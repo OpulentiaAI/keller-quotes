@@ -46,6 +46,7 @@ Skills in `.agents/skills/` document the workflows:
 - **keller-quote-register** — this dataset's schema, provenance, and quirks
 - **keller-estimator-evals** — leave-one-out eval harness (`evals/`) + hill-climbing guide; current baseline: 98.8% coverage, median APE 46.3%, 24.3% within ±20% (`evals/report-baseline.md`)
 - **polygres** — connect to and query the register in Polygres (Postgres + embeddings + graph + FTS)
+- **keller-data-analysis** — data-analysis workflow adapted to this dataset (SQL recipes, charting, grain rules)
 
 ## Polygres database
 
