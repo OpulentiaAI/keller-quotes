@@ -1,0 +1,22 @@
+{
+  "customer": "IPEG, INC.",
+  "rfq_no": "EXAMPLE-RFQ-1",
+  "parts": [
+    {
+      "part_no": "96-0085-00",
+      "description": "RETAINER PLATE",
+      "quantity": 250,
+      "material": "PAINTLOK"
+    },
+    {
+      "part_no": "S119-120-000",
+      "description": "CORNER EDGE LEFT",
+      "quantity": 1500,
+      "material": "S.S 304 BRUSHED PVC"
+    },
+    {
+      "description": "STAINLESS BRACKET, 304, BENT",
+      "quantity": 100
+    }
+  ]
+}

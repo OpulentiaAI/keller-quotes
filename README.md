@@ -35,3 +35,13 @@ Quoting history extracted from the client's live **Metalsoft FabriTRAK** (Visual
 - `customer` is resolved via `QUOTLETT.CNAME` for the 365 customer ids that ever got a letter; the remainder keep `customer_id` only.
 - Memo (`COMMENT`) fields are included verbatim with original CRLFs.
 - Vendor-side quote requests (`VENDQUOT.DBF`, 12,779 rows) and quote ops/tooling detail (`QUOTOPER`, `QUOTTOO`, `QUOTQA`, `QUOTEH/M/O` markup matrices, `QUOTCAD`) were extracted in the zip but are not part of this flat export — ask if you want those too.
+
+## Estimator
+
+`estimator/` is a TypeScript pipeline that turns a pricing request (parts + materials + drawing refs) into a priced quote draft by retrieving historical analogs from this register, ranking/screening them with TypeSafe Jev (`typesafe-ai/jev` via Vercel AI Gateway, deterministic fallback without a key), and interpolating qty/price breaks.
+
+Skills in `.agents/skills/` document the workflows:
+
+- **keller-quote-estimator** — request → quote procedure
+- **keller-quote-register** — this dataset's schema, provenance, and quirks
+- **keller-estimator-evals** — leave-one-out eval harness (`evals/`) + hill-climbing guide; current baseline: 98.8% coverage, median APE 46.3%, 24.3% within ±20% (`evals/report-baseline.md`)
