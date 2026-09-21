@@ -1,0 +1,81 @@
+# keller-estimator
+
+Agentic pricing-request → quote estimator for C. Keller Mfg., built on the
+**Metalsoft FabriTRAK quoting register** (179,608 quote lines / 40,111 quotes
+from `C:\Vftw\KELLER`, extracted 2026-09-21 — see
+[keller-quotes](https://github.com/OpulentiaAI/keller-quotes)) and **TypeSafe
+Jev** (`typesafe-ai/jev` via Vercel AI Gateway) for bounded judgment.
+
+## Pipeline
+
+```
+request.json (customer + parts[part_no, description, qty, material, drawing_ref])
+  → retrieve   deterministic analog candidates: exact/normalized part_no,
+               drawing_no match (the "visualization" link — customer drawing
+               numbers match quoted drawings), description-token overlap,
+               same-customer / material / won-quote bonuses
+  → jev.rank   one bounded `choice` question over the top-8 candidate
+               descriptions → calibrated ordering + probabilities
+  → jev.screen boolean "is this a genuine analog" on the top candidates;
+               rejects are dropped
+  → jev.choose bounded choice of pricing strategy per line:
+               latest | median_won | curve_fit | conservative
+  → price      per-analog log-log interpolation of that quote's own qty/price
+               breaks to the requested qty → weighted median (weights:
+               similarity × recency × won-bonus × Jev probability) →
+               unit_price + p25/p75 band + confidence
+  → quote      JSON (and optional CSV) with per-line price, analogs,
+               confidence, and warnings
+```
+
+Jev only ever sees descriptions and picks among prevalidated options — it
+never invents prices or tool inputs. Without `AI_GATEWAY_API_KEY` (or with
+`--offline`) the same pipeline runs fully deterministically with the
+deterministic ranking/`median_won` fallbacks.
+
+## Usage
+
+```bash
+npm install
+# data/quotes.csv is a symlink to the repo-root register — or pass --register
+npm run estimate -- examples/request.json --csv quote.csv
+# Jev enabled automatically when AI_GATEWAY_API_KEY is set
+```
+
+Request format: `customer` / `customer_id` (optional, boosts same-customer
+history), `parts[]` with `part_no`, `description`, `quantity` (required),
+`material`, `finish`, `drawing_ref`, `notes`.
+
+Output per line: `unit_price`, `extended_price`, `price_low`/`price_high`
+(weighted p25/p75), `confidence` (0–1), `method` (which strategy ran),
+`status_basis` (`jev+…` vs `fallback:…`), top `analogs` with Jev
+probabilities, and `warnings` (e.g. "no won-quote analogs").
+
+## Interpretation notes
+
+- Prices are **as-quoted historically** — no inflation normalization is
+  applied. A 1994 analog produces 1994 dollars; the recency weight and the
+  p25/p75 band make that visible, and `confidence` drops when the newest
+  analogs are old. Treat stale lines as "needs markup review", not gospel.
+- `status` in the register is `won`/`open` only — FabriTRAK's lost-quote
+  table (QUOTEHN) is empty, so "open" includes silently-lost history.
+- `drawing_ref` accepts a drawing number (e.g. `"RAL-0214"`); it is matched
+  against the register's `DRAWING_NO` field. Raster/PDF drawing analysis
+  (dims/materials from a scan) is out of scope — feed extracted attributes
+  in via `material`/`notes`.
+
+## Layout
+
+- `src/register.ts` — CSV → grouped quotes (one group per quote_no+item, all qty breaks) + indexes
+- `src/retrieve.ts` — deterministic candidate retrieval/scoring
+- `src/jev.ts` — `typesafe-ai/jev` wrapper (`experimental_evaluate`, gateway key, 15s deadline, zero retries)
+- `src/price.ts` — per-quote qty interpolation + weighted strategies + confidence
+- `src/estimate.ts` — orchestration
+- `src/cli.ts` — `estimate <request.json> [--register …] [--csv out] [--offline]`
+- `test/estimator.test.ts` — vitest suite (register, retrieval, pricing, end-to-end offline)
+
+## Test
+
+```bash
+npm test
+```

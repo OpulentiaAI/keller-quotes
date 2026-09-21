@@ -35,3 +35,36 @@ Quoting history extracted from the client's live **Metalsoft FabriTRAK** (Visual
 - `customer` is resolved via `QUOTLETT.CNAME` for the 365 customer ids that ever got a letter; the remainder keep `customer_id` only.
 - Memo (`COMMENT`) fields are included verbatim with original CRLFs.
 - Vendor-side quote requests (`VENDQUOT.DBF`, 12,779 rows) and quote ops/tooling detail (`QUOTOPER`, `QUOTTOO`, `QUOTQA`, `QUOTEH/M/O` markup matrices, `QUOTCAD`) were extracted in the zip but are not part of this flat export — ask if you want those too.
+
+## Estimator
+
+`estimator/` is a TypeScript pipeline that turns a pricing request (parts + materials + drawing refs) into a priced quote draft by retrieving historical analogs from this register, ranking/screening them with TypeSafe Jev (`typesafe-ai/jev` via Vercel AI Gateway, deterministic fallback without a key), and interpolating qty/price breaks.
+
+Skills in `.agents/skills/` document the workflows:
+
+- **keller-quote-estimator** — request → quote procedure
+- **keller-quote-register** — this dataset's schema, provenance, and quirks
+- **keller-estimator-evals** — leave-one-out eval harness (`evals/`) + hill-climbing guide; current baseline: 98.8% coverage, median APE 46.3%, 24.3% within ±20% (`evals/report-baseline.md`)
+- **polygres** — connect to and query the register in Polygres (Postgres + embeddings + graph + FTS)
+
+## Polygres database
+
+The register is also normalized into a Polygres Postgres project (Nano tier).
+Connection metadata, secrets, and MCP wiring: `docs/polygres.md`. Reproducible
+schema in `db/migrations/` + `scripts/load.py` / `scripts/embed.py`.
+
+Table map (CSV → normalized):
+
+| Table | Rows | Maps from |
+|---|---|---|
+| `customers` | 258 | `customer_id` + `customer` (letter-resolved names) |
+| `parts` | 38,091 | deduped `part_no`+`drawing_no`+`description` |
+| `quotes` | 40,111 | QUOTEN heads; `to_quote` self-FK re-quote lineage |
+| `quote_qty_breaks` | 179,608 | every source row incl. `is_placeholder` breakless quotes |
+| `quote_letters` / `quote_letter_lines` | 23,822 / 23,903 | QUOTLETT headers + per-letter quote links, `material` |
+| `estimates` / `estimate_lines` | — | estimator output only, never history |
+
+Retrieval layers: pgContext embedding collections `parts_desc` +
+`quote_comments` (512-dim, ~77k points), `graph` extension with
+customers/parts/quotes nodes and QUOTED/FOR_PART/REQUOTE_OF edges (~87.5k of
+100k Nano units), Postgres `tsvector` FTS + `pg_trgm` fuzzy indexes.

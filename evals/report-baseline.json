@@ -1,0 +1,2515 @@
+{
+  "summary": {
+    "cases": 250,
+    "coverage": 0.988,
+    "median_ape": 0.46304241003931057,
+    "mean_ape": 1.2208500963890565,
+    "within_10pct": 15.789473684210526,
+    "within_20pct": 24.291497975708502,
+    "within_50pct": 52.63157894736842,
+    "mean_confidence": 0.5015599999999999,
+    "jev": false
+  },
+  "results": [
+    {
+      "id": "0000612|@3000",
+      "actual": 0.5,
+      "predicted": 0.4384,
+      "ape": 0.12319999999999998,
+      "confidence": 0.28,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0005839|@500",
+      "actual": 1.15,
+      "predicted": 3.0685,
+      "ape": 1.6682608695652175,
+      "confidence": 0.37,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0006543|@20000",
+      "actual": 0.7785,
+      "predicted": 1.3496,
+      "ape": 0.7335902376364803,
+      "confidence": 0.35,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0007790|@250",
+      "actual": 6.672,
+      "predicted": 6.9018,
+      "ape": 0.03444244604316547,
+      "confidence": 0.36,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0008955|@50",
+      "actual": 8.2223,
+      "predicted": 4.3164,
+      "ape": 0.47503739829488106,
+      "confidence": 0.26,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0009561|@100",
+      "actual": 4.59,
+      "predicted": 14.0074,
+      "ape": 2.0517211328976037,
+      "confidence": 0.27,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0010395|@250",
+      "actual": 1.65,
+      "predicted": 1.7844,
+      "ape": 0.0814545454545455,
+      "confidence": 0.34,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0010738|@250",
+      "actual": 3.4651,
+      "predicted": 3.4265,
+      "ape": 0.011139649649360824,
+      "confidence": 0.27,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0011247|@250",
+      "actual": 8.3398,
+      "predicted": 10.6561,
+      "ape": 0.2777404733926473,
+      "confidence": 0.36,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0011786|@250",
+      "actual": 2.0576,
+      "predicted": 1.7954,
+      "ape": 0.12743001555209943,
+      "confidence": 0.26,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0012438|@250",
+      "actual": 1.0293,
+      "predicted": 2.1756,
+      "ape": 1.1136694841154182,
+      "confidence": 0.32,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0012484|@500",
+      "actual": 2.2085,
+      "predicted": 3.3742,
+      "ape": 0.5278243151460268,
+      "confidence": 0.42,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0012522|@250",
+      "actual": 1.3997,
+      "predicted": 1.6593,
+      "ape": 0.18546831463885122,
+      "confidence": 0.35,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0012602|@100",
+      "actual": 8.311,
+      "predicted": 6.2368,
+      "ape": 0.2495728552520756,
+      "confidence": 0.35,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0012891|@250",
+      "actual": 6.411,
+      "predicted": 8.6956,
+      "ape": 0.35635626267353004,
+      "confidence": 0.2,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0013285|@250",
+      "actual": 2.2633,
+      "predicted": 3.053,
+      "ape": 0.3489153006671673,
+      "confidence": 0.12,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0013693|@100",
+      "actual": 7.2782,
+      "predicted": 4.4689,
+      "ape": 0.38598829380890887,
+      "confidence": 0.42,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0013737|@100",
+      "actual": 6.8024,
+      "predicted": 7.57,
+      "ape": 0.11284252616723521,
+      "confidence": 0.41,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0014848|@100",
+      "actual": 8.39,
+      "predicted": 5.9568,
+      "ape": 0.2900119189511323,
+      "confidence": 0.27,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0015264|@200",
+      "actual": 4.6132,
+      "predicted": 6.6377,
+      "ape": 0.4388493887106563,
+      "confidence": 0.35,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0015569|@400",
+      "actual": 3.9326,
+      "predicted": 2.2947,
+      "ape": 0.41649290545694956,
+      "confidence": 0.27,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0015672|@75",
+      "actual": 5.6,
+      "predicted": 3.2611,
+      "ape": 0.4176607142857143,
+      "confidence": 0.27,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0015819|@100",
+      "actual": 1.49,
+      "predicted": 14.0074,
+      "ape": 8.400939597315437,
+      "confidence": 0.27,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0016420|@500",
+      "actual": 5.8315,
+      "predicted": 14.7639,
+      "ape": 1.5317499785646915,
+      "confidence": 0.27,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0016543|@100",
+      "actual": 6.0812,
+      "predicted": 1.1064,
+      "ape": 0.8180622245609419,
+      "confidence": 0.27,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0016791|@100",
+      "actual": 10.0782,
+      "predicted": 8.3373,
+      "ape": 0.1727391796154075,
+      "confidence": 0.37,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0017162|@750",
+      "actual": 5.0511,
+      "predicted": 1.3502,
+      "ape": 0.7326918888954881,
+      "confidence": 0.36,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0017652|@250",
+      "actual": 1.1549,
+      "predicted": 4.8038,
+      "ape": 3.159494328513291,
+      "confidence": 0.7,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0017686|@250",
+      "actual": 3.878,
+      "predicted": 6.7915,
+      "ape": 0.7512893243940175,
+      "confidence": 0.27,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0017895|@250",
+      "actual": 3.12,
+      "predicted": 22.2983,
+      "ape": 6.146891025641025,
+      "confidence": 0.42,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0018132|@50",
+      "actual": 9.79,
+      "predicted": 9.0335,
+      "ape": 0.07727272727272719,
+      "confidence": 0.44,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0018297|@150",
+      "actual": 10.5824,
+      "predicted": 5.6823,
+      "ape": 0.46304241003931057,
+      "confidence": 0.35,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0019810|@500",
+      "actual": 9.2259,
+      "predicted": 3.2987,
+      "ape": 0.6424522268830141,
+      "confidence": 0.41,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0020161|1@100",
+      "actual": 3.8756,
+      "predicted": 1.8126,
+      "ape": 0.5323046754050985,
+      "confidence": 0.35,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0020479|@275",
+      "actual": 3.4739,
+      "predicted": 5.2612,
+      "ape": 0.514493796597484,
+      "confidence": 0.28,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0020549|@150",
+      "actual": 7.5714,
+      "predicted": 1.4437,
+      "ape": 0.8093219219695169,
+      "confidence": 0.53,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0020672|3@100",
+      "actual": 8.0058,
+      "predicted": 3.6261,
+      "ape": 0.5470658772390018,
+      "confidence": 0.27,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0020669|3@800",
+      "actual": 0.6474,
+      "predicted": 1.0297,
+      "ape": 0.5905159097930184,
+      "confidence": 0.26,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0020761|@50",
+      "actual": 11.4002,
+      "predicted": 6.1923,
+      "ape": 0.45682531885405514,
+      "confidence": 0.27,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0020774|@300",
+      "actual": 11.8688,
+      "predicted": 0.8249,
+      "ape": 0.9304984497169049,
+      "confidence": 0.27,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0020790|@250",
+      "actual": 4.9019,
+      "predicted": 3.9471,
+      "ape": 0.19478161529202973,
+      "confidence": 0.42,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0020812|@500",
+      "actual": 8.8201,
+      "predicted": 0.865,
+      "ape": 0.9019285495629301,
+      "confidence": 0.26,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0020871|@25000",
+      "actual": 0.8012,
+      "predicted": 0.2448,
+      "ape": 0.6944583125312032,
+      "confidence": 0.28,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0020958|@1500",
+      "actual": 4.6689,
+      "predicted": 8.468,
+      "ape": 0.8137034419242221,
+      "confidence": 0.36,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0021007|@500",
+      "actual": 1.2164,
+      "predicted": 3.6558,
+      "ape": 2.005425846760934,
+      "confidence": 0.25,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0021011|@6000",
+      "actual": 0.6663,
+      "predicted": 0.5646,
+      "ape": 0.1526339486717695,
+      "confidence": 0.33,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0021132|@1000",
+      "actual": 0.723,
+      "predicted": 0.7739,
+      "ape": 0.07040110650069165,
+      "confidence": 0.33,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0022003|@300",
+      "actual": 2.8553,
+      "predicted": 5.8166,
+      "ape": 1.0371239449444891,
+      "confidence": 0.57,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0023620|@750",
+      "actual": 22.4037,
+      "predicted": 9.1488,
+      "ape": 0.5916388810776791,
+      "confidence": 0.25,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0026026|@50",
+      "actual": 5.5401,
+      "predicted": 6.6917,
+      "ape": 0.20786628400209387,
+      "confidence": 0.26,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0026854|@500",
+      "actual": 3.2529,
+      "predicted": 1.518,
+      "ape": 0.5333394816932583,
+      "confidence": 0.28,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0027527|@100",
+      "actual": 2.6155,
+      "predicted": 9.3101,
+      "ape": 2.559587077040719,
+      "confidence": 0.28,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0028092|@20000",
+      "actual": 0.6563,
+      "predicted": 0.7031,
+      "ape": 0.07130885265884497,
+      "confidence": 0.46,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0028432|@250",
+      "actual": 0.7891,
+      "predicted": 2.3818,
+      "ape": 2.018375364339121,
+      "confidence": 0.26,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0028593|@250",
+      "actual": 20.9715,
+      "predicted": 3.0843,
+      "ape": 0.852928975037551,
+      "confidence": 0.4,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0028712|@15",
+      "actual": 10.2958,
+      "predicted": 167.7808,
+      "ape": 15.29604304667923,
+      "confidence": 0.6,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0028769|@100",
+      "actual": 19.5854,
+      "predicted": 13.8062,
+      "ape": 0.2950769450713286,
+      "confidence": 0.26,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0029915|@1000",
+      "actual": 2.5987,
+      "predicted": 4.4315,
+      "ape": 0.705275714780467,
+      "confidence": 0.37,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0030208|@250",
+      "actual": 1.538,
+      "predicted": 8.1802,
+      "ape": 4.318725617685305,
+      "confidence": 0.92,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0030360|@500",
+      "actual": 3.5186,
+      "predicted": 3.2995,
+      "ape": 0.06226908429489003,
+      "confidence": 0.27,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0030900|@200",
+      "actual": 15.3327,
+      "predicted": 1.4823,
+      "ape": 0.9033242677414937,
+      "confidence": 0.33,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0030950|@100",
+      "actual": 9.5564,
+      "predicted": 11.9999,
+      "ape": 0.25569252019588967,
+      "confidence": 0.37,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0031955|@40",
+      "actual": 29.9459,
+      "predicted": 12.7425,
+      "ape": 0.5744826503795177,
+      "confidence": 0.28,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0032036|@50",
+      "actual": 11.2696,
+      "predicted": 16.0178,
+      "ape": 0.4213281749130404,
+      "confidence": 0.3,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0033448|@500",
+      "actual": 0.5138,
+      "predicted": 3.1859,
+      "ape": 5.20066173608408,
+      "confidence": 0.26,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0033540|@75",
+      "actual": 0.7623,
+      "predicted": 36.6412,
+      "ape": 47.06664043027679,
+      "confidence": 0.29,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0034366|@100",
+      "actual": 16.3794,
+      "predicted": 8.2469,
+      "ape": 0.4965078085888372,
+      "confidence": 0.82,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0034903|@200",
+      "actual": 1.3965,
+      "predicted": 2.2723,
+      "ape": 0.6271392767633368,
+      "confidence": 0.57,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0035030|@100",
+      "actual": 30.7308,
+      "predicted": 19.8471,
+      "ape": 0.3541625990862587,
+      "confidence": 0.43,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0035333|@25",
+      "actual": 10.6178,
+      "predicted": 6.5176,
+      "ape": 0.38616285859594274,
+      "confidence": 0.35,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0035500|@600",
+      "actual": 0.7849,
+      "predicted": 2.3231,
+      "ape": 1.9597400942795262,
+      "confidence": 0.27,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0035514|@100",
+      "actual": 4.692,
+      "predicted": 4.2859,
+      "ape": 0.08655157715260024,
+      "confidence": 0.28,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0036511|@2500",
+      "actual": 2.0715,
+      "predicted": 3.2636,
+      "ape": 0.5754767076997345,
+      "confidence": 0.63,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0038801|@2500",
+      "actual": 15.3072,
+      "predicted": 10.5814,
+      "ape": 0.30873053203721124,
+      "confidence": 0.37,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0039673|@1000",
+      "actual": 1.8583,
+      "predicted": 2.6084,
+      "ape": 0.40364849593714686,
+      "confidence": 0.37,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0039985|@40",
+      "actual": 5.3932,
+      "predicted": 10.4647,
+      "ape": 0.9403508121337981,
+      "confidence": 0.29,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0040865|@100",
+      "actual": 15.1232,
+      "predicted": 5.6347,
+      "ape": 0.6274135103681762,
+      "confidence": 0.3,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0041206|@50",
+      "actual": 11.1242,
+      "predicted": 10.6484,
+      "ape": 0.0427716150374858,
+      "confidence": 0.36,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0041498|@216",
+      "actual": 4.7547,
+      "predicted": 7.6877,
+      "ape": 0.6168633141943762,
+      "confidence": 0.45,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0042571|@750",
+      "actual": 1.6556,
+      "predicted": 1.4108,
+      "ape": 0.14786180236772162,
+      "confidence": 0.39,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0042748|@750",
+      "actual": 2.1571,
+      "predicted": 2.2352,
+      "ape": 0.03620601733809284,
+      "confidence": 0.3,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0042754|@750",
+      "actual": 1.7668,
+      "predicted": 2.3962,
+      "ape": 0.356237265112067,
+      "confidence": 0.3,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0043026|@200",
+      "actual": 15.7021,
+      "predicted": 4.4918,
+      "ape": 0.7139363524624095,
+      "confidence": 0.61,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0043566|@500",
+      "actual": 1.0271,
+      "predicted": 1.7389,
+      "ape": 0.6930191802161426,
+      "confidence": 0.45,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0044875|@400",
+      "actual": 4.5368,
+      "predicted": 1.8887,
+      "ape": 0.5836933521424793,
+      "confidence": 0.68,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0049771|@40",
+      "actual": 2.2021,
+      "predicted": 8.2452,
+      "ape": 2.7442441306026066,
+      "confidence": 0.39,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0049782|@250",
+      "actual": 4.8748,
+      "predicted": 20.7773,
+      "ape": 3.262185115286781,
+      "confidence": 0.2,
+      "method": "latest",
+      "basis": "fallback:median_won",
+      "analogs": 1
+    },
+    {
+      "id": "0049809|@200",
+      "actual": 1.0651,
+      "predicted": 1.1176,
+      "ape": 0.04929114637123274,
+      "confidence": 0.67,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0049793|@12000",
+      "actual": 0.276,
+      "predicted": 1.4106,
+      "ape": 4.110869565217391,
+      "confidence": 0.46,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0049805|@500",
+      "actual": 3.2987,
+      "predicted": 1.3515,
+      "ape": 0.5902931457847032,
+      "confidence": 0.27,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0049852|@500",
+      "actual": 6.56,
+      "predicted": 1.6277,
+      "ape": 0.751875,
+      "confidence": 0.28,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0049909|1@115",
+      "actual": 10.3979,
+      "predicted": 12.6791,
+      "ape": 0.2193904538416411,
+      "confidence": 0.4,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0049994|@1000",
+      "actual": 1.586,
+      "predicted": 1.6291,
+      "ape": 0.02717528373266073,
+      "confidence": 0.75,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0050093|@100",
+      "actual": 13.7419,
+      "predicted": 12.1203,
+      "ape": 0.11800406057386527,
+      "confidence": 0.41,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0050090|@100",
+      "actual": 24.0372,
+      "predicted": 2.9018,
+      "ape": 0.8792787845506131,
+      "confidence": 0.55,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0050131|@100",
+      "actual": 3.367,
+      "predicted": 8.0751,
+      "ape": 1.3983070983070987,
+      "confidence": 0.51,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0050179|@250",
+      "actual": 0.9183,
+      "predicted": 1.7082,
+      "ape": 0.8601764129369487,
+      "confidence": 0.37,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0050197|@750",
+      "actual": 0.5922,
+      "predicted": 1.2642,
+      "ape": 1.1347517730496455,
+      "confidence": 0.3,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0050364|@5000",
+      "actual": 1.2625,
+      "predicted": 1.2625,
+      "ape": 0,
+      "confidence": 0.35,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0050372|@100",
+      "actual": 4.5559,
+      "predicted": 5.2064,
+      "ape": 0.14278188722316118,
+      "confidence": 0.3,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0050376|@1000",
+      "actual": 3.1519,
+      "predicted": 2.4577,
+      "ape": 0.22024810431803038,
+      "confidence": 0.38,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0050400|@16",
+      "actual": 12.4344,
+      "predicted": 6.2902,
+      "ape": 0.49412918998906263,
+      "confidence": 0.85,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0050442|2@25",
+      "actual": 2.0585,
+      "predicted": 5.3396,
+      "ape": 1.593927617196988,
+      "confidence": 0.35,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0050522|@100",
+      "actual": 19.8632,
+      "predicted": 4.4275,
+      "ape": 0.7771003665069072,
+      "confidence": 0.31,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0050552|@1000",
+      "actual": 1.0584,
+      "predicted": 1.7763,
+      "ape": 0.6782879818594104,
+      "confidence": 0.67,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0050592|@1000",
+      "actual": 1.1992,
+      "predicted": 1.0124,
+      "ape": 0.15577051367578393,
+      "confidence": 0.35,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0050798|@750",
+      "actual": 6.6546,
+      "predicted": 2.898,
+      "ape": 0.5645117662969976,
+      "confidence": 0.38,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0050854|@50",
+      "actual": 5.4,
+      "predicted": 3.6681,
+      "ape": 0.3207222222222223,
+      "confidence": 0.75,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0050872|@500",
+      "actual": 21.2988,
+      "predicted": 14.7639,
+      "ape": 0.30682010254098824,
+      "confidence": 0.27,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0050949|@25",
+      "actual": 16.5868,
+      "predicted": 2.8758,
+      "ape": 0.8266211686401235,
+      "confidence": 0.36,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0051073|@250",
+      "actual": 1.031,
+      "predicted": 2.5966,
+      "ape": 1.5185257032007762,
+      "confidence": 0.32,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0051133|2@250",
+      "actual": 3.3447,
+      "predicted": 2.2534,
+      "ape": 0.32627739408616613,
+      "confidence": 0.47,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0051241|@500",
+      "actual": 0.9991,
+      "predicted": 1.1663,
+      "ape": 0.1673506155539985,
+      "confidence": 0.48,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0051435|@250",
+      "actual": 3.5502,
+      "predicted": 0.6952,
+      "ape": 0.8041800461945805,
+      "confidence": 0.27,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0051462|@25",
+      "actual": 9.4563,
+      "predicted": 2.355,
+      "ape": 0.7509596776752007,
+      "confidence": 0.27,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0051472|@120",
+      "actual": 4.2947,
+      "predicted": 3.9953,
+      "ape": 0.06971383332945257,
+      "confidence": 0.38,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0051481|@3000",
+      "actual": 2.6881,
+      "predicted": 4.6436,
+      "ape": 0.7274654960752949,
+      "confidence": 0.18,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0051546|@40",
+      "actual": 3.6605,
+      "predicted": 14.7639,
+      "ape": 3.033301461548969,
+      "confidence": 0.27,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0051656|@500",
+      "actual": 5.9035,
+      "predicted": null,
+      "ape": null,
+      "confidence": 0,
+      "method": "no_analogs",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0051701|@100",
+      "actual": 17.9802,
+      "predicted": 7.0729,
+      "ape": 0.6066284023537002,
+      "confidence": 0.61,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0051794|@250",
+      "actual": 30.235,
+      "predicted": 14.0074,
+      "ape": 0.536715726806681,
+      "confidence": 0.27,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0051870|@200",
+      "actual": 1.4211,
+      "predicted": 2.0452,
+      "ape": 0.4391668425867285,
+      "confidence": 0.56,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0052105|@1000",
+      "actual": 1.4053,
+      "predicted": 2.2872,
+      "ape": 0.6275528356934462,
+      "confidence": 0.52,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0052116|@1000",
+      "actual": 1.0066,
+      "predicted": 0.7553,
+      "ape": 0.2496522948539638,
+      "confidence": 0.26,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0052137|@110",
+      "actual": 2.2677,
+      "predicted": 2.8579,
+      "ape": 0.26026370331172544,
+      "confidence": 0.53,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0052157|@1000",
+      "actual": 9.7975,
+      "predicted": 4.2578,
+      "ape": 0.5654197499362082,
+      "confidence": 0.86,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0052184|@60",
+      "actual": 13.1457,
+      "predicted": 14.7639,
+      "ape": 0.1230972865651886,
+      "confidence": 0.27,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0052186|@25",
+      "actual": 9.8555,
+      "predicted": 14.1113,
+      "ape": 0.43181979605296544,
+      "confidence": 0.49,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0052230|@300",
+      "actual": 12.864,
+      "predicted": 16.1238,
+      "ape": 0.2534048507462685,
+      "confidence": 0.43,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0052514|@1000",
+      "actual": 3.3483,
+      "predicted": 5.1417,
+      "ape": 0.5356150882537407,
+      "confidence": 0.45,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0052560|2@1000",
+      "actual": 5.5,
+      "predicted": 5.5,
+      "ape": 0,
+      "confidence": 0.83,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0052561|@140",
+      "actual": 2.1128,
+      "predicted": 2.3419,
+      "ape": 0.10843430518742894,
+      "confidence": 0.33,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0052579|@1000",
+      "actual": 5.1666,
+      "predicted": 1.8405,
+      "ape": 0.6437695970270584,
+      "confidence": 0.61,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0052707|@5",
+      "actual": 42.6114,
+      "predicted": 41.7779,
+      "ape": 0.01956049320134989,
+      "confidence": 0.55,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0052862|@1250",
+      "actual": 1.0687,
+      "predicted": 1.4517,
+      "ape": 0.35837933938429867,
+      "confidence": 0.52,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0053121|@150",
+      "actual": 3.6938,
+      "predicted": 3.6938,
+      "ape": 0,
+      "confidence": 0.64,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0053357|@1000",
+      "actual": 1.512,
+      "predicted": 1.158,
+      "ape": 0.23412698412698418,
+      "confidence": 0.5,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0053418|@100",
+      "actual": 33.506,
+      "predicted": 22.1538,
+      "ape": 0.3388109592311825,
+      "confidence": 0.51,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0053426|@50",
+      "actual": 68.1443,
+      "predicted": 49.9625,
+      "ape": 0.2668132184203228,
+      "confidence": 0.66,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0053429|2@50",
+      "actual": 2.1038,
+      "predicted": 16.9638,
+      "ape": 7.063409069303165,
+      "confidence": 0.28,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0053478|@50",
+      "actual": 51.5795,
+      "predicted": 54.7439,
+      "ape": 0.06134995492395221,
+      "confidence": 0.59,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0053590|@500",
+      "actual": 1.6146,
+      "predicted": 1.5501,
+      "ape": 0.039947974730583424,
+      "confidence": 0.78,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0053627|@100",
+      "actual": 7.6898,
+      "predicted": 8.0751,
+      "ape": 0.050105334338994625,
+      "confidence": 0.52,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0053720|@1",
+      "actual": 241.65,
+      "predicted": 104.7188,
+      "ape": 0.5666509414442374,
+      "confidence": 0.66,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0053744|@500",
+      "actual": 1.5936,
+      "predicted": 1.3345,
+      "ape": 0.16258785140562243,
+      "confidence": 0.49,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0053826|@50",
+      "actual": 7.5333,
+      "predicted": 6.4643,
+      "ape": 0.1419032827578883,
+      "confidence": 0.53,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0053921|@1000",
+      "actual": 4.8099,
+      "predicted": 4.8099,
+      "ape": 0,
+      "confidence": 0.54,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0053940|@1000",
+      "actual": 1.7162,
+      "predicted": 1.9158,
+      "ape": 0.11630346113506584,
+      "confidence": 0.53,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0053972|@8000",
+      "actual": 1.548,
+      "predicted": 0.6952,
+      "ape": 0.5509043927648579,
+      "confidence": 0.27,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0053974|@500",
+      "actual": 0.7661,
+      "predicted": 1.6146,
+      "ape": 1.10755776008354,
+      "confidence": 0.82,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0054043|@200",
+      "actual": 1.183,
+      "predicted": 1.1176,
+      "ape": 0.05528317836010154,
+      "confidence": 0.67,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0054046|@10",
+      "actual": 4.0001,
+      "predicted": 14.0074,
+      "ape": 2.501762455938602,
+      "confidence": 0.52,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0054068|@10",
+      "actual": 10.5975,
+      "predicted": 9.3746,
+      "ape": 0.11539514036329332,
+      "confidence": 0.31,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 3
+    },
+    {
+      "id": "0054089|@200",
+      "actual": 13.4125,
+      "predicted": 77.9002,
+      "ape": 4.808029822926375,
+      "confidence": 0.54,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0054104|@3000",
+      "actual": 2.5494,
+      "predicted": 1.0966,
+      "ape": 0.5698595748019142,
+      "confidence": 0.67,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0054122|@5000",
+      "actual": 1.7729,
+      "predicted": 1.3219,
+      "ape": 0.2543854701336792,
+      "confidence": 0.59,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0054128|@100000",
+      "actual": 0.3282,
+      "predicted": 2.3151,
+      "ape": 6.053930530164535,
+      "confidence": 0.56,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0054172|@500",
+      "actual": 5.6642,
+      "predicted": 3.7051,
+      "ape": 0.34587408636700684,
+      "confidence": 0.69,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0054203|@500",
+      "actual": 3.6083,
+      "predicted": 14.7639,
+      "ape": 3.091649807388521,
+      "confidence": 0.27,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0054240|@2400",
+      "actual": 65.5322,
+      "predicted": 15.4469,
+      "ape": 0.7642853436936345,
+      "confidence": 0.88,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0054243|@20",
+      "actual": 22.0186,
+      "predicted": 22.8298,
+      "ape": 0.03684157939196859,
+      "confidence": 0.59,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0054267|@20",
+      "actual": 14.4684,
+      "predicted": 9.1609,
+      "ape": 0.36683392773216117,
+      "confidence": 0.69,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0054307|@100",
+      "actual": 3.9721,
+      "predicted": 2.9179,
+      "ape": 0.26540117318295114,
+      "confidence": 0.7,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0054323|@100",
+      "actual": 5.9008,
+      "predicted": 7.4616,
+      "ape": 0.2645065075921908,
+      "confidence": 0.65,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0054365|@500",
+      "actual": 7.616,
+      "predicted": 5.1313,
+      "ape": 0.32624737394957976,
+      "confidence": 0.61,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0054420|1@100",
+      "actual": 12.1986,
+      "predicted": 6.752,
+      "ape": 0.446493859951142,
+      "confidence": 0.41,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0054449|@50",
+      "actual": 3.3619,
+      "predicted": 16.0223,
+      "ape": 3.7658466938338444,
+      "confidence": 0.64,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0054434|2@50",
+      "actual": 14.47,
+      "predicted": 6.4013,
+      "ape": 0.5576157567380787,
+      "confidence": 0.6,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0054470|@300",
+      "actual": 16.3911,
+      "predicted": 4.3725,
+      "ape": 0.7332393799073889,
+      "confidence": 0.67,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0054516|@300",
+      "actual": 4.2531,
+      "predicted": 2.0156,
+      "ape": 0.5260868542945145,
+      "confidence": 0.48,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0054710|@1000",
+      "actual": 0.65,
+      "predicted": 19.5477,
+      "ape": 29.073384615384615,
+      "confidence": 0.58,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0054762|@30",
+      "actual": 28.1682,
+      "predicted": 18.4089,
+      "ape": 0.34646516284320616,
+      "confidence": 0.3,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0054823|@500",
+      "actual": 3.3248,
+      "predicted": 3.3552,
+      "ape": 0.009143407122232843,
+      "confidence": 0.74,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0054837|@100",
+      "actual": 27.4575,
+      "predicted": 18.3715,
+      "ape": 0.3309114085404716,
+      "confidence": 0.6,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0054881|@250",
+      "actual": 26.1152,
+      "predicted": null,
+      "ape": null,
+      "confidence": 0,
+      "method": "no_analogs",
+      "basis": "fallback:median_won",
+      "analogs": 0
+    },
+    {
+      "id": "0054898|@100",
+      "actual": 4.48,
+      "predicted": 5.78,
+      "ape": 0.29017857142857134,
+      "confidence": 0.68,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0054939|@250",
+      "actual": 13.2218,
+      "predicted": 9.4985,
+      "ape": 0.2816031100152778,
+      "confidence": 0.7,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0054960|@150",
+      "actual": 8.6413,
+      "predicted": 20.5774,
+      "ape": 1.381285223288163,
+      "confidence": 0.68,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0055027|@100",
+      "actual": 2.3809,
+      "predicted": 5.5081,
+      "ape": 1.313452895963711,
+      "confidence": 0.77,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0055056|@100",
+      "actual": 7.9943,
+      "predicted": 3.9208,
+      "ape": 0.5095505547702739,
+      "confidence": 0.29,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0055058|@120",
+      "actual": 5.5266,
+      "predicted": 5.7091,
+      "ape": 0.03302211124380272,
+      "confidence": 0.57,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0055146|@500",
+      "actual": 1.6224,
+      "predicted": 0.8338,
+      "ape": 0.48607001972386593,
+      "confidence": 0.51,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0055280|@100",
+      "actual": 9.7404,
+      "predicted": 5.263,
+      "ape": 0.4596731140404911,
+      "confidence": 0.31,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0055285|@100",
+      "actual": 2.4941,
+      "predicted": 3.7492,
+      "ape": 0.5032276171765366,
+      "confidence": 0.78,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0055314|1@10",
+      "actual": 9.8603,
+      "predicted": 6.2736,
+      "ape": 0.36375160999158246,
+      "confidence": 0.44,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0055331|@50",
+      "actual": 20.1945,
+      "predicted": null,
+      "ape": null,
+      "confidence": 0,
+      "method": "no_analogs",
+      "basis": "fallback:median_won",
+      "analogs": 0
+    },
+    {
+      "id": "0055377|@150",
+      "actual": 26.1381,
+      "predicted": 4.0724,
+      "ape": 0.8441967855352913,
+      "confidence": 0.3,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0055437|@2",
+      "actual": 174.6206,
+      "predicted": 31.0415,
+      "ape": 0.8222346046228222,
+      "confidence": 0.59,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0055459|@10",
+      "actual": 20.455,
+      "predicted": 31.7998,
+      "ape": 0.5546223417257397,
+      "confidence": 0.72,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0055501|1@500",
+      "actual": 17.1946,
+      "predicted": 10.1738,
+      "ape": 0.40831423819106005,
+      "confidence": 0.64,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0055539|@1000",
+      "actual": 8.1043,
+      "predicted": 7.4906,
+      "ape": 0.07572523228409617,
+      "confidence": 0.71,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0055588|@150",
+      "actual": 4.9434,
+      "predicted": 8.2297,
+      "ape": 0.664785370392847,
+      "confidence": 0.44,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0055622|@750",
+      "actual": 1.3292,
+      "predicted": 2.2238,
+      "ape": 0.673036412879928,
+      "confidence": 0.79,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0055708|@325",
+      "actual": 28.0043,
+      "predicted": 25.5212,
+      "ape": 0.08866852590495032,
+      "confidence": 0.9,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0055719|@400",
+      "actual": 4.4322,
+      "predicted": 20.7046,
+      "ape": 3.6714047200036095,
+      "confidence": 0.82,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0055731|@150",
+      "actual": 47.8449,
+      "predicted": 19.4345,
+      "ape": 0.5938020562275186,
+      "confidence": 0.29,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0055736|@100",
+      "actual": 32.9944,
+      "predicted": 11.679,
+      "ape": 0.6460308415973619,
+      "confidence": 0.76,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0055824|@100",
+      "actual": 1.0402,
+      "predicted": 1.0647,
+      "ape": 0.02355316285329741,
+      "confidence": 0.91,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0055886|@250",
+      "actual": 18.998,
+      "predicted": 14.7639,
+      "ape": 0.2228708285082641,
+      "confidence": 0.27,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0055949|@15",
+      "actual": 371.385,
+      "predicted": 68.5704,
+      "ape": 0.8153657255947332,
+      "confidence": 0.69,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0055980|@600",
+      "actual": 8.9915,
+      "predicted": 8.9915,
+      "ape": 0,
+      "confidence": 0.69,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0055986|@500",
+      "actual": 4.3735,
+      "predicted": 14.7639,
+      "ape": 2.375763118783583,
+      "confidence": 0.27,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0056023|2@75",
+      "actual": 3.2311,
+      "predicted": 4.0047,
+      "ape": 0.2394231066819348,
+      "confidence": 0.84,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0056031|@300",
+      "actual": 4.5973,
+      "predicted": 2.5301,
+      "ape": 0.44965523241902855,
+      "confidence": 0.78,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0056072|@100",
+      "actual": 8.7805,
+      "predicted": 14.7639,
+      "ape": 0.6814418313307897,
+      "confidence": 0.27,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0056120|@200",
+      "actual": 2.441,
+      "predicted": 3.4013,
+      "ape": 0.3934043424825892,
+      "confidence": 0.66,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0056139|@5000",
+      "actual": 1.5748,
+      "predicted": 5.2338,
+      "ape": 2.323469646939294,
+      "confidence": 0.58,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0056226|@500",
+      "actual": 2.308,
+      "predicted": 14.7639,
+      "ape": 5.3968370883882155,
+      "confidence": 0.27,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0056261|@250",
+      "actual": 7.1029,
+      "predicted": 6.9292,
+      "ape": 0.024454800152050597,
+      "confidence": 0.85,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0056320|@1250",
+      "actual": 21.4508,
+      "predicted": 6.071,
+      "ape": 0.7169802524847558,
+      "confidence": 0.75,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0056325|@250",
+      "actual": 3.7605,
+      "predicted": 37.0496,
+      "ape": 8.852306874085892,
+      "confidence": 0.69,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0056348|@50",
+      "actual": 18.6962,
+      "predicted": 5.8791,
+      "ape": 0.685545725869428,
+      "confidence": 0.83,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0056399|@300",
+      "actual": 2.3329,
+      "predicted": 3.6385,
+      "ape": 0.5596467915470016,
+      "confidence": 0.85,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0056437|@100",
+      "actual": 4.8155,
+      "predicted": 14.7639,
+      "ape": 2.065912158654345,
+      "confidence": 0.27,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0056472|1@300",
+      "actual": 6.0519,
+      "predicted": 4.6847,
+      "ape": 0.22591252333977752,
+      "confidence": 0.69,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0056596|@1000",
+      "actual": 2.4413,
+      "predicted": 3.4644,
+      "ape": 0.41907999836152865,
+      "confidence": 0.66,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0056718|@1500",
+      "actual": 2.2876,
+      "predicted": 1.2383,
+      "ape": 0.4586903304773562,
+      "confidence": 0.71,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0056813|@2000",
+      "actual": 15.012,
+      "predicted": 15.5024,
+      "ape": 0.032667199573674345,
+      "confidence": 0.7,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0056946|1@500",
+      "actual": 1.6549,
+      "predicted": 3.1469,
+      "ape": 0.9015650492476887,
+      "confidence": 0.68,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0056972|@500",
+      "actual": 8.0816,
+      "predicted": 7.0888,
+      "ape": 0.1228469609978222,
+      "confidence": 0.62,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0056979|@100",
+      "actual": 8.3207,
+      "predicted": 8.1571,
+      "ape": 0.019661807299866673,
+      "confidence": 0.71,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0056999|@1000",
+      "actual": 2.2528,
+      "predicted": 2.2528,
+      "ape": 0,
+      "confidence": 0.82,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0057053|@500",
+      "actual": 5.4137,
+      "predicted": 4.5722,
+      "ape": 0.1554389788868982,
+      "confidence": 0.87,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0057099|@250",
+      "actual": 2.9101,
+      "predicted": 4.2044,
+      "ape": 0.44476134840727116,
+      "confidence": 0.72,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0057124|1@10000",
+      "actual": 0.831,
+      "predicted": 0.3933,
+      "ape": 0.5267148014440434,
+      "confidence": 0.63,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0057156|@100",
+      "actual": 12.8511,
+      "predicted": 9.8511,
+      "ape": 0.2334430515675701,
+      "confidence": 0.82,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0057175|@200",
+      "actual": 5.9429,
+      "predicted": 1.5518,
+      "ape": 0.7388816907570378,
+      "confidence": 0.71,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0057199|@500",
+      "actual": 3.7736,
+      "predicted": 2.25,
+      "ape": 0.40375238499046007,
+      "confidence": 0.69,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0057308|@100",
+      "actual": 5.5792,
+      "predicted": 4.202,
+      "ape": 0.2468454258675079,
+      "confidence": 0.79,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0057307|@500",
+      "actual": 4.1036,
+      "predicted": 5.8526,
+      "ape": 0.42621113168924835,
+      "confidence": 0.79,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0057448|5@100",
+      "actual": 13.5301,
+      "predicted": 8.4775,
+      "ape": 0.37343404705065003,
+      "confidence": 0.79,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0057554|1@50",
+      "actual": 43.5673,
+      "predicted": 6.6128,
+      "ape": 0.848216437557526,
+      "confidence": 0.41,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0057621|@100",
+      "actual": 6.1143,
+      "predicted": 6.1143,
+      "ape": 0,
+      "confidence": 0.8,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0057726|@100",
+      "actual": 1.9265,
+      "predicted": 3.7183,
+      "ape": 0.9300804567869193,
+      "confidence": 0.79,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0057733|@1000",
+      "actual": 1.5773,
+      "predicted": 2.2528,
+      "ape": 0.4282634882393966,
+      "confidence": 0.8,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0057765|@500",
+      "actual": 2.3115,
+      "predicted": 2.3327,
+      "ape": 0.009171533636166941,
+      "confidence": 0.76,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0057807|@1500",
+      "actual": 2.3305,
+      "predicted": 2.2012,
+      "ape": 0.055481656296931886,
+      "confidence": 0.88,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0057849|1@500",
+      "actual": 6.6082,
+      "predicted": 1.5386,
+      "ape": 0.7671680639205836,
+      "confidence": 0.61,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0057860|@200",
+      "actual": 3.403,
+      "predicted": 13.6892,
+      "ape": 3.0226858654128708,
+      "confidence": 0.8,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0057868|@200",
+      "actual": 7.5392,
+      "predicted": 3.8258,
+      "ape": 0.4925456281833616,
+      "confidence": 0.8,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0057876|@100",
+      "actual": 5.3267,
+      "predicted": 15.2215,
+      "ape": 1.857585371806184,
+      "confidence": 0.88,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0057892|@1500",
+      "actual": 3.1812,
+      "predicted": 4.6046,
+      "ape": 0.4474412171507606,
+      "confidence": 0.88,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0057934|@1500",
+      "actual": 1.5836,
+      "predicted": 2.3241,
+      "ape": 0.46760545592321306,
+      "confidence": 0.81,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0057932|@1500",
+      "actual": 3.8065,
+      "predicted": 2.3241,
+      "ape": 0.3894391172993564,
+      "confidence": 0.88,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0058055|@12000",
+      "actual": 4.472,
+      "predicted": 8.9768,
+      "ape": 1.007334525939177,
+      "confidence": 0.92,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0058051|@1400",
+      "actual": 15.894,
+      "predicted": 15.7356,
+      "ape": 0.009966024915062308,
+      "confidence": 0.95,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0058164|@1250",
+      "actual": 2.3458,
+      "predicted": 2.3458,
+      "ape": 0,
+      "confidence": 0.8,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0058182|@500",
+      "actual": 25.1747,
+      "predicted": 22.0923,
+      "ape": 0.1224403865785888,
+      "confidence": 0.88,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0058300|@500",
+      "actual": 0.8645,
+      "predicted": 7.1709,
+      "ape": 7.294852515905147,
+      "confidence": 0.8,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    },
+    {
+      "id": "0058349|@20",
+      "actual": 7.3594,
+      "predicted": 7.49,
+      "ape": 0.017746011903144315,
+      "confidence": 0.8,
+      "method": "median_won",
+      "basis": "fallback:median_won",
+      "analogs": 5
+    }
+  ]
+}
