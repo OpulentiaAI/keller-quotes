@@ -57,3 +57,12 @@ For programmatic access use `estimator/src/register.ts` (`QuoteRegister.fromCsv`
 ## Extending the register
 
 To add fields (e.g. ops detail from `QUOTOPER`): re-extract `C:\Vftw\KELLER` (see session history / TeamViewer device 1321305824), join the new table on `QUOTE_NO`, regenerate CSV+JSON, bump this README's provenance table. Never hand-edit `quotes.csv`.
+
+## Polygres mirror
+
+The register is also loaded into a Polygres Postgres database — normalized
+tables + embedding/graph/FTS retrieval layers. Use it for semantic analog
+search, re-quote lineage traversal, and fuzzy part lookup instead of scanning
+the CSV. Connection, schema map, and query recipes live in the **polygres**
+skill (`polygres`) and `docs/polygres.md`. The CSV remains the source of truth;
+the DB is a derived copy — regenerate via `scripts/load.py`.
