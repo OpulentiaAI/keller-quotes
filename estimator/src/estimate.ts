@@ -19,11 +19,41 @@ export interface EstimateOptions {
   exclude?: Set<string>;
 }
 
+export function assertEstimateRequest(req: unknown): asserts req is EstimateRequest {
+  if (typeof req !== "object" || req === null || Array.isArray(req)) {
+    throw new Error("request must be an object");
+  }
+  const request = req as Record<string, unknown>;
+  if (!Array.isArray(request.parts) || request.parts.length === 0) {
+    throw new Error("request.parts must be a nonempty array");
+  }
+  for (const field of ["customer", "customer_id", "rfq_no", "notes"]) {
+    if (request[field] !== undefined && typeof request[field] !== "string") {
+      throw new Error(`request.${field} must be a string`);
+    }
+  }
+  for (const [i, value] of request.parts.entries()) {
+    if (typeof value !== "object" || value === null || Array.isArray(value)) {
+      throw new Error(`request.parts[${i}] must be an object`);
+    }
+    const part = value as Record<string, unknown>;
+    if (typeof part.quantity !== "number" || !Number.isFinite(part.quantity) || part.quantity <= 0) {
+      throw new Error(`request.parts[${i}].quantity must be a finite positive number`);
+    }
+    for (const field of ["part_no", "description", "material", "finish", "drawing_ref", "notes"]) {
+      if (part[field] !== undefined && typeof part[field] !== "string") {
+        throw new Error(`request.parts[${i}].${field} must be a string`);
+      }
+    }
+  }
+}
+
 export async function estimate(
   reg: QuoteRegister,
   req: EstimateRequest,
   opts: EstimateOptions = {},
 ): Promise<QuoteEstimate> {
+  assertEstimateRequest(req);
   const jev = opts.jev ?? new JevClient();
   const rankLimit = opts.rankLimit ?? 8;
   const screenTopN = opts.screenTopN ?? 3;

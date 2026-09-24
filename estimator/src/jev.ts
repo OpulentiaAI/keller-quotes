@@ -77,8 +77,9 @@ export class JevClient {
       const ans = res.answers.best_analog;
       if (ans.type !== "choice") return this.fallback(candidates);
       const probs = ans.probabilities ?? {};
+      const probability = (id: string) => probs[id] ?? (id === ans.choice ? 1 : 0);
       const ordered = Object.keys(criteria).sort(
-        (a, b) => (probs[b] ?? (a === ans.choice ? 1 : 0)) - (probs[a] ?? (b === ans.choice ? 1 : 0)),
+        (a, b) => probability(b) - probability(a),
       );
       // Merge Jev order for the top-K with deterministic order for the tail.
       const byId = new Map(top.map((c, i) => [`c${i}`, c]));

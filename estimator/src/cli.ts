@@ -1,8 +1,9 @@
 #!/usr/bin/env node
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { QuoteRegister } from "./register.js";
-import { estimate } from "./estimate.js";
-import type { EstimateRequest, QuoteEstimate } from "./types.js";
+import { assertEstimateRequest, estimate } from "./estimate.js";
+import type { QuoteEstimate } from "./types.js";
 
 function usage(): never {
   console.error(`usage: estimate <request.json> [--register quotes.csv] [--csv out.csv] [--offline]
@@ -37,20 +38,19 @@ const opt = (n: string) => {
   return i >= 0 ? argv[i + 1] : undefined;
 };
 
-const registerPath =
-  opt("--register") ?? process.env.KELLER_REGISTER ?? "data/quotes.csv";
+const sourceData = new URL("../data/quotes.csv", import.meta.url);
+const registerPath = opt("--register") ?? process.env.KELLER_REGISTER ?? fileURLToPath(
+  existsSync(sourceData) ? sourceData : new URL("../../data/quotes.csv", import.meta.url),
+);
 const offline = flag("--offline");
 
-const req = JSON.parse(readFileSync(reqPath, "utf8")) as EstimateRequest;
-if (!Array.isArray(req.parts) || !req.parts.length) {
-  console.error("request.parts must be a nonempty array");
+let req: unknown;
+try {
+  req = JSON.parse(readFileSync(reqPath, "utf8"));
+  assertEstimateRequest(req);
+} catch (error) {
+  console.error(`invalid request: ${error instanceof Error ? error.message : String(error)}`);
   process.exit(2);
-}
-for (const p of req.parts) {
-  if (!p.quantity || p.quantity <= 0) {
-    console.error(`part ${p.part_no ?? p.description ?? "?"}: quantity must be > 0`);
-    process.exit(2);
-  }
 }
 
 const reg = QuoteRegister.fromCsv(registerPath);
@@ -63,8 +63,9 @@ const csvPath = opt("--csv");
 if (csvPath) {
   const header = "part_no,description,quantity,unit_price,extended_price,price_low,price_high,confidence,method,top_analog_quote,top_analog_date,top_analog_status,warnings\n";
   const esc = (s: unknown) => {
-    const v = s === null || s === undefined ? "" : String(s);
-    return /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+    let v = s === null || s === undefined ? "" : String(s);
+    if (typeof s === "string" && /^[\s\x00-\x1f]*[=+\-@]/.test(s)) v = `'${v}`;
+    return /[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
   };
   const body = result.lines
     .map((l) =>
