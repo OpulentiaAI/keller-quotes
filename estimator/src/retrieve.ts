@@ -48,12 +48,21 @@ export function retrieve(
     limit?: number;
     /** quote_no prefixes to exclude (leave-one-out evals). */
     exclude?: Set<string>;
+    asOf?: string;
   } = {},
 ): Candidate[] {
   const limit = opts.limit ?? 12;
+  const beforeCutoff = (date: string) => Boolean(opts.asOf && /^\d{4}-\d{2}-\d{2}$/.test(date) &&
+    !Number.isNaN(Date.parse(`${date}T00:00:00Z`)) &&
+    new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) === date && date < opts.asOf);
   const excluded = (g: QuoteGroup) =>
-    opts.exclude !== undefined &&
-    [...opts.exclude].some((p) => g.quote_no.split("|")[0] === p);
+    (opts.exclude?.has(g.head.quote_no) ?? false) ||
+    (opts.asOf !== undefined && g.breaks.some((b) =>
+      !beforeCutoff(b.quote_date) ||
+      (b.date_stamp !== "" && !beforeCutoff(b.date_stamp)) ||
+      (b.letter_date !== "" && !beforeCutoff(b.letter_date))));
+  const wonAtCutoff = (g: QuoteGroup) => g.breaks.every((b) =>
+    b.status === "won" && beforeCutoff(b.won_date));
   const wantPn = part.part_no ? normalizePartNo(part.part_no) : "";
   const wantToks = descTokens(
     [part.description, part.material, part.finish, part.notes].filter(Boolean).join(" "),
@@ -62,6 +71,7 @@ export function retrieve(
   const scored = new Map<QuoteGroup, { score: number; reasons: string[] }>();
 
   const bump = (g: QuoteGroup, s: number, reason: string) => {
+    if (excluded(g)) return;
     const cur = scored.get(g);
     if (cur) {
       cur.score += s;
@@ -115,18 +125,36 @@ export function retrieve(
   for (const [g, cur] of scored) {
     if (opts.customerId && g.head.customer_id === opts.customerId) {
       bump(g, 0.15, "same customer_id");
-    } else if (wantCust && normalizeCustomer(g.head.customer) === wantCust) {
+    } else if (!opts.asOf && wantCust && normalizeCustomer(g.head.customer) === wantCust) {
       bump(g, 0.15, "same customer");
     }
-    if (materialMatch(part.material, g.head.material, g.head.comment)) {
+    if (materialMatch(part.material,
+      !opts.asOf || beforeCutoff(g.head.letter_date) ? g.head.material : "",
+      g.head.comment)) {
       bump(g, 0.1, "material match");
     }
-    if (g.head.status === "won") bump(g, 0.08, "won quote");
+    if (g.head.status === "won" && (!opts.asOf || wonAtCutoff(g))) {
+      bump(g, 0.08, "won quote");
+    }
   }
 
   return [...scored.entries()]
-    .filter(([g]) => !excluded(g))
-    .map(([g, s]) => ({ row: g.head, breaks: g.breaks, score: Math.min(1, s.score), reasons: s.reasons }))
+    .map(([g, s]) => {
+      const status = wonAtCutoff(g) ? "won" : "open";
+      const redact = (row: typeof g.head) => ({
+        ...row,
+        status,
+        won_date: status === "won" ? row.won_date : "",
+        customer: "",
+        material: beforeCutoff(row.letter_date) ? row.material : "",
+      });
+      return {
+        row: opts.asOf ? redact(g.head) : g.head,
+        breaks: opts.asOf ? g.breaks.map(redact) : g.breaks,
+        score: Math.min(1, s.score),
+        reasons: s.reasons,
+      };
+    })
     .sort((a, b) => b.score - a.score || b.row.quote_date.localeCompare(a.row.quote_date))
     .slice(0, limit);
 }

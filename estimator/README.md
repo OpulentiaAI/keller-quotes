@@ -51,6 +51,8 @@ Output per line: `unit_price`, `extended_price`, `price_low`/`price_high`
 `status_basis` (`jev+…` vs `fallback:…`), top `analogs` with Jev
 probabilities, and `warnings` (e.g. "no won-quote analogs").
 
+Quote-time historical replays can pass `EstimateOptions.asOf` (`YYYY-MM-DD`): only quotes/revisions/letters dated before the cutoff are used, and wins are visible only if their won date precedes it. Recency is computed at the same cutoff. The live CLI uses all available history unless the caller supplies `asOf` through the library.
+
 ## Interpretation notes
 
 - Prices are **as-quoted historically** — no inflation normalization is
@@ -79,3 +81,5 @@ probabilities, and `warnings` (e.g. "no won-quote analogs").
 ```bash
 npm test
 ```
+
+The repository root's `scripts/keller-local.mjs` and [operator guide](../docs/local-automation.md) provide offline readiness checks and a durable, manual-review-only request queue.

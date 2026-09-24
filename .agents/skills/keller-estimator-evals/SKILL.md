@@ -5,11 +5,11 @@ description: Run leave-one-out evaluations of the Keller quote estimator against
 
 # Keller Estimator Evals
 
-The eval set (`evals/evalset.jsonl`) is sampled from the register itself: each case replays a historical quote line as a fresh pricing request, with the source quote excluded from its own analogs (leave-one-out). The harness scores predicted unit price vs the actual quoted price.
+The eval set (`evals/evalset.jsonl`) is sampled from the register itself: each case replays a historical quote line as a fresh pricing request, with the source quote excluded from its own analogs. The default harness also excludes quotes, revisions, and letters on/after the case date, and hides wins not known before then. It scores predicted unit price vs the actual quoted price. This is a cutoff-aware **frozen-snapshot replay**, not a true backtest: earlier rows may contain later unversioned changes. The eval sample intentionally overweights won and recent quotes, so its metrics do not represent natural production prevalence.
 
 ## Current baseline (v0, offline deterministic path)
 
-250 cases · coverage **98.8%** · median APE **46.3%** · mean APE 122% · within ±20% **24.3%** · within ±50% **52.6%** · mean confidence 0.50 → see `evals/report-baseline.md`.
+The committed v0 `evals/report-baseline.md` used retrospective leave-one-out and exposed future data: 250 cases · coverage 98.8% · median APE 46.3%. Do not compare that number directly to the cutoff-aware default. Regenerate the report after an estimator change; use `--retrospective` only when explicitly analyzing the old, future-visible behavior.
 
 That is a *starting point*, not a target. Job-shop quotes span 1994–2026 with no inflation normalization, so historical-dollar APE is inherently high; hill-climbing should improve analog selection and staleness handling first.
 
@@ -29,9 +29,12 @@ cd estimator && npm install && cd ..    # first time only
 
 # with Jev ranking (needs AI_GATEWAY_API_KEY)
 ./estimator/node_modules/.bin/tsx evals/run-eval.ts --jev --report evals/report-jev.md
+
+# old leave-one-out with future data visible (not quote-time accuracy)
+./estimator/node_modules/.bin/tsx evals/run-eval.ts --retrospective --report /tmp/retrospective.md
 ```
 
-Each run writes `report-<label>.md` (metrics table + worst-10 misses) and a `.json` with per-case results for deeper slicing.
+Each run writes `report-<label>.md` (metrics table + worst-10 misses) and a `.json` with per-case results for deeper slicing. The summary separately counts unpriced (`no_analog`) and invalid/undated (`unreplayable`) cases; when none is priced, accuracy is `n/a`/`null`, not a fabricated zero.
 
 ## Regenerating the eval set
 

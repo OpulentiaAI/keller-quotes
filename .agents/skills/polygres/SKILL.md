@@ -40,7 +40,7 @@ Secrets live in Devin org secrets — never print, log, or commit them:
 | `parts` | deduped `(part_no, drawing_no, description)` | `part_id` pk; `id` = stored generated text alias (pgContext source key); `embedding` pgcontext.vector(512); `fts` generated |
 | `quotes` | one per `quote_no` | `quote_date` (ORG_DATE) vs `date_stamp` (last touch) kept separate; `status` only `'won'`/`'open'` — no lost state (QUOTEHN empty); `to_quote` self-FK re-quote lineage; `comment` verbatim CRLF; `comment_embedding`; `id` source-key alias |
 | `quote_qty_breaks` | one per source CSV row | `is_placeholder` rows preserve the 179,608-row grain for breakless quotes |
-| `quote_letters` + `quote_letter_lines` | QUOTLETT headers + per-quote lines | `material` lives here only; letters are NOT graph nodes (Nano unit budget) |
+| `quote_letters` + `quote_letter_lines` | QUOTLETT headers + per-quote lines | `material` and per-link `letter_date` live here; apply migration `0005_letter_line_date.sql` before a refresh on an older DB. Letters are NOT graph nodes (Nano unit budget) |
 | `estimates` / `estimate_lines` | estimator output, request-id keyed | generated estimates — never mix with real history |
 
 Row counts after the baseline load: customers 258, parts 38,091, quotes 40,111,

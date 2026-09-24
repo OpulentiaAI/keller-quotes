@@ -3,6 +3,8 @@ import { QuoteRegister, normalizePartNo, descTokens } from "../src/register.js";
 import { retrieve } from "../src/retrieve.js";
 import { interpolateAtQty, price } from "../src/price.js";
 import { estimate } from "../src/estimate.js";
+import type { JevClient } from "../src/jev.js";
+import type { Candidate } from "../src/types.js";
 import type { QuoteRow } from "../src/types.js";
 
 function row(partial: Partial<QuoteRow>): QuoteRow {
@@ -76,12 +78,42 @@ describe("price", () => {
   it("returns null for empty breaks", () => {
     expect(interpolateAtQty([], 10)).toBeNull();
   });
+  it("collapses repeated quantities without a zero log denominator", () => {
+    const result = interpolateAtQty([
+      { quantity: 10, unit_price: 10 }, { quantity: 10, unit_price: 10 },
+      { quantity: 100, unit_price: 5 },
+    ], 5)!;
+    expect(Number.isFinite(result)).toBe(true);
+    expect(result).toBeGreaterThan(10);
+    expect(result).toBeLessThanOrEqual(12.5);
+  });
   it("prices from candidates with weights", () => {
     const c = retrieve(reg, { part_no: "ABC-123", quantity: 100 });
     const r = price(100, c, { strategy: "median_won" });
     expect(r.unit_price).toBeGreaterThan(6);
     expect(r.unit_price).toBeLessThan(11);
     expect(r.confidence).toBeGreaterThan(0.2);
+  });
+  it("fits the historical break quantities instead of the requested quantity", () => {
+    const c = [
+      row({ quote_no: "A", quote_date: "2024-01-01", quantity: 10, unit_price: 100 }),
+      row({ quote_no: "B", quote_date: "2024-01-01", quantity: 100, unit_price: 50 }),
+      row({ quote_no: "C", quote_date: "2024-01-01", quantity: 1000, unit_price: 25 }),
+    ].map((r) => ({ row: r, breaks: [r], score: 1, reasons: [] }));
+    const fit = price(50, c, { strategy: "curve_fit", now: Date.parse("2024-01-02") });
+    expect(fit.method).toBe("curve_fit");
+    expect(fit.unit_price).toBeGreaterThan(50);
+    expect(fit.unit_price).toBeLessThan(100);
+  });
+  it("normalizes regression weight per quote rather than per price break", () => {
+    const single = row({ quote_no: "A", quote_date: "2024-01-01", quantity: 10, unit_price: 100 });
+    const many = [10, 20, 40, 80].map((quantity) => row({ quote_no: "B", quote_date: "2024-01-01", quantity, unit_price: 10 }));
+    const fit = price(25, [
+      { row: single, breaks: [single], score: 1, reasons: [] },
+      { row: many[0]!, breaks: many, score: 1, reasons: [] },
+    ], { strategy: "curve_fit", now: Date.parse("2024-01-02") });
+    expect(fit.method).toBe("curve_fit");
+    expect(fit.points).toHaveLength(2);
   });
 });
 
@@ -119,5 +151,60 @@ describe("estimate (offline fallback)", () => {
     });
     expect(res.lines[0]!.unit_price).toBeNull();
     expect(res.lines[0]!.warnings.join(" ")).toMatch(/no historical analogs|no usable/);
+  });
+  it("never boosts an unrelated customer's price when request identity is absent", async () => {
+    const c = (quote_no: string, customer_id: string, unit_price: number) => row({
+      quote_no, part_no: "PART-X", customer_id, quote_date: "2024-01-01", quantity: 10, unit_price,
+    });
+    const register = new QuoteRegister([
+      c("low-a", "", 1), c("low-b", "", 2), c("high-a", "A", 100), c("high-b", "B", 200),
+    ]);
+    const res = await estimate(register, { parts: [{ part_no: "PART-X", quantity: 10 }] },
+      { rankLimit: 4 });
+    expect(res.lines[0]!.unit_price).toBe(2);
+  });
+  it("uses only quote-time history and downgrades future wins", async () => {
+    const register = new QuoteRegister([
+      row({ quote_no: "old", part_no: "PART-X", customer_id: "C1", customer: "Future-resolved name", material: "future material", quote_date: "2020-01-01", date_stamp: "2020-01-02", letter_date: "", won_date: "2025-01-01", quantity: 10, unit_price: 10, status: "won" }),
+      row({ quote_no: "future", part_no: "PART-X", quote_date: "2025-01-01", quantity: 10, unit_price: 20 }),
+      row({ quote_no: "revision", part_no: "PART-X", quote_date: "2020-01-01", date_stamp: "2025-01-01", quantity: 10, unit_price: 30 }),
+      row({ quote_no: "letter", part_no: "PART-X", quote_date: "2020-01-01", letter_date: "2025-01-01", quantity: 10, unit_price: 40 }),
+      row({ quote_no: "today", part_no: "PART-X", quote_date: "2024-01-01", quantity: 10, unit_price: 50 }),
+      row({ quote_no: "undated", part_no: "PART-X", quote_date: "", quantity: 10, unit_price: 60 }),
+    ]);
+    const res = await estimate(register, { parts: [{ part_no: "PART-X", quantity: 10 }] },
+      { asOf: "2024-01-01" });
+    expect(res.lines[0]!.analogs.map((a) => a.quote_no)).toEqual(["old"]);
+    expect(res.lines[0]!.analogs[0]!.status).toBe("open");
+    expect(res.lines[0]!.analogs[0]!.customer).toBe("");
+    expect(res.lines[0]!.warnings).toContain("no won-quote analogs — all references are open history");
+  });
+  it("excludes a whole quote with a future-dated break and hides future outcomes from Jev", async () => {
+    const register = new QuoteRegister([
+      row({ quote_no: "mixed", part_no: "PART-X", quote_date: "2020-01-01", letter_date: "2020-01-02", quantity: 10, unit_price: 10 }),
+      row({ quote_no: "mixed", part_no: "PART-X", quote_date: "2020-01-01", letter_date: "2025-01-02", quantity: 100, unit_price: 1 }),
+      row({ quote_no: "old", part_no: "PART-X", quote_date: "2020-01-01", won_date: "2025-02-01", status: "won", quantity: 10, unit_price: 20 }),
+    ]);
+    let seen: Candidate[] = [];
+    const jev = {
+      enabled: true,
+      rankAnalogs: async (_part: unknown, candidates: Candidate[]) => {
+        seen = candidates;
+        return { rankedIds: candidates.map((c) => c.row.quote_no), probabilities: {}, source: "jev" as const };
+      },
+      screenCandidate: async () => "admit" as const,
+      chooseStrategy: async () => "median_won" as const,
+    } as unknown as JevClient;
+    const res = await estimate(register, { parts: [{ part_no: "PART-X", quantity: 100 }] },
+      { asOf: "2024-01-01", jev });
+    expect(seen.map((c) => c.row.quote_no)).toEqual(["old"]);
+    expect(seen[0]!.row.status).toBe("open");
+    expect(seen[0]!.row.won_date).toBe("");
+    expect(seen[0]!.breaks.every((b) => b.status === "open" && b.won_date === "")).toBe(true);
+    expect(res.lines[0]!.analogs.map((a) => a.quote_no)).toEqual(["old"]);
+    expect(res.lines[0]!.unit_price).toBe(20);
+  });
+  it("rejects invalid as-of dates", async () => {
+    await expect(estimate(reg, { parts: [{ quantity: 10 }] }, { asOf: "2024-02-30" })).rejects.toThrow(/asOf/);
   });
 });
