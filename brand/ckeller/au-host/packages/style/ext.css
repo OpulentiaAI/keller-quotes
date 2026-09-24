@@ -1,0 +1,413 @@
+/*
+ * @arsumbris/style — token extensions, loaded after tokens.css.
+ *
+ * @property declarations provide typed, inheritable defaults with computationally independent initials.
+ * The :root derivations scale spacing by density, map base color aliases to the palette ladders, and
+ * compose focus and elevation values. Theme overrides of source ladders propagate through these values.
+ *
+ * Consume tokens through var(--au-*). Themes supply :root overrides; the host selects the active theme.
+ */
+
+/* ─────────────────────────────────────────────────────────────────────────────────────────────
+ * GALLERY BASELINE — grid/ruler overlay pitch. Kept first so overlays.css resolves it regardless.
+ * ───────────────────────────────────────────────────────────────────────────────────────────── */
+@property --au-baseline { syntax: "<number>"; inherits: true; initial-value: 1; }
+
+/* ─────────────────────────────────────────────────────────────────────────────────────────────
+ * SURFACE LADDER — six-step warm graphite. (--au-color-bg lives in base.css; re-pointed in :root.)
+ * ───────────────────────────────────────────────────────────────────────────────────────────── */
+@property --au-color-desk      { syntax: "<color>"; inherits: true; initial-value: #050403; }
+@property --au-color-shell     { syntax: "<color>"; inherits: true; initial-value: #100e0c; }
+/* Opacity of the native-window chrome tint. Content surfaces retain their own opaque fills. */
+@property --au-color-chrome { syntax: "<color>"; inherits: true; initial-value: #0d0c0b; }
+@property --au-chrome-opacity { syntax: "<number>"; inherits: true; initial-value: 1; }
+/* Optional decorative layer on window chrome; content panes paint above it. */
+@property --au-chrome-background-image { syntax: "*"; inherits: true; initial-value: none; }
+/* Optional low-contrast illumination on large pane surfaces. The solid elevation fill remains underneath. */
+@property --au-pane-background-image { syntax: "*"; inherits: true; initial-value: none; }
+/* Decorative directional rim on large panes; independent from focus and error outlines. */
+@property --au-pane-edge-image { syntax: "*"; inherits: true; initial-value: none; }
+/* Floating surfaces share the theme material family, with independently overridable roles. */
+@property --au-floating-fill { syntax: "<color>"; inherits: true; initial-value: #232323; }
+@property --au-floating-background-image { syntax: "*"; inherits: true; initial-value: none; }
+@property --au-floating-edge-image { syntax: "*"; inherits: true; initial-value: none; }
+/* Pane focus contour can be tuned independently from general separators and control focus. */
+@property --au-pane-focus-color { syntax: "<color>"; inherits: true; initial-value: rgba(245, 243, 238, 0.14); }
+@property --au-color-surface-1 { syntax: "<color>"; inherits: true; initial-value: #15130f; }
+@property --au-color-surface-2 { syntax: "<color>"; inherits: true; initial-value: #1c1a15; }
+@property --au-color-surface-3 { syntax: "<color>"; inherits: true; initial-value: #25221c; }
+
+/* Ink hierarchy: enabled text uses ink-1 through ink-4; ink-5 is disabled-only.
+ * Contrast depends on each theme and its intended background pairs. */
+@property --au-ink-1 { syntax: "<color>"; inherits: true; initial-value: #e2dfda; } /* Primary text ink reduces perceived bloom on dark backgrounds. */
+@property --au-ink-2 { syntax: "<color>"; inherits: true; initial-value: #d9d6cd; } /* 13.45:1 body     — measured */
+@property --au-ink-3 { syntax: "<color>"; inherits: true; initial-value: #a09c92; } /*  7.13:1 muted    — measured */
+@property --au-ink-4 { syntax: "<color>"; inherits: true; initial-value: #959083; } /* muted readable text */
+@property --au-ink-5 { syntax: "<color>"; inherits: true; initial-value: #3f3c36; } /*  1.78:1 disabled only — exempt from the gate */
+
+/* ─────────────────────────────────────────────────────────────────────────────────────────────
+ * HAIRLINE LADDER — alphas of ink-1. Consumed directly AND by the elevation line recipes below.
+ * ───────────────────────────────────────────────────────────────────────────────────────────── */
+@property --au-line-1 { syntax: "<color>"; inherits: true; initial-value: rgba(245, 243, 238, 0.055); }
+@property --au-line-2 { syntax: "<color>"; inherits: true; initial-value: rgba(245, 243, 238, 0.09); }
+@property --au-line-3 { syntax: "<color>"; inherits: true; initial-value: rgba(245, 243, 238, 0.14); }
+
+/* ─────────────────────────────────────────────────────────────────────────────────────────────
+ * ACCENT SLOTS — declared once; presets flip the values so primitives are never conditional.
+ * Monochrome: signal = ink-1, atmosphere = off (transparent), soft = surface lift, ink = canvas.
+ * ───────────────────────────────────────────────────────────────────────────────────────────── */
+@property --au-accent-signal     { syntax: "<color>"; inherits: true; initial-value: #f5f3ee; }
+@property --au-accent-atmosphere { syntax: "<color>"; inherits: true; initial-value: rgba(0, 0, 0, 0); }
+@property --au-accent-soft       { syntax: "<color>"; inherits: true; initial-value: rgba(245, 243, 238, 0.06); }
+@property --au-accent-ink        { syntax: "<color>"; inherits: true; initial-value: #0d0c0b; }
+
+/* ─────────────────────────────────────────────────────────────────────────────────────────────
+ * CTA — warm off-white, one hair below ink-1. Stays ink-toned across every preset (never amber).
+ * ───────────────────────────────────────────────────────────────────────────────────────────── */
+@property --au-cta-bg      { syntax: "<color>"; inherits: true; initial-value: #ebe8e1; }
+@property --au-cta-ink     { syntax: "<color>"; inherits: true; initial-value: #0d0c0b; }
+@property --au-cta-hover   { syntax: "<color>"; inherits: true; initial-value: #f2efe8; }
+@property --au-cta-pressed { syntax: "<color>"; inherits: true; initial-value: #dcd8cf; }
+
+/* ─────────────────────────────────────────────────────────────────────────────────────────────
+ * SELECTION — mono selection is a warm surface lift with primary ink foreground.
+ * ───────────────────────────────────────────────────────────────────────────────────────────── */
+@property --au-selection-bg { syntax: "<color>"; inherits: true; initial-value: rgba(245, 243, 238, 0.14); }
+@property --au-selection-fg { syntax: "<color>"; inherits: true; initial-value: #f5f3ee; }
+
+/* ─────────────────────────────────────────────────────────────────────────────────────────────
+ * FOCUS — ring is canvas-then-ink. focus-inner is preset-safe: its @property initial is a concrete
+ * canvas hex (registry-legal), but :root binds it to var(--au-color-bg) so the inner halo tracks
+ * the active canvas. focus-ring likewise: concrete initial, var() :root binding.
+ * ───────────────────────────────────────────────────────────────────────────────────────────── */
+@property --au-focus-inner { syntax: "<color>"; inherits: true; initial-value: #0d0c0b; }
+@property --au-focus-outer { syntax: "<color>"; inherits: true; initial-value: #a09c92; }
+@property --au-focus-ring  { syntax: "*"; inherits: true; initial-value: 0 0 0 2px #0d0c0b, 0 0 0 4px #a09c92; }
+
+/* ─────────────────────────────────────────────────────────────────────────────────────────────
+ * SPACE — extends the base 1..5 (do NOT redeclare those). Additional steps are density-scaled in :root.
+ * ───────────────────────────────────────────────────────────────────────────────────────────── */
+@property --au-space-0-5 { syntax: "<length>"; inherits: true; initial-value: 2px; }
+/* 6px / 10px — the chrome rhythm steps between the 4px scale's rungs. Padding-derived rows need a
+ * block padding that is not 4 (too tight) or 8 (too loose). */
+@property --au-space-1-5 { syntax: "<length>"; inherits: true; initial-value: 6px; }
+@property --au-space-2-5 { syntax: "<length>"; inherits: true; initial-value: 10px; }
+@property --au-space-6   { syntax: "<length>"; inherits: true; initial-value: 24px; }
+@property --au-space-7   { syntax: "<length>"; inherits: true; initial-value: 32px; }
+@property --au-space-8   { syntax: "<length>"; inherits: true; initial-value: 40px; }
+
+/* ─────────────────────────────────────────────────────────────────────────────────────────────
+ * TYPE SCALE — paired size + line-height, every line-height quantised to the 4px baseline.
+ * Typography is density-INDEPENDENT: type is fixed, only spacing scales. So these
+ * carry no :root calc — the @property initial IS the value.
+ * ───────────────────────────────────────────────────────────────────────────────────────────── */
+@property --au-t-2xs   { syntax: "<length>"; inherits: true; initial-value: 11px; }
+@property --au-t-xs    { syntax: "<length>"; inherits: true; initial-value: 12px; }
+@property --au-t-sm    { syntax: "<length>"; inherits: true; initial-value: 13px; }
+@property --au-t-base  { syntax: "<length>"; inherits: true; initial-value: 14px; }
+@property --au-t-body  { syntax: "<length>"; inherits: true; initial-value: 16px; }
+@property --au-t-lead  { syntax: "<length>"; inherits: true; initial-value: 18px; }
+@property --au-t-title { syntax: "<length>"; inherits: true; initial-value: 20px; }
+@property --au-t-h2    { syntax: "<length>"; inherits: true; initial-value: 28px; }
+/* Document-title font size; base default is 44px. */
+@property --au-t-h1    { syntax: "<length>"; inherits: true; initial-value: 44px; }
+
+@property --au-lh-2xs   { syntax: "<length>"; inherits: true; initial-value: 16px; }
+@property --au-lh-xs    { syntax: "<length>"; inherits: true; initial-value: 16px; }
+@property --au-lh-sm    { syntax: "<length>"; inherits: true; initial-value: 16px; }
+@property --au-lh-base  { syntax: "<length>"; inherits: true; initial-value: 20px; }
+@property --au-lh-body  { syntax: "<length>"; inherits: true; initial-value: 24px; }
+@property --au-lh-lead  { syntax: "<length>"; inherits: true; initial-value: 24px; }
+@property --au-lh-title { syntax: "<length>"; inherits: true; initial-value: 28px; }
+@property --au-lh-h2    { syntax: "<length>"; inherits: true; initial-value: 36px; }
+@property --au-lh-h1    { syntax: "<length>"; inherits: true; initial-value: 48px; } /* 44 x ~1.09, on the 4px baseline */
+
+/* ─────────────────────────────────────────────────────────────────────────────────────────────
+ * WEIGHT — never bold. medium = UI authority, strong = title authority.
+ * ───────────────────────────────────────────────────────────────────────────────────────────── */
+@property --au-w-body   { syntax: "<number>"; inherits: true; initial-value: 400; }
+@property --au-w-medium { syntax: "<number>"; inherits: true; initial-value: 500; }
+@property --au-w-strong { syntax: "<number>"; inherits: true; initial-value: 590; }
+
+/* ─────────────────────────────────────────────────────────────────────────────────────────────
+ * TRACKING — syntax "*" so `normal` (not a <length>) is a legal value alongside the em offsets.
+ * ───────────────────────────────────────────────────────────────────────────────────────────── */
+@property --au-ls-display { syntax: "*"; inherits: true; initial-value: -0.025em; }
+@property --au-ls-snug    { syntax: "*"; inherits: true; initial-value: -0.02em; }
+@property --au-ls-body    { syntax: "*"; inherits: true; initial-value: normal; }
+@property --au-ls-mono    { syntax: "*"; inherits: true; initial-value: -0.005em; }
+@property --au-ls-label   { syntax: "*"; inherits: true; initial-value: 0.08em; }
+
+/* ─────────────────────────────────────────────────────────────────────────────────────────────
+ * RADII — extends the base sm/md/pill (do NOT redeclare those).
+ * ───────────────────────────────────────────────────────────────────────────────────────────── */
+@property --au-radius-frame { syntax: "<length>"; inherits: true; initial-value: 14px; }
+@property --au-radius-panel { syntax: "<length>"; inherits: true; initial-value: 12px; }
+@property --au-radius-row   { syntax: "<length>"; inherits: true; initial-value: 8px; }
+@property --au-radius-chip  { syntax: "<length>"; inherits: true; initial-value: 6px; }
+
+/*
+ * Elevation, motion and easing are declared in tokens.css.
+ * The :root block below derives elevation fills and lines from the surface and hairline ladders.
+ */
+
+/* ─────────────────────────────────────────────────────────────────────────────────────────────
+ * METRICS — shell chrome invariants (fixed; not density-scaled).
+ * ───────────────────────────────────────────────────────────────────────────────────────────── */
+/*
+ * Prose uses its own reading measure, gutters and line-height.
+ * --au-prose-lh is a unitless ratio, so each element computes its line-height from its own font size.
+ * A registered token always has a value; a var() fallback cannot override its registered default.
+ */
+/* 680px, NOT 42.5rem. A registered custom property's initial-value must be COMPUTATIONALLY
+ * INDEPENDENT, and `rem` depends on the root font-size — so the whole @property declaration is
+ * invalid and silently DROPPED. Symptom: `max-width: var(--au-prose-measure)` computed to `none`
+ * and the reading column ran full-bleed, while every neighbouring token resolved fine. The file
+ * header warns about `var()` initials for this reason; relative UNITS fail the same rule. */
+@property --au-prose-measure   { syntax: "<length>"; inherits: true; initial-value: 680px; }
+@property --au-prose-lh        { syntax: "<number>"; inherits: true; initial-value: 1.72; }
+@property --au-prose-pad-top   { syntax: "<length>"; inherits: true; initial-value: 44px; }
+@property --au-prose-pad-side  { syntax: "<length>"; inherits: true; initial-value: 52px; }
+@property --au-prose-pad-foot  { syntax: "<length>"; inherits: true; initial-value: 130px; }
+
+/* Tree indentation has its own token so adjusting it does not change prose spacing. */
+@property --au-tree-indent  { syntax: "<length>"; inherits: true; initial-value: 16px; }
+@property --au-side-w       { syntax: "<length>"; inherits: true; initial-value: 232px; }
+@property --au-side-w-mini  { syntax: "<length>"; inherits: true; initial-value: 48px; }
+@property --au-row-h        { syntax: "<length>"; inherits: true; initial-value: 32px; }
+@property --au-row-h-label  { syntax: "<length>"; inherits: true; initial-value: 20px; }
+@property --au-row-h-dense  { syntax: "<length>"; inherits: true; initial-value: 24px; }
+@property --au-topbar-h     { syntax: "<length>"; inherits: true; initial-value: 40px; }
+@property --au-tabs-h       { syntax: "<length>"; inherits: true; initial-value: 36px; }
+@property --au-status-h     { syntax: "<length>"; inherits: true; initial-value: 28px; }
+@property --au-pane-gap     { syntax: "<length>"; inherits: true; initial-value: 6px; }
+@property --au-frame-margin { syntax: "<length>"; inherits: true; initial-value: 6px; }
+
+/* ═════════════════════════════════════════════════════════════════════════════════════════════
+ * :root — the MONOCHROME DEFAULT + derivation layer. Everything above supplies concrete initials;
+ * here we (a) density-scale the additional spacing, (b) promote Monochrome onto the base color aliases,
+ * (c) bind the var()-composite tokens so presets need only override the source ladders.
+ * ═════════════════════════════════════════════════════════════════════════════════════════════ */
+:root {
+  /* — fonts: CKeller brand faces first, robust system stack behind it (works even if fonts.css is not loaded). — */
+  --au-font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --au-font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', 'Fira Code', monospace;
+
+  /* — canvas: Monochrome warm-black. — */
+  --au-color-bg: #0d0d0c;
+  /* Base palette with a trace of warmth. */
+  --au-color-desk: #050504;
+  --au-color-shell: #10100f;
+  --au-color-surface-1: #151513;
+  --au-color-surface-2: #1c1b19;
+  --au-color-surface-3: #252422;
+  --au-ink-1: #e2e1de;
+  --au-ink-2: #d9d8d4;
+  --au-ink-3: #a09e99;
+  --au-ink-4: #95938e;
+  --au-ink-5: #3f3e3b;
+  /* Base: subtly warm reflection over the charcoal ground. Themes can override either decorative layer independently. */
+  --au-chrome-background-image: linear-gradient(118deg, oklch(0.97 0.012 80 / 0.065), oklch(0.97 0.012 80 / 0.018) 35%, transparent 65%), radial-gradient(100% 110% at 100% 100%, oklch(0.97 0.012 80 / 0.025), transparent 75%);
+  --au-floating-fill: color-mix(in srgb, var(--au-elev-3-fill) 85%, var(--au-elev-5-fill));
+  --au-floating-background-image: var(--au-pane-background-image);
+  --au-floating-edge-image: var(--au-pane-edge-image);
+  --au-pane-background-image: linear-gradient(118deg, oklch(0.97 0.012 80 / 0.025), oklch(0.97 0.012 80 / 0.006) 38%, transparent 70%);
+  --au-pane-edge-image: none;
+
+  /* — base color aliases re-pointed at the Monochrome ladders (presets change the ladders, these follow). — */
+  --au-color-surface:   var(--au-color-surface-1);
+  --au-color-border:    var(--au-line-2);
+  --au-color-text:      var(--au-ink-1);
+  --au-color-muted:     var(--au-ink-4);
+  --au-color-accent:    var(--au-accent-signal);
+  --au-color-selection: var(--au-selection-bg);
+
+  /* — additional spacing steps, density-scaled exactly like the base 1..5. — */
+  --au-space-0-5: calc(2px * var(--au-density));
+  --au-space-1-5: calc(6px * var(--au-density));
+  --au-space-2-5: calc(10px * var(--au-density));
+  --au-space-6:   calc(24px * var(--au-density));
+  --au-space-7:   calc(32px * var(--au-density));
+  --au-space-8:   calc(40px * var(--au-density));
+
+  /* — elevation derives from the surface + hairline ladders → presets propagate for free. — */
+  --au-elev-1-fill: var(--au-color-bg);
+  /* Opaque fill inherited by document chrome; pane frames establish their own surface. */
+  --au-surface-fill: var(--au-color-bg);
+  --au-elev-2-fill: var(--au-color-shell);
+  --au-elev-3-fill: var(--au-color-surface-1);
+  --au-elev-4-fill: var(--au-color-surface-2);
+  --au-elev-5-fill: var(--au-color-surface-3);
+  --au-elev-2-line: inset -1px 0 0 var(--au-line-1);
+  --au-elev-3-line: inset 0 0 0 1px oklch(0.97 0.006 80 / 0.025), inset 0 0 0 2px rgb(0 0 0 / 0.10);
+  --au-pane-focus-color: oklch(0.97 0.006 80 / 0.055);
+  --au-elev-4-line: inset 0 0 0 1px var(--au-line-2);
+  --au-elev-5-line: inset 0 0 0 1px var(--au-line-3);
+
+  /* Translucent state overlays lift dark chrome while preserving its surface hue.
+   * Light themes supply dark overlays. Selection has more emphasis than hover. */
+  --au-chrome-hover:  oklch(1 0 0 / 0.045);
+  --au-chrome-active: oklch(1 0 0 / 0.075);
+
+  /* — focus: inner tracks the canvas; ring composes inner + outer. — */
+  --au-focus-inner: var(--au-color-bg);
+  --au-focus-ring: 0 0 0 2px var(--au-focus-inner), 0 0 0 4px var(--au-focus-outer);
+}
+
+/* tokens.css supplies the shared reduced-motion duration overrides. */
+
+/* ═════════════════════════════════════════════════════════════════════════════════════════════
+ * TEXTURE & SPECIAL — opt-in atmosphere tokens.
+ *
+ * The monochrome base stays flat mono forever. These tokens ride ONLY on the sanctioned "one bright
+ * breath" moments — a brand/hero surface, the Orb, a live Glow — never on chrome (tables, forms,
+ * toolbars, rows, dots-at-large). Grain, soft gradients and orb lighting provide atmosphere
+ * at these focal surfaces.
+ *
+ * Same two-layer shape as the rest of this file: @property blocks carry computationally-INDEPENDENT
+ * initials (no var()), and the trailing :root binds the var()-composite values so a preset that
+ * re-hues --au-color-accent / --au-ink-1 propagates for free. Reduced-motion / reduced-transparency /
+ * forced-colors handling lives on the CONSUMING elements (.au-orb, .au-glow, the showcase surface).
+ * ───────────────────────────────────────────────────────────────────────────────────────────── */
+
+/* SOFT GRADIENT — a top-anchored accent radial fading to transparent at both ends.
+ * The low peak alpha keeps the overlay subtle. Concrete initials are ink-1 rgba (the mono default warm-white
+ * glow); the trailing :root re-hues them from --au-color-accent so a preset's accent carries through. */
+@property --au-tone-grad-peak   { syntax: "<number>"; inherits: true; initial-value: 0.14; }  /* 0.10–0.18 */
+@property --au-tone-grad-accent { syntax: "*"; inherits: true; initial-value: radial-gradient(120% 90% at 50% 0%, rgba(245, 243, 238, 0.14) 0%, rgba(245, 243, 238, 0.05) 42%, transparent 78%); }
+/* Inset hairline highlights add surface depth without a drop shadow or coloured bar. */
+@property --au-tone-inset       { syntax: "*"; inherits: true; initial-value: inset 0 1px 0 0 rgba(245, 243, 238, 0.04), inset 0 0 24px 0 rgba(245, 243, 238, 0.02); }
+
+/*
+ * --au-material-blur and --au-surface-alpha are declared in tokens.css.
+ * They control CSS backdrop filtering and surface opacity over rendered app content.
+ */
+
+/* Derivation — bind the var()-composite atmosphere tokens so presets re-hue them (registry rejects
+ * var() in an @property initial, so the real values live here, exactly like focus-ring / elev-*-line). */
+:root {
+  --au-tone-grad-accent:
+    radial-gradient(
+      120% 90% at 50% 0%,
+      color-mix(in oklab, var(--au-color-accent) calc(var(--au-tone-grad-peak) * 100%), transparent) 0%,
+      color-mix(in oklab, var(--au-color-accent) 5%, transparent) 42%,
+      transparent 78%
+    );
+  --au-tone-inset:
+    inset 0 1px 0 0 color-mix(in oklab, var(--au-ink-1) 4%, transparent),
+    inset 0 0 24px 0 color-mix(in oklab, var(--au-ink-1) 2%, transparent);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────────────────────
+ * Z-INDEX — the overlay layering ladder. Portaled overlays get a consistent order when
+ * they stack/nest. Never introduce a raw z-index. */
+@property --au-z-raised   { syntax: "<integer>"; inherits: true; initial-value: 10; }
+@property --au-z-sticky   { syntax: "<integer>"; inherits: true; initial-value: 100; }
+@property --au-z-dropdown { syntax: "<integer>"; inherits: true; initial-value: 1000; }
+@property --au-z-overlay  { syntax: "<integer>"; inherits: true; initial-value: 1100; } /* scrim + modal / drawer */
+@property --au-z-popover  { syntax: "<integer>"; inherits: true; initial-value: 1200; }
+@property --au-z-toast    { syntax: "<integer>"; inherits: true; initial-value: 1300; }
+@property --au-z-tooltip  { syntax: "<integer>"; inherits: true; initial-value: 1400; }
+
+/* OPACITY — semantic dimming steps. */
+@property --au-opacity-disabled { syntax: "<number>"; inherits: true; initial-value: 0.5; }
+@property --au-opacity-muted    { syntax: "<number>"; inherits: true; initial-value: 0.65; }
+@property --au-opacity-faint    { syntax: "<number>"; inherits: true; initial-value: 0.4; }
+
+/* ─────────────────────────────────────────────────────────────────────────────────────────────
+ * CODE + EDITOR — the syntax palette + editor chrome (gutter / active-line / cursor).
+ * Near-black ACHROMATIC chrome with a MUTED multi-hue syntax palette — enough hue to SCAN code, desaturated to stay calm. The editor
+ * projection maps these to CodeMirror; any code viewer reads the same tokens. SYNTAX hues are
+ * independent initials tuned for the dark presets; a light preset overrides them in its theme file.
+ * ───────────────────────────────────────────────────────────────────────────────────────────── */
+@property --au-code-keyword     { syntax: "<color>"; inherits: true; initial-value: #c9a8e0; } /* muted violet */
+@property --au-code-string      { syntax: "<color>"; inherits: true; initial-value: #a6c48a; } /* muted sage   */
+@property --au-code-comment     { syntax: "<color>"; inherits: true; initial-value: #7d786e; } /* recedes      */
+@property --au-code-function    { syntax: "<color>"; inherits: true; initial-value: #8fb8e0; } /* soft blue    */
+@property --au-code-type        { syntax: "<color>"; inherits: true; initial-value: #86ccc4; } /* soft teal    */
+@property --au-code-number      { syntax: "<color>"; inherits: true; initial-value: #e0bd8f; } /* muted amber  */
+@property --au-code-property    { syntax: "<color>"; inherits: true; initial-value: #b8d0e8; } /* attr / key   */
+@property --au-code-variable    { syntax: "<color>"; inherits: true; initial-value: #d9d6cd; } /* base ink-2   */
+@property --au-code-punctuation { syntax: "<color>"; inherits: true; initial-value: #8a857a; } /* muted ink-4  */
+@property --au-editor-bg            { syntax: "<color>"; inherits: true; initial-value: #100e0c; }
+@property --au-editor-gutter-fg     { syntax: "<color>"; inherits: true; initial-value: #8a857a; }
+@property --au-editor-gutter-active { syntax: "<color>"; inherits: true; initial-value: #d9d6cd; }
+@property --au-editor-active-line   { syntax: "<color>"; inherits: true; initial-value: #15130f; }
+@property --au-editor-cursor        { syntax: "<color>"; inherits: true; initial-value: #f5f3ee; }
+
+/* editor chrome DERIVATION — follow the ink / surface ladders so every preset propagates. */
+:root {
+  --au-editor-bg: var(--au-color-bg);
+  --au-editor-gutter-fg: var(--au-ink-4);
+  --au-editor-gutter-active: var(--au-ink-2);
+  --au-editor-active-line: color-mix(in oklab, var(--au-ink-1) 5%, transparent);
+  --au-editor-cursor: var(--au-ink-1);
+}
+
+/* Registered palette roles are discoverable even without a mounted terminal. */
+@property --au-terminal-black { syntax: "<color>"; inherits: true; initial-value: #1c1a15; }
+@property --au-terminal-red { syntax: "<color>"; inherits: true; initial-value: #fb817c; }
+@property --au-terminal-green { syntax: "<color>"; inherits: true; initial-value: #76cd98; }
+@property --au-terminal-yellow { syntax: "<color>"; inherits: true; initial-value: #e6b55d; }
+@property --au-terminal-blue { syntax: "<color>"; inherits: true; initial-value: #8fb8e0; }
+@property --au-terminal-magenta { syntax: "<color>"; inherits: true; initial-value: #c9a8e0; }
+@property --au-terminal-cyan { syntax: "<color>"; inherits: true; initial-value: #86ccc4; }
+@property --au-terminal-white { syntax: "<color>"; inherits: true; initial-value: #d9d6cd; }
+@property --au-terminal-bright-black { syntax: "<color>"; inherits: true; initial-value: #959083; }
+@property --au-terminal-bright-red { syntax: "<color>"; inherits: true; initial-value: #f9a0b0; }
+@property --au-terminal-bright-green { syntax: "<color>"; inherits: true; initial-value: #b8d99a; }
+@property --au-terminal-bright-yellow { syntax: "<color>"; inherits: true; initial-value: #e9c797; }
+@property --au-terminal-bright-blue { syntax: "<color>"; inherits: true; initial-value: #b0cde9; }
+@property --au-terminal-bright-magenta { syntax: "<color>"; inherits: true; initial-value: #dac2e9; }
+@property --au-terminal-bright-cyan { syntax: "<color>"; inherits: true; initial-value: #aadbd6; }
+@property --au-terminal-bright-white { syntax: "<color>"; inherits: true; initial-value: #e2dfda; }
+
+/* Terminal palette aliases: terminal output has its own overrideable roles. */
+:root {
+  --au-terminal-black: var(--au-color-surface-2);
+  --au-terminal-red: var(--au-color-danger);
+  --au-terminal-green: var(--au-color-ok);
+  --au-terminal-yellow: var(--au-color-warn);
+  --au-terminal-blue: var(--au-code-function);
+  --au-terminal-magenta: var(--au-code-keyword);
+  --au-terminal-cyan: var(--au-code-type);
+  --au-terminal-white: var(--au-ink-2);
+  --au-terminal-bright-black: var(--au-ink-4);
+  --au-terminal-bright-red: color-mix(in oklch, var(--au-terminal-red) 80%, var(--au-ink-1));
+  --au-terminal-bright-green: color-mix(in oklch, var(--au-terminal-green) 80%, var(--au-ink-1));
+  --au-terminal-bright-yellow: color-mix(in oklch, var(--au-terminal-yellow) 80%, var(--au-ink-1));
+  --au-terminal-bright-blue: color-mix(in oklch, var(--au-terminal-blue) 80%, var(--au-ink-1));
+  --au-terminal-bright-magenta: color-mix(in oklch, var(--au-terminal-magenta) 80%, var(--au-ink-1));
+  --au-terminal-bright-cyan: color-mix(in oklch, var(--au-terminal-cyan) 80%, var(--au-ink-1));
+  --au-terminal-bright-white: var(--au-ink-1);
+}
+
+/* Syntax roles follow theme ink for neutral text; chromatic roles retain their own palette. */
+:root {
+  --au-code-comment: var(--au-ink-4);
+  --au-code-punctuation: var(--au-ink-4);
+  --au-code-variable: var(--au-ink-2);
+}
+
+/* Chrome follows the canvas until independently overridden by the theme or user. */
+:root { --au-color-chrome: var(--au-color-bg); }
+
+/* Shared interaction colors are editable through the same discovery as surface colors. */
+@property --au-chrome-hover { syntax: "<color>"; inherits: true; initial-value: rgb(255 255 255 / 0.045); }
+@property --au-chrome-active { syntax: "<color>"; inherits: true; initial-value: rgb(255 255 255 / 0.075); }
+@property --au-control-focus { syntax: "<color>"; inherits: true; initial-value: #959083; }
+:root { --au-control-focus: var(--au-focus-outer); }
+
+/* Interactive control edges need more contrast than decorative pane dividers. */
+@property --au-line-control { syntax: "<color>"; inherits: true; initial-value: #797469; }
+:root { --au-line-control: color-mix(in srgb, var(--au-ink-4) 75%, var(--au-color-surface-1)); }
+
+/* Document navigation has its own accent, independent from button/status colors. */
+@property --au-link-internal { syntax: "<color>"; inherits: true; initial-value: #c9a782; }
+@property --au-link-external { syntax: "<color>"; inherits: true; initial-value: #c9a782; }
+
+:root {
+  /* Base theme document accent; named themes override this role. */
+  --au-link-internal: #c9a782;
+  --au-link-external: var(--au-link-internal);
+}

@@ -1,0 +1,50 @@
+/* CKeller theme — Opulent × C. Keller build. Villa Park navy chrome and steel-blue accents,
+ * as a discoverable theme INSTANCE. Flat `:root` override block: the theming pane's parser
+ * reads only `:root` rules and inline-applies them via setProperty.
+ *
+ * Palette via contextdev brand pull (ckellermfg.com):
+ *   #0568dd C. Keller blue · #609eea light blue · #05386b deep blue
+ *   #07101d/#051d31 navies · #6b6c6e/#9b9b9c steels
+ * Same elevation model as Umbris: the card LIFTS and the inset INVERTS (surface-2 darker
+ * than surface-1). The blue carries signal, CTA and focus so chrome reads "Keller". */
+:root {
+  --au-pane-edge-image: none;
+  --au-pane-focus-color: var(--au-line-3);
+  --au-elev-3-line: inset 0 0 0 1px var(--au-line-1);
+  --au-pane-background-image: linear-gradient(118deg, oklch(0.540 0.196 258 / 0.045), oklch(0.540 0.196 258 / 0.012) 38%, transparent 70%);
+  /* Cool blue illumination on exposed window chrome; stable reading panes paint above. */
+  --au-chrome-background-image: linear-gradient(118deg, oklch(0.610 0.170 256 / 0.075) 0%, oklch(0.610 0.170 256 / 0.022) 32%, transparent 60%), radial-gradient(100% 110% at 100% 100%, oklch(0.540 0.196 258 / 0.035), transparent 75%);
+
+  --au-color-desk:      oklch(0.120 0.020 258); /* below the favicon's #07101d ground */
+  --au-color-bg:        oklch(0.172 0.031 257); /* #07101d — the brand's nav-black */
+  --au-color-shell:     oklch(0.195 0.038 252);
+  --au-color-surface-1: oklch(0.240 0.055 249); /* card lifts just past #051d31 */
+  --au-color-surface-2: oklch(0.205 0.045 248); /* insets recess toward #051d31 */
+  --au-color-surface-3: oklch(0.318 0.090 253); /* raised, approaching #05386b */
+
+  --au-line-1: oklch(0.800 0.050 255 / 0.06);
+  --au-line-2: oklch(0.800 0.050 255 / 0.09);
+  --au-line-3: oklch(0.800 0.050 255 / 0.14);
+
+  --au-chrome-hover: oklch(0.690 0.130 254 / 0.08);
+  --au-chrome-active: oklch(0.690 0.130 254 / 0.14);
+
+  --au-accent-signal:     oklch(0.690 0.130 254); /* #609eea reads crisply on navy */
+  --au-accent-atmosphere: oklch(0.540 0.196 258 / 0.12);
+  --au-accent-soft:       oklch(0.540 0.196 258 / 0.24);
+  --au-accent-ink:        oklch(0.700 0.140 254);
+
+  --au-cta-bg:      oklch(0.540 0.196 258); /* #0568dd — the C. Keller blue */
+  --au-cta-ink:     oklch(0.985 0.005 250);
+  --au-cta-hover:   oklch(0.610 0.170 256);
+  --au-cta-pressed: oklch(0.455 0.150 256);
+
+  --au-selection-bg: oklch(0.540 0.196 258 / 0.32);
+  --au-selection-fg: oklch(0.980 0.010 252);
+  --au-focus-outer:  oklch(0.610 0.170 256 / 0.60);
+
+  --au-radius-frame: 15px;
+  --au-radius-panel: 10px;
+  --au-radius-row:    8px;
+  --au-radius-chip:   6px;
+}
