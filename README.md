@@ -69,3 +69,11 @@ Retrieval layers: pgContext embedding collections `parts_desc` +
 `quote_comments` (512-dim, ~77k points), `graph` extension with
 customers/parts/quotes nodes and QUOTED/FOR_PART/REQUOTE_OF edges (~87.5k of
 100k Nano units), Postgres `tsvector` FTS + `pg_trgm` fuzzy indexes.
+
+## Ars Umbris brand overlay
+
+`brand/ckeller/` carries the Opulent × C. Keller branding for the Ars Umbris
+build (`au-host`): a CKeller theme instance (navy surfaces, `#0568dd` accent),
+Inter + JetBrains Mono faces, the "Opulent × C. Keller" start-here lockup with
+the CK mark and product shots — all pulled from ckellermfg.com via Context.dev.
+Apply instructions in `brand/ckeller/README.md`.

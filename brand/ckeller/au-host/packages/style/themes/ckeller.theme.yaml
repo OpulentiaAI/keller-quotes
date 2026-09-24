@@ -1,0 +1,4 @@
+type: theme
+name: CKeller
+styles:
+  - ./ckeller.theme.css

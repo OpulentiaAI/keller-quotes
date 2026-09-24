@@ -1,0 +1,31 @@
+/* @arsumbris/style — Inter + JetBrains Mono self-host (@font-face). THE FOUNDATION's typeface.
+ *
+ * The font is base vocabulary, like the tokens: `ext.css` already NAMES `'Inter'` / `'JetBrains Mono'`
+ * on `--au-font-sans` / `--au-font-mono`, so the face that resolves them belongs HERE, in the neutral
+ * foundation. The host loads this at its renderer root; every
+ * consumer inherits it — the shadow-DOM custom elements too, since `@font-face` is document-global and
+ * pierces shadow boundaries.
+ *
+ * Inter + JetBrains Mono (SIL Open Font License 1.1) — the CKeller brand faces from
+ * ckellermfg.com. The two VARIABLE woff2 axes are VENDORED into ./assets/fonts/ (fontsource latin
+ * subsets; we self-host). A single variable face per family covers every weight.
+ *
+ * NOTICE: the SIL OFL 1.1 accompanies the files it governs: ./assets/fonts/OFL.txt (required on
+ * redistribution). License: ./assets/fonts/OFL.txt.
+ */
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('./assets/fonts/Inter-Variable.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('./assets/fonts/JetBrainsMono-Variable.woff2') format('woff2');
+}
