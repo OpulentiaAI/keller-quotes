@@ -17,6 +17,7 @@ export interface EstimateOptions {
   screenTopN?: number;
   /** quote_no values to exclude from analogs (eval leave-one-out). */
   exclude?: Set<string>;
+  asOf?: string;
 }
 
 export function assertEstimateRequest(req: unknown): asserts req is EstimateRequest {
@@ -54,6 +55,11 @@ export async function estimate(
   opts: EstimateOptions = {},
 ): Promise<QuoteEstimate> {
   assertEstimateRequest(req);
+  if (opts.asOf !== undefined && (!/^\d{4}-\d{2}-\d{2}$/.test(opts.asOf) ||
+    Number.isNaN(Date.parse(`${opts.asOf}T00:00:00Z`)) ||
+    new Date(`${opts.asOf}T00:00:00Z`).toISOString().slice(0, 10) !== opts.asOf)) {
+    throw new Error("asOf must be a valid YYYY-MM-DD date");
+  }
   const jev = opts.jev ?? new JevClient();
   const rankLimit = opts.rankLimit ?? 8;
   const screenTopN = opts.screenTopN ?? 3;
@@ -65,6 +71,7 @@ export async function estimate(
         rankLimit,
         screenTopN,
         exclude: opts.exclude,
+        asOf: opts.asOf,
       }),
     );
   }
@@ -86,7 +93,7 @@ async function estimatePart(
   jev: JevClient,
   req: EstimateRequest,
   part: PartRequest,
-  opts: { rankLimit: number; screenTopN: number; exclude?: Set<string> },
+  opts: { rankLimit: number; screenTopN: number; exclude?: Set<string>; asOf?: string },
 ): Promise<LineEstimate> {
   const warnings: string[] = [];
   let candidates = retrieve(reg, part, {
@@ -94,6 +101,7 @@ async function estimatePart(
     customerId: req.customer_id,
     limit: 12,
     exclude: opts.exclude,
+    asOf: opts.asOf,
   });
 
   const verdict = await jev.rankAnalogs(part, candidates, opts.rankLimit);
@@ -121,13 +129,12 @@ async function estimatePart(
   candidates = screened;
 
   const strategy = await jev.chooseStrategy(part, candidates);
-  const sameCustomerIds = new Set(
-    candidates.map((c) => c.row.customer_id).filter(Boolean),
-  );
   const priced = price(part.quantity, candidates.slice(0, opts.rankLimit), {
     strategy,
     jevProbabilities: verdict.probabilities,
-    sameCustomerIds: req.customer_id ? new Set([req.customer_id]) : sameCustomerIds,
+    customerId: req.customer_id,
+    customer: req.customer,
+    now: opts.asOf ? Date.parse(`${opts.asOf}T00:00:00Z`) : undefined,
   });
 
   if (priced.unit_price === null) {
@@ -135,7 +142,7 @@ async function estimatePart(
   }
   if (!candidates.length) warnings.push("no historical analogs found");
   if (priced.points.length && priced.points.every((p) => p.status !== "won")) {
-    warnings.push("no won-quote analogs — all references are open/lost history");
+    warnings.push("no won-quote analogs — all references are open history");
   }
 
   return {

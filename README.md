@@ -40,6 +40,8 @@ Quoting history extracted from the client's live **Metalsoft FabriTRAK** (Visual
 
 `estimator/` is a TypeScript pipeline that turns a pricing request (parts + materials + drawing refs) into a priced quote draft by retrieving historical analogs from this register, ranking/screening them with TypeSafe Jev (`typesafe-ai/jev` via Vercel AI Gateway, deterministic fallback without a key), and interpolating qty/price breaks.
 
+For a cross-platform offline onboarding check and safe request inbox → draft/receipt cycle, see [the 15-minute operator guide](docs/local-automation.md). This does not automatically send customer quotes or connect a request producer.
+
 Skills in `.agents/skills/` document the workflows:
 
 - **keller-quote-estimator** — request → quote procedure

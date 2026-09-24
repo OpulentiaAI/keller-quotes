@@ -1,4 +1,5 @@
 import type { Candidate, PricePoint } from "./types.js";
+import { normalizeCustomer } from "./register.js";
 
 const DAY = 86_400_000;
 
@@ -11,10 +12,18 @@ function recencyWeight(dateStr: string, now = Date.now()): number {
 
 /** Interpolate (or near-extrapolate) unit price at targetQty from one quote's breaks. */
 export function interpolateAtQty(breaks: { quantity: number | null; unit_price: number | null }[], targetQty: number): number | null {
-  const pts = breaks
-    .filter((b) => b.quantity && b.unit_price && b.quantity > 0 && b.unit_price > 0)
-    .map((b) => ({ q: b.quantity!, p: b.unit_price! }))
-    .sort((a, b) => a.q - b.q);
+  const byQuantity = new Map<number, number[]>();
+  for (const b of breaks) {
+    if (b.quantity === null || b.unit_price === null || !Number.isFinite(b.quantity) ||
+      !Number.isFinite(b.unit_price) || b.quantity <= 0 || b.unit_price <= 0) continue;
+    const prices = byQuantity.get(b.quantity) ?? [];
+    prices.push(b.unit_price);
+    byQuantity.set(b.quantity, prices);
+  }
+  const pts = [...byQuantity].map(([q, prices]) => ({
+    q, p: prices.every((value) => value === prices[0]) ? prices[0]! :
+      Math.exp(prices.reduce((sum, value) => sum + Math.log(value), 0) / prices.length),
+  })).sort((a, b) => a.q - b.q);
   if (!pts.length) return null;
   const first = pts[0]!;
   const last = pts[pts.length - 1]!;
@@ -72,12 +81,14 @@ export function price(
   opts: {
     strategy: "latest" | "median_won" | "curve_fit" | "conservative";
     jevProbabilities?: Record<string, number>;
-    sameCustomerIds?: Set<string>;
+    customerId?: string;
+    customer?: string;
     now?: number;
   },
 ): PriceResult {
   const now = opts.now ?? Date.now();
   const points: PricePoint[] = [];
+  const regression: { quantity: number; unit_price: number; weight: number }[] = [];
   for (const c of candidates) {
     const p = interpolateAtQty(c.breaks, targetQty);
     if (p === null) continue;
@@ -85,7 +96,20 @@ export function price(
     const jevP = opts.jevProbabilities?.[c.row.quote_no];
     if (jevP !== undefined) w *= 0.25 + jevP;
     if (c.row.status === "won") w *= 1.25;
-    if (opts.sameCustomerIds?.has(c.row.customer_id)) w *= 1.2;
+    if (opts.customerId ? c.row.customer_id === opts.customerId :
+      opts.customer && c.row.customer && normalizeCustomer(c.row.customer) === normalizeCustomer(opts.customer)) w *= 1.2;
+    const byQuantity = new Map<number, number[]>();
+    for (const b of c.breaks) {
+      if (b.quantity === null || b.unit_price === null || !Number.isFinite(b.quantity) ||
+        !Number.isFinite(b.unit_price) || b.quantity <= 0 || b.unit_price <= 0) continue;
+      const prices = byQuantity.get(b.quantity) ?? [];
+      prices.push(b.unit_price);
+      byQuantity.set(b.quantity, prices);
+    }
+    for (const [quantity, prices] of byQuantity) regression.push({ quantity,
+      unit_price: prices.every((value) => value === prices[0]) ? prices[0]! :
+        Math.exp(prices.reduce((sum, value) => sum + Math.log(value), 0) / prices.length),
+      weight: w / byQuantity.size });
     points.push({
       quantity: targetQty,
       unit_price: p,
@@ -105,10 +129,10 @@ export function price(
     const latest = [...points].sort((a, b) => b.quote_date.localeCompare(a.quote_date))[0]!;
     unit = latest.unit_price;
     method = "latest";
-  } else if (opts.strategy === "curve_fit" && points.length >= 3) {
+  } else if (opts.strategy === "curve_fit" && regression.length >= 3) {
     // pooled log-log regression, weighted
     let sw = 0, sx = 0, sy = 0, sxx = 0, sxy = 0;
-    for (const pt of points) {
+    for (const pt of regression) {
       const x = Math.log(pt.quantity);
       const y = Math.log(pt.unit_price);
       sw += pt.weight;

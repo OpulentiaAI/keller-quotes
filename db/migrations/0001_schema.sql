@@ -117,6 +117,7 @@ create table if not exists quote_letter_lines (
   quote_letter text not null references quote_letters(quote_letter),
   quote_no     text not null references quotes(quote_no),
   material     text,
+  letter_date  date,
   primary key (quote_letter, quote_no)
 );
 
