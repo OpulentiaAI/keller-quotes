@@ -18,7 +18,7 @@
   "type": "module",
   "private": "true",
   "bin": {
-    "estimate": "./dist/cli.js"
+    "estimate": "./dist/src/cli.js"
   },
   "dependencies": {
     "@ai-sdk/gateway": "^4.0.85",

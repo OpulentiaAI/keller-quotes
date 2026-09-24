@@ -86,6 +86,19 @@ describe("price", () => {
 });
 
 describe("estimate (offline fallback)", () => {
+  it("rejects invalid requests before pricing", async () => {
+    for (const request of [
+      null,
+      { parts: [null] },
+      { parts: [{ quantity: "10" }] },
+      { parts: [{ quantity: 0 }] },
+      { parts: [{ quantity: Infinity }] },
+      { parts: [{ quantity: NaN }] },
+      { parts: [{ quantity: 10, description: 42 }] },
+    ]) {
+      await expect(estimate(reg, request as Parameters<typeof estimate>[1])).rejects.toThrow();
+    }
+  });
   it("produces a quote with line estimates and analogs", async () => {
     delete process.env.AI_GATEWAY_API_KEY;
     const res = await estimate(reg, {
