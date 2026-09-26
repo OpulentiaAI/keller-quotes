@@ -6,6 +6,12 @@ export function normalizePartNo(p: string): string {
   return p.toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
 
+export function partBigrams(s: string): ReadonlySet<string> {
+  const out = new Set<string>();
+  for (let i = 0; i < s.length - 1; i++) out.add(s.slice(i, i + 2));
+  return out;
+}
+
 const STOP = new Set([
   "THE", "A", "AN", "OF", "FOR", "AND", "WITH", "TO", "IN", "ON", "PER",
   "ASSY", "ASSEMBLY", "PART", "NO", "PCS", "EA",
@@ -38,6 +44,12 @@ export interface QuoteGroup {
   /** One row per quote after collapsing qty breaks — representative fields. */
   head: QuoteRow;
   breaks: QuoteRow[];
+  readonly search: {
+    readonly partNo: string;
+    readonly partBigrams: ReadonlySet<string>;
+    readonly drawingNo: string;
+    readonly descriptionTokens: readonly string[];
+  };
 }
 
 export class QuoteRegister {
@@ -59,10 +71,18 @@ export class QuoteRegister {
     for (const [key, rs] of byQuote) {
       rs.sort((a, b) => (a.quantity ?? 0) - (b.quantity ?? 0));
       const head = rs.find((r) => r.unit_price !== null) ?? rs[0]!;
-      const g: QuoteGroup = { quote_no: key, head, breaks: rs };
+      const pn = normalizePartNo(head.part_no);
+      const g: QuoteGroup = {
+        quote_no: key, head, breaks: rs,
+        search: {
+          partNo: pn,
+          partBigrams: partBigrams(pn),
+          drawingNo: normalizePartNo(head.drawing_no),
+          descriptionTokens: descTokens(head.description),
+        },
+      };
       const idx = this.groups.length;
       this.groups.push(g);
-      const pn = normalizePartNo(g.head.part_no);
       if (pn) {
         const l = this.byPartNo.get(pn);
         if (l) l.push(g);
