@@ -8,9 +8,10 @@
     "test": "test"
   },
   "scripts": {
-    "test": "vitest run",
+    "test": "vitest run --exclude \"dist/**\"",
     "build": "tsc",
-    "estimate": "tsx src/cli.ts"
+    "estimate": "tsx src/cli.ts",
+    "order": "tsx src/order-cli.ts"
   },
   "keywords": [],
   "author": "",
@@ -18,17 +19,18 @@
   "type": "module",
   "private": "true",
   "bin": {
-    "estimate": "./dist/src/cli.js"
+    "estimate": "./dist/src/cli.js",
+    "price-order": "./dist/src/order-cli.js"
   },
   "dependencies": {
     "@ai-sdk/gateway": "^4.0.85",
     "ai": "^7.0.105",
-    "csv-parse": "^5.6.0"
+    "csv-parse": "^7.0.2"
   },
   "devDependencies": {
     "@types/node": "^24.13.6",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2",
-    "vitest": "^3.2.4"
+    "vitest": "^4.1.11"
   }
 }

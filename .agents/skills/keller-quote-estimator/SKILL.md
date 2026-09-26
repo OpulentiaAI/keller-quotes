@@ -5,12 +5,14 @@ description: Turn a C. Keller Mfg. pricing request (parts, quantities, materials
 
 # Keller Quote Estimator
 
-Estimator pipeline: pricing request → historical analog retrieval → Jev rank/screen/strategy → qty-break interpolation → priced quote draft. It lives in `estimator/` and runs against the quote register (`quotes.csv` at repo root, symlinked at `estimator/data/quotes.csv`).
+Estimator pipeline: pricing request → historical analog retrieval → Jev rank/screen/strategy → qty-break interpolation → priced quote draft. It lives in `estimator/`; the estimate CLI resolves the checked-in `estimator/data/quotes.csv` symlink relative to its module, independently of the working directory. Pass `--register quotes.csv` from the repository root on checkouts that do not preserve symlinks.
 
 ## What's needed from the user
 
+When asked for a **fully priced order**, use `estimator/src/order-cli.ts` and the contract in `docs/pricing-evals-and-orders.md`, not the older estimate total. Require stable line IDs, order/customer/date, and explicit shipping and tax amounts; operator unit prices or cost build-ups need reasons. Missing prices/charges must produce a blocked artifact with no grand total. The resulting JSON/Markdown is an internal proposal containing cost inputs and historical evidence, never authorization for customer delivery or fulfillment.
+
 - The **pricing request**: parts list with whatever the customer supplied — part numbers, descriptions, quantities, material/finish, drawing numbers, RFQ number, customer name. Accept it in any form (text, image, spreadsheet); normalize into `request.json`.
-- Optionally: whether Jev ranking should run. It needs `AI_GATEWAY_API_KEY` in the environment (org secret). Without it the estimator still works — deterministic fallback, `status_basis` reads `fallback:*`. Jev materially improves analog selection when candidates are ambiguous; use it when available.
+- Optionally: whether an authorized Jev ranking call should run. It needs `AI_GATEWAY_API_KEY` in the environment (org secret). Without it the estimator still works — deterministic fallback, `status_basis` reads `fallback:*`. The committed offline evaluation does not establish a Jev accuracy improvement; compare matched runs before claiming one. The scheduled draft worker always runs offline.
 
 ## Procedure
 
@@ -40,32 +42,31 @@ Estimator pipeline: pricing request → historical analog retrieval → Jev rank
 2. **Run the estimator** from the repo root:
 
    ```bash
-   cd estimator && npm install   # first time only
+   cd estimator && npm ci   # first time only
    cd ..
    ./estimator/node_modules/.bin/tsx estimator/src/cli.ts request.json --csv quote.csv
    ```
 
    Add `--offline` to force the deterministic path even when `AI_GATEWAY_API_KEY` is set. Output: full `QuoteEstimate` JSON to stdout (lines with `unit_price`, `extended_price`, `price_low`/`price_high` (weighted p25/p75), `confidence`, `method`, `analogs` with Jev probabilities, `warnings`), plus a flat CSV if `--csv` is given.
 
-3. **Review before delivering**. The estimator drafts; a human or agent sanity-checks:
+3. **Require human review before external delivery**. The estimator drafts; an agent may assist, but a named human must approve pricing and scope:
    - `warnings` flag "no historical analogs", "no won-quote analogs", or rejected analogs — price those lines manually.
    - `confidence` < ~0.3 means thin or old evidence — flag for estimator review, don't send as-is.
    - Prices are **as-quoted historically** — there is no inflation normalization. A line priced off 1990s analogs will show a wide `price_low`–`price_high` band and low confidence; sanity-check against current material/labor rates.
    - `analogs[]` shows exactly which historical quotes drove each price — cite them to the customer if asked "how did you get this number".
 
-4. **Deliver** the quote (JSON/CSV), preserving `analogs` and `warnings` in the output so the pricing rationale survives.
+4. **Hand off** the draft (JSON/CSV), preserving `analogs` and `warnings` for the human reviewer. Only the existing human-approved delivery channel may send a customer quote; the estimator and scheduled worker do not authorize delivery.
 
 ## Anti-patterns
 
 - Do not edit `quotes.csv` or treat it as mutable — it is the frozen extract. Corrections go through re-extraction from FabriTRAK.
 - Do not bypass the analog layer and hand Jev (or any model) the whole register to "pick a price" — Jev only ranks/screens prevalidated candidates; it never generates prices.
-- Do not run evals or estimates with the source quote visible to retrieval — always pass `exclude` (the CLI handles this via `EstimateOptions.exclude`; see the evals skill).
+- Do not evaluate a historical quote with the source quote visible to retrieval — pass `EstimateOptions.exclude` through the library or use the eval harness, which also supplies the quote-time cutoff. The live CLI does not expose these options; see the evals skill.
 - Do not treat `status: "open"` as lost — QUOTEHN is empty; open includes silently-lost history.
 
 ## Verification
 
 ```bash
-cd estimator && npx vitest run        # 11 tests
-npx tsc --noEmit
-./estimator/node_modules/.bin/tsx estimator/src/cli.ts estimator/examples/request.json   # from repo root
+# from the repository root, after cd estimator && npm ci && cd ..
+node scripts/verify.mjs
 ```

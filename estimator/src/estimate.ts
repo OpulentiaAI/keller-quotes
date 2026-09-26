@@ -63,6 +63,12 @@ export async function estimate(
   const jev = opts.jev ?? new JevClient();
   const rankLimit = opts.rankLimit ?? 8;
   const screenTopN = opts.screenTopN ?? 3;
+  if (!Number.isSafeInteger(rankLimit) || rankLimit <= 0) {
+    throw new Error("rankLimit must be a positive integer");
+  }
+  if (!Number.isSafeInteger(screenTopN) || screenTopN < 0) {
+    throw new Error("screenTopN must be a nonnegative integer");
+  }
   const lines: LineEstimate[] = [];
 
   for (const part of req.parts) {
@@ -114,8 +120,8 @@ async function estimatePart(
 
   // Screen the top few; drop rejects.
   const screened: typeof candidates = [];
-  for (const c of candidates) {
-    if (screened.length >= opts.screenTopN) {
+  for (const [i, c] of candidates.entries()) {
+    if (i >= opts.screenTopN) {
       screened.push(c);
       continue;
     }

@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "id": "invalid-quantity",
+  "title": "Reject zero quantity before order creation",
+  "category": "validation",
+  "outcome": "validation",
+  "deliverables": {
+    "order.json": "order.json",
+    "order.md": "order.md"
+  },
+  "criteria": [
+    {
+      "id": "C-001",
+      "title": "Reject invalid quantity",
+      "check": "validation",
+      "deliverables": [
+        "order.json",
+        "order.md"
+      ]
+    }
+  ],
+  "expected": {
+    "error_includes": "quantity must be a positive safe integer"
+  }
+}

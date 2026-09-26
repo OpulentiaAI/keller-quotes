@@ -5,9 +5,13 @@ description: Run leave-one-out evaluations of the Keller quote estimator against
 
 # Keller Estimator Evals
 
+The full workflow is documented in `docs/pricing-evals-and-orders.md`. In addition to historical replay, `evals/run-orders.ts` grades synthetic request-to-order tasks from persisted JSON/Markdown artifacts using deterministic, all-pass rubrics inspired by Harvey Labs. These are workflow correctness checks, not evidence that historical prices are accurate.
+
 The eval set (`evals/evalset.jsonl`) is sampled from the register itself: each case replays a historical quote line as a fresh pricing request, with the source quote excluded from its own analogs. The default harness also excludes quotes, revisions, and letters on/after the case date, and hides wins not known before then. It scores predicted unit price vs the actual quoted price. This is a cutoff-aware **frozen-snapshot replay**, not a true backtest: earlier rows may contain later unversioned changes. The eval sample intentionally overweights won and recent quotes, so its metrics do not represent natural production prevalence.
 
-## Current baseline (v0, offline deterministic path)
+## Current baseline (cutoff-aware, offline deterministic path)
+
+The 2026-09-26 replay of the fixed 250-case set on pricing code from `4cc5b23` prices 237 cases (94.8% coverage), with median APE 53.0% and 23.2% of priced cases within ±20%. See `docs/execution.md` for the source digests, exact command, and release gates. This is evidence for a manual-review draft tool, not unattended pricing.
 
 The committed v0 `evals/report-baseline.md` used retrospective leave-one-out and exposed future data: 250 cases · coverage 98.8% · median APE 46.3%. Do not compare that number directly to the cutoff-aware default. Regenerate the report after an estimator change; use `--retrospective` only when explicitly analyzing the old, future-visible behavior.
 
@@ -18,7 +22,7 @@ That is a *starting point*, not a target. Job-shop quotes span 1994–2026 with 
 From the repo root:
 
 ```bash
-cd estimator && npm install && cd ..    # first time only
+cd estimator && npm ci && cd ..    # first time only
 
 # full 250-case run, deterministic (no API key needed)
 ./estimator/node_modules/.bin/tsx evals/run-eval.ts \
@@ -35,6 +39,10 @@ cd estimator && npm install && cd ..    # first time only
 ```
 
 Each run writes `report-<label>.md` (metrics table + worst-10 misses) and a `.json` with per-case results for deeper slicing. The summary separately counts unpriced (`no_analog`) and invalid/undated (`unreplayable`) cases; when none is priced, accuracy is `n/a`/`null`, not a fabricated zero.
+
+`--jev` requires `AI_GATEWAY_API_KEY` and fails before writing reports when it is missing. The report now uses `summary.jev_configured` instead of `summary.jev`: a configured client can still fall back if a provider call fails, so this field is not proof that every decision used Jev. Median APE averages the two central values for an even number of priced cases.
+
+Schema-version-2 reports pin register/evalset/source/lockfile digests and record per-case criteria, all-pass rate over all cases, signed errors, and confidence/evidence/era/quantity/outcome slices. The grouped development/holdout partition is diagnostic, not a blind holdout. Compare two compatible reports with `evals/compare.ts baseline.json candidate.json --report out/comparison.md --fail-on-regression`; mismatched data, cases, actuals, quantities, or modes are rejected. Keep the fixed historical set unchanged and distinguish its empirical pricing score from synthetic order-completeness scores.
 
 ## Regenerating the eval set
 

@@ -1,0 +1,36 @@
+{
+  "order_id": "SYNTHETIC-DEMO-001",
+  "quote_date": "2026-09-26",
+  "customer": "EXAMPLE CUSTOMER (SYNTHETIC)",
+  "rfq_no": "DEMO-RFQ",
+  "parts": [
+    {
+      "line_id": "L1",
+      "part_no": "DEMO-BRACKET",
+      "description": "Synthetic bracket for workflow demonstration",
+      "quantity": 10,
+      "pricing": {
+        "method": "unit_price",
+        "unit_price": 12.3456,
+        "reason": "Synthetic operator proposal for demo only; not production pricing"
+      }
+    },
+    {
+      "line_id": "L2",
+      "part_no": "DEMO-PLATE",
+      "description": "Synthetic plate for workflow demonstration",
+      "quantity": 20,
+      "pricing": {
+        "method": "cost_plus",
+        "material_per_unit": 2.5,
+        "labor_per_unit": 3,
+        "outside_per_unit": 0.5,
+        "setup_total": 10,
+        "margin_pct": 20,
+        "reason": "Synthetic cost inputs for demo only; requires human review"
+      }
+    }
+  ],
+  "charges": { "shipping": 0, "tax": 0 },
+  "notes": "Demonstration request; no customer quote has been approved"
+}

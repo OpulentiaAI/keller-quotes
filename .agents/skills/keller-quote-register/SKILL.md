@@ -11,7 +11,7 @@ One row per **quote qty/price break** — 179,608 rows covering 40,111 part-quot
 
 - `quotes.csv` — canonical flat table, Excel-openable.
 - `quotes.json.gz` — same rows as JSON (`gunzip` it; 132 MB unpacked).
-- `estimator/data/quotes.csv` — symlink to `../quotes.csv` so the estimator resolves it in place.
+- `estimator/data/quotes.csv` is a checked-in symlink to `../../quotes.csv`; the estimate CLI resolves it relative to its module. Pass `--register` explicitly on checkouts that do not preserve symlinks.
 
 ## Provenance (which FoxPro table feeds what)
 

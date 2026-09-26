@@ -36,8 +36,8 @@ deterministic ranking/`median_won` fallbacks.
 ## Usage
 
 ```bash
-npm install
-# data/quotes.csv is a symlink to the repo-root register — or pass --register
+npm ci
+# the default register resolves relative to the module — or pass --register
 npm run estimate -- examples/request.json --csv quote.csv
 # Jev enabled automatically when AI_GATEWAY_API_KEY is set
 ```
@@ -76,10 +76,25 @@ Quote-time historical replays can pass `EstimateOptions.asOf` (`YYYY-MM-DD`): on
 - `src/cli.ts` — `estimate <request.json> [--register …] [--csv out] [--offline]`
 - `test/estimator.test.ts` — vitest suite (register, retrieval, pricing, end-to-end offline)
 
-## Test
+## Complete order proposals
+
+`src/order-cli.ts` assembles every request line, explicit shipping/tax, additional charges, and a reconciled total into `order.json` and `order.md`. Lines may use offline historical analogs, an explicit proposed unit price, or a supplied cost build-up. Missing prices or charges produce `BLOCKED` with no grand total, rather than a partial total labeled complete. Every priced proposal remains subject to human review.
 
 ```bash
-npm test
+# from estimator/, with an existing private parent output directory
+npm run order -- examples/order-request.json --register ../quotes.csv --out ../out/demo-order
 ```
+
+The example is synthetic. See [the order schema, evaluation tasks, and comparison workflow](../docs/pricing-evals-and-orders.md) before using real inputs. The older estimate CLI and inbox worker still produce quote drafts, not this order artifact.
+
+## Verification
+
+From the repository root, run the same offline verification used by CI:
+
+```bash
+node scripts/verify.mjs
+```
+
+This runs estimator/order/eval tests, the build and separate evaluation typecheck, compiled CLI smoke, local automation tests, and the synthetic request-to-order artifact benchmark. For database verification and replay commands, see [execution and release verification](../docs/execution.md). `npm test` from `estimator/` remains the focused test command.
 
 The repository root's `scripts/keller-local.mjs` and [operator guide](../docs/local-automation.md) provide offline readiness checks and a durable, manual-review-only request queue.
