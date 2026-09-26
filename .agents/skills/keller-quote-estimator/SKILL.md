@@ -5,9 +5,11 @@ description: Turn a C. Keller Mfg. pricing request (parts, quantities, materials
 
 # Keller Quote Estimator
 
-Estimator pipeline: pricing request → historical analog retrieval → Jev rank/screen/strategy → qty-break interpolation → priced quote draft. It lives in `estimator/` and resolves the default quote register (`quotes.csv` at repo root) relative to its module, independently of the working directory.
+Estimator pipeline: pricing request → historical analog retrieval → Jev rank/screen/strategy → qty-break interpolation → priced quote draft. It lives in `estimator/`; the estimate CLI resolves the checked-in `estimator/data/quotes.csv` symlink relative to its module, independently of the working directory. Pass `--register quotes.csv` from the repository root on checkouts that do not preserve symlinks.
 
 ## What's needed from the user
+
+When asked for a **fully priced order**, use `estimator/src/order-cli.ts` and the contract in `docs/pricing-evals-and-orders.md`, not the older estimate total. Require stable line IDs, order/customer/date, and explicit shipping and tax amounts; operator unit prices or cost build-ups need reasons. Missing prices/charges must produce a blocked artifact with no grand total. The resulting JSON/Markdown is an internal proposal containing cost inputs and historical evidence, never authorization for customer delivery or fulfillment.
 
 - The **pricing request**: parts list with whatever the customer supplied — part numbers, descriptions, quantities, material/finish, drawing numbers, RFQ number, customer name. Accept it in any form (text, image, spreadsheet); normalize into `request.json`.
 - Optionally: whether an authorized Jev ranking call should run. It needs `AI_GATEWAY_API_KEY` in the environment (org secret). Without it the estimator still works — deterministic fallback, `status_basis` reads `fallback:*`. The committed offline evaluation does not establish a Jev accuracy improvement; compare matched runs before claiming one. The scheduled draft worker always runs offline.

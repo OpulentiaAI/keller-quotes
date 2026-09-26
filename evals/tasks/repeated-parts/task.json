@@ -1,0 +1,100 @@
+{
+  "schema_version": 1,
+  "id": "repeated-parts",
+  "title": "Repeated part identities remain separate lines",
+  "category": "repeated",
+  "outcome": "order",
+  "deliverables": {
+    "order.json": "order.json",
+    "order.md": "order.md"
+  },
+  "criteria": [
+    {
+      "id": "C-001",
+      "title": "Identity",
+      "check": "identity",
+      "deliverables": [
+        "order.json"
+      ]
+    },
+    {
+      "id": "C-002",
+      "title": "Repeated lines retained",
+      "check": "lines",
+      "deliverables": [
+        "order.json"
+      ]
+    },
+    {
+      "id": "C-003",
+      "title": "Distinct prices",
+      "check": "prices",
+      "deliverables": [
+        "order.json"
+      ]
+    },
+    {
+      "id": "C-004",
+      "title": "Sum both lines",
+      "check": "amounts",
+      "deliverables": [
+        "order.json"
+      ]
+    },
+    {
+      "id": "C-005",
+      "title": "Charges",
+      "check": "charges",
+      "deliverables": [
+        "order.json"
+      ]
+    },
+    {
+      "id": "C-006",
+      "title": "Review state",
+      "check": "state",
+      "deliverables": [
+        "order.json"
+      ]
+    },
+    {
+      "id": "C-007",
+      "title": "Markdown",
+      "check": "markdown",
+      "deliverables": [
+        "order.json",
+        "order.md"
+      ]
+    },
+    {
+      "id": "C-008",
+      "title": "Provenance",
+      "check": "provenance",
+      "deliverables": [
+        "order.json"
+      ]
+    }
+  ],
+  "expected": {
+    "lines": [
+      {
+        "line_id": "L1",
+        "quantity": 2,
+        "unit_price": 4,
+        "extended_price": 8,
+        "pricing_source": "explicit_unit_price"
+      },
+      {
+        "line_id": "L2",
+        "quantity": 3,
+        "unit_price": 3,
+        "extended_price": 9,
+        "pricing_source": "explicit_unit_price"
+      }
+    ],
+    "priced_subtotal": 17,
+    "subtotal": 17,
+    "total": 17,
+    "state": "PRICED_REQUIRES_REVIEW"
+  }
+}

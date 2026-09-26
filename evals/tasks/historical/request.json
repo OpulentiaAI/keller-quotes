@@ -1,0 +1,16 @@
+{
+  "order_id": "O-HIST",
+  "quote_date": "2025-01-01",
+  "customer": "Sample Shop",
+  "parts": [
+    {
+      "line_id": "L1",
+      "part_no": "AXLE-101",
+      "quantity": 10
+    }
+  ],
+  "charges": {
+    "shipping": 0,
+    "tax": 0
+  }
+}

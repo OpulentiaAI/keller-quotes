@@ -1,0 +1,3 @@
+quote_no,item_no,quote_date,part_no,description,customer,quantity,unit_price,status
+Q-OLD,,2024-01-01,AXLE-101,Axle,Sample Shop,10,12.5,won
+Q-FUTURE,,2025-02-01,AXLE-101,Axle,Sample Shop,10,99,won
