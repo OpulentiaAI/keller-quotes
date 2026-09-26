@@ -9,9 +9,11 @@ The full workflow is documented in `docs/pricing-evals-and-orders.md`. In additi
 
 The eval set (`evals/evalset.jsonl`) is sampled from the register itself: each case replays a historical quote line as a fresh pricing request, with the source quote excluded from its own analogs. The default harness also excludes quotes, revisions, and letters on/after the case date, and hides wins not known before then. It scores predicted unit price vs the actual quoted price. This is a cutoff-aware **frozen-snapshot replay**, not a true backtest: earlier rows may contain later unversioned changes. The eval sample intentionally overweights won and recent quotes, so its metrics do not represent natural production prevalence.
 
-## Current baseline (cutoff-aware, offline deterministic path)
+## Reference baseline (cutoff-aware, offline deterministic path)
 
 The 2026-09-26 replay of the fixed 250-case set on pricing code from `4cc5b23` prices 237 cases (94.8% coverage), with median APE 53.0% and 23.2% of priced cases within ±20%. See `docs/execution.md` for the source digests, exact command, and release gates. This is evidence for a manual-review draft tool, not unattended pricing.
+
+`docs/pricing-optimization.md` records the exact-match/quantity-weighting experiment and its development, diagnostic-holdout, and separate 500-family validation results. It documents the holdout within-20% regression alongside aggregate gains. Do not treat either observed validation set as a fresh blind holdout for further tuning, or assume a stronger recency weight improves accuracy; the tested latest-only and two-year-decay alternatives performed worse.
 
 The committed v0 `evals/report-baseline.md` used retrospective leave-one-out and exposed future data: 250 cases · coverage 98.8% · median APE 46.3%. Do not compare that number directly to the cutoff-aware default. Regenerate the report after an estimator change; use `--retrospective` only when explicitly analyzing the old, future-visible behavior.
 
@@ -60,13 +62,13 @@ Deterministic seed (42), stratified toward won/recent/multi-break quotes. Change
 4. **Inspect the worst misses** in the report — they cluster (usually: era drift, single-analog lines, description-only matches on generic parts). Fix classes, not individual rows.
 5. **Sanity-check** that confidence still tracks accuracy (high-confidence lines should be the accurate ones; if a change decouples them, the confidence model needs updating too).
 
-## Knobs that move the metric (ranked by expected leverage)
+## Policy checks and remaining hypotheses
 
-- **Recency weighting** (`recencyWeight` in `src/price.ts`, ~8y decay): too weak → 1990s prices dominate medians. Tightening decay or adding a hard era cutoff is the highest-leverage knob.
+- **Recency weighting** (`recencyWeight` in `src/price.ts`, ~8y decay): staleness is a risk signal, not proof that stronger decay improves accuracy. The tested two-year decay and latest-only policy worsened development results; do not apply a blanket inflation uplift to quote-time replay.
 - **Same-part-in-another-quote bonus**: `to_quote` lineage and re-quotes of the same part_no are the strongest evidence — retrieval already matches exact part_no at 1.0; consider boosting *recent* exact matches further.
-- **Exact-match dominance**: when an exact part_no analog exists, description-similar analogs probably shouldn't anchor the median — gate `curve_fit`/`median_won` to exact matches when present.
+- **Exact-match dominance and quantity relevance**: the measured proposal prefers priceable exact matches within the retrieved pool and downweights distant break quantities. Review its documented holdout tradeoff instead of claiming every slice improved.
 - **Screen rejections feeding back**: rejected analogs indicate retrieval noise — check their `reasons` before tuning weights.
-- **Jev on/off**: `--jev` changes ranking quality; run both, keep whichever wins on median APE (Jev should win on ambiguous cases).
+- **Jev on/off**: compare matched, explicitly authorized runs before claiming a ranking improvement. Configured access does not establish provider success or superior pricing accuracy; no live Jev experiment underpins the offline results.
 
 ## Rules
 

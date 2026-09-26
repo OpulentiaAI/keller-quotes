@@ -106,6 +106,9 @@ export function price(
       prices.push(b.unit_price);
       byQuantity.set(b.quantity, prices);
     }
+    const distance = Math.min(...[...byQuantity.keys()].map((quantity) =>
+      Math.abs(Math.log(quantity) - Math.log(targetQty))));
+    w *= 1 / (1 + distance);
     for (const [quantity, prices] of byQuantity) regression.push({ quantity,
       unit_price: prices.every((value) => value === prices[0]) ? prices[0]! :
         Math.exp(prices.reduce((sum, value) => sum + Math.log(value), 0) / prices.length),

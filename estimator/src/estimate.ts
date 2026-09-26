@@ -4,7 +4,7 @@ import type {
   PartRequest,
   QuoteEstimate,
 } from "./types.js";
-import { QuoteRegister } from "./register.js";
+import { QuoteRegister, normalizePartNo } from "./register.js";
 import { retrieve } from "./retrieve.js";
 import { JevClient } from "./jev.js";
 import { price } from "./price.js";
@@ -109,6 +109,14 @@ async function estimatePart(
     exclude: opts.exclude,
     asOf: opts.asOf,
   });
+  const partNo = normalizePartNo(part.part_no ?? "");
+  if (partNo) {
+    const exact = candidates.filter((c) =>
+      normalizePartNo(c.row.part_no) === partNo && c.breaks.some((b) =>
+        b.quantity !== null && Number.isFinite(b.quantity) && b.quantity > 0 &&
+        b.unit_price !== null && Number.isFinite(b.unit_price) && b.unit_price > 0));
+    if (exact.length) candidates = exact;
+  }
 
   const verdict = await jev.rankAnalogs(part, candidates, opts.rankLimit);
   if (verdict.source === "jev") {
@@ -142,6 +150,15 @@ async function estimatePart(
     customer: req.customer,
     now: opts.asOf ? Date.parse(`${opts.asOf}T00:00:00Z`) : undefined,
   });
+
+  const ranges = candidates.slice(0, opts.rankLimit).map((c) => c.breaks
+    .filter((b) => b.quantity !== null && Number.isFinite(b.quantity) && b.quantity > 0 &&
+      b.unit_price !== null && Number.isFinite(b.unit_price) && b.unit_price > 0)
+    .map((b) => b.quantity!)).filter((quantities) => quantities.length);
+  if (ranges.length && ranges.every((quantities) =>
+    part.quantity < Math.min(...quantities) || part.quantity > Math.max(...quantities))) {
+    warnings.push("requested quantity outside all usable analog price-break ranges — manual review needed");
+  }
 
   if (priced.unit_price === null) {
     warnings.push("no usable price breaks in analogs — manual pricing needed");
