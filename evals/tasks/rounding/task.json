@@ -1,0 +1,93 @@
+{
+  "schema_version": 1,
+  "id": "rounding",
+  "title": "Four-place unit price and cent extension rounding",
+  "category": "rounding",
+  "outcome": "order",
+  "deliverables": {
+    "order.json": "order.json",
+    "order.md": "order.md"
+  },
+  "criteria": [
+    {
+      "id": "C-001",
+      "title": "Identity",
+      "check": "identity",
+      "deliverables": [
+        "order.json"
+      ]
+    },
+    {
+      "id": "C-002",
+      "title": "Line identity",
+      "check": "lines",
+      "deliverables": [
+        "order.json"
+      ]
+    },
+    {
+      "id": "C-003",
+      "title": "Unit and extension rounding",
+      "check": "prices",
+      "deliverables": [
+        "order.json"
+      ]
+    },
+    {
+      "id": "C-004",
+      "title": "Rounded total",
+      "check": "amounts",
+      "deliverables": [
+        "order.json"
+      ]
+    },
+    {
+      "id": "C-005",
+      "title": "Charges",
+      "check": "charges",
+      "deliverables": [
+        "order.json"
+      ]
+    },
+    {
+      "id": "C-006",
+      "title": "Review state",
+      "check": "state",
+      "deliverables": [
+        "order.json"
+      ]
+    },
+    {
+      "id": "C-007",
+      "title": "Markdown",
+      "check": "markdown",
+      "deliverables": [
+        "order.json",
+        "order.md"
+      ]
+    },
+    {
+      "id": "C-008",
+      "title": "Provenance",
+      "check": "provenance",
+      "deliverables": [
+        "order.json"
+      ]
+    }
+  ],
+  "expected": {
+    "lines": [
+      {
+        "line_id": "L1",
+        "quantity": 3,
+        "unit_price": 0.3333,
+        "extended_price": 1,
+        "pricing_source": "explicit_unit_price"
+      }
+    ],
+    "priced_subtotal": 1,
+    "subtotal": 1,
+    "total": 1.02,
+    "state": "PRICED_REQUIRES_REVIEW"
+  }
+}

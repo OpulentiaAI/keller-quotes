@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -84,6 +85,7 @@ const main = () => {
   if (!estimatorTests.length) throw new Error('no estimator/test/*.test.ts files found');
   run(process.execPath, [vitest, 'run', ...estimatorTests], estimator, 'estimator tests');
   run(process.execPath, [tsc], estimator, 'TypeScript build');
+  run(process.execPath, [tsc, '--project', join(repo, 'evals/tsconfig.json')], repo, 'evaluation typecheck');
   required(cli, 'compiled estimator CLI missing after build; check the TypeScript build output');
   const output = run(process.execPath, [cli, fixture, '--offline', '--register', join(repo, 'quotes.csv')],
     estimator, 'compiled CLI offline smoke', 'pipe');
@@ -93,6 +95,14 @@ const main = () => {
     .filter((name) => name.endsWith('.test.mjs')).sort().map((name) => join(repo, 'scripts/test', name));
   if (!tests.length) throw new Error('no scripts/test/*.test.mjs files found');
   run(process.execPath, ['--test', ...tests], repo, 'script tests');
+  const scratch = mkdtempSync(join(tmpdir(), 'keller-order-verification-'));
+  try {
+    run(process.execPath, [join(estimator, 'node_modules/tsx/dist/cli.mjs'),
+      join(repo, 'evals/run-orders.ts'), '--tasks', join(repo, 'evals/tasks'),
+      '--out', join(scratch, 'benchmark')], repo, 'request-to-order artifact benchmark');
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
 };
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

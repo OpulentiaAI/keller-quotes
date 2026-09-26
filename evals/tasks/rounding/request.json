@@ -1,0 +1,21 @@
+{
+  "order_id": "O-ROUND",
+  "quote_date": "2025-01-01",
+  "customer": "Sample Shop",
+  "parts": [
+    {
+      "line_id": "L1",
+      "part_no": "CUSTOM-8",
+      "quantity": 3,
+      "pricing": {
+        "method": "unit_price",
+        "unit_price": 0.3333,
+        "reason": "Operator input"
+      }
+    }
+  ],
+  "charges": {
+    "shipping": 0.01,
+    "tax": 0.01
+  }
+}

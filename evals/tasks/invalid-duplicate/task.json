@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "id": "invalid-duplicate",
+  "title": "Reject duplicated line identity",
+  "category": "validation",
+  "outcome": "validation",
+  "deliverables": {
+    "order.json": "order.json",
+    "order.md": "order.md"
+  },
+  "criteria": [
+    {
+      "id": "C-001",
+      "title": "Reject duplicate line ID",
+      "check": "validation",
+      "deliverables": [
+        "order.json",
+        "order.md"
+      ]
+    }
+  ],
+  "expected": {
+    "error_includes": "duplicate line_id"
+  }
+}

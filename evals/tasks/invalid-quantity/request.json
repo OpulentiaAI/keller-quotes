@@ -1,0 +1,21 @@
+{
+  "order_id": "O-BAD-QTY",
+  "quote_date": "2025-01-01",
+  "customer": "Sample Shop",
+  "parts": [
+    {
+      "line_id": "L1",
+      "part_no": "CUSTOM-5",
+      "quantity": 0,
+      "pricing": {
+        "method": "unit_price",
+        "unit_price": 5,
+        "reason": "Operator input"
+      }
+    }
+  ],
+  "charges": {
+    "shipping": 0,
+    "tax": 0
+  }
+}

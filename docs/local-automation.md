@@ -2,6 +2,8 @@
 
 This repository can price a local request **offline** and write a draft for manual review. It does not fetch customer requests, send quotes, modify FabriTRAK, or install a background service. A client or Opulent host must supply an approved request to the inbox and poll the draft/receipt; a human must review every draft before external delivery.
 
+For the separate **complete order-proposal** schema and CLI, see [pricing evaluations and orders](pricing-evals-and-orders.md). That path requires explicit line identities and shipping/tax and blocks a grand total when any price is unknown. The inbox worker described here still accepts the older `EstimateRequest` schema and emits quote drafts; its receipts do not certify the new order-completeness contract.
+
 ## 0–5 minutes: install and check
 
 Install Node 24 or newer on Windows, macOS, or Linux. In a checkout containing `quotes.csv`, run:

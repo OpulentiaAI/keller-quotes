@@ -1,0 +1,32 @@
+{
+  "order_id": "O-MIX",
+  "quote_date": "2025-01-01",
+  "customer": "Sample Shop",
+  "parts": [
+    {
+      "line_id": "L1",
+      "part_no": "CUSTOM-3",
+      "quantity": 3,
+      "pricing": {
+        "method": "unit_price",
+        "unit_price": 2,
+        "reason": "Operator input"
+      }
+    },
+    {
+      "line_id": "L2",
+      "part_no": "AXLE-101",
+      "quantity": 2
+    }
+  ],
+  "charges": {
+    "shipping": 5,
+    "tax": 1.25
+  },
+  "additional_charges": [
+    {
+      "label": "Packaging",
+      "amount": 2
+    }
+  ]
+}

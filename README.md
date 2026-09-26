@@ -44,6 +44,10 @@ For a cross-platform offline onboarding check and safe request inbox → draft/r
 
 For the shipped-work trace, shared local/CI verification commands, and remaining activation gates, see [execution and release verification](docs/execution.md).
 
+For **request → complete priced order proposals**, use [pricing evaluations and orders](docs/pricing-evals-and-orders.md). The order CLI preserves line identities, supports historical analogs, explicit sell prices, and operator-supplied cost build-ups, and reconciles shipping/tax/charges without treating missing prices as zero. It produces internal JSON/Markdown proposals for review, not accepted orders or customer deliveries.
+
+The evaluation stack pairs the fixed historical replay with Harvey Labs-inspired task manifests and deterministic all-pass grading of persisted order artifacts. Historical reports include provenance, slice diagnostics, and compatible baseline/candidate comparison; synthetic workflow scores are kept separate from price accuracy.
+
 Skills in `.agents/skills/` document the workflows:
 
 - **keller-quote-estimator** — request → quote procedure

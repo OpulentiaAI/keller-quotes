@@ -10,7 +10,8 @@
   "scripts": {
     "test": "vitest run --exclude \"dist/**\"",
     "build": "tsc",
-    "estimate": "tsx src/cli.ts"
+    "estimate": "tsx src/cli.ts",
+    "order": "tsx src/order-cli.ts"
   },
   "keywords": [],
   "author": "",
@@ -18,7 +19,8 @@
   "type": "module",
   "private": "true",
   "bin": {
-    "estimate": "./dist/src/cli.js"
+    "estimate": "./dist/src/cli.js",
+    "price-order": "./dist/src/order-cli.js"
   },
   "dependencies": {
     "@ai-sdk/gateway": "^4.0.85",
