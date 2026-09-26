@@ -36,8 +36,8 @@ deterministic ranking/`median_won` fallbacks.
 ## Usage
 
 ```bash
-npm install
-# data/quotes.csv is a symlink to the repo-root register — or pass --register
+npm ci
+# the default register resolves relative to the module — or pass --register
 npm run estimate -- examples/request.json --csv quote.csv
 # Jev enabled automatically when AI_GATEWAY_API_KEY is set
 ```
@@ -78,8 +78,12 @@ Quote-time historical replays can pass `EstimateOptions.asOf` (`YYYY-MM-DD`): on
 
 ## Test
 
+From the repository root, run the same offline verification used by CI:
+
 ```bash
-npm test
+node scripts/verify.mjs
 ```
+
+This runs the estimator tests, TypeScript build, compiled CLI smoke, and local automation tests. For database verification and replay commands, see [execution and release verification](../docs/execution.md). `npm test` from `estimator/` remains the focused estimator-only check.
 
 The repository root's `scripts/keller-local.mjs` and [operator guide](../docs/local-automation.md) provide offline readiness checks and a durable, manual-review-only request queue.

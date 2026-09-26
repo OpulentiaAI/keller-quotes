@@ -24,6 +24,10 @@ const useJev = argv.includes("--jev");
 const retrospective = argv.includes("--retrospective");
 const limit = Number(opt("--limit") ?? Infinity);
 const reportPath = opt("--report") ?? `evals/report-${new Date().toISOString().slice(0, 10)}.md`;
+const jev = useJev ? new JevClient() : new JevClient("");
+if (useJev && !jev.enabled) {
+  throw new Error("--jev requires AI_GATEWAY_API_KEY; no evaluation report was written");
+}
 
 interface EvalCase {
   id: string;
@@ -48,7 +52,6 @@ const cases = readFileSync(evalsetPath, "utf8")
   .slice(0, limit);
 
 const reg = QuoteRegister.fromCsv(registerPath);
-const jev = useJev ? new JevClient() : new JevClient("");
 
 interface Result {
   id: string;
@@ -110,7 +113,8 @@ for (const [i, c] of cases.entries()) {
 
 const priced = results.filter((r): r is Result & { ape: number } => r.ape !== null);
 const apes = priced.map((r) => r.ape!).sort((a, b) => a - b);
-const median = (xs: number[]) => (xs.length ? xs[Math.floor(xs.length / 2)]! : null);
+const median = (xs: number[]) => xs.length ?
+  (xs[Math.floor((xs.length - 1) / 2)]! + xs[Math.floor(xs.length / 2)]!) / 2 : null;
 const pctWithin = (t: number) => priced.length ? (priced.filter((r) => r.ape! <= t).length / priced.length) * 100 : null;
 const worst = [...priced].sort((a, b) => b.ape! - a.ape!).slice(0, 10);
 
@@ -127,13 +131,14 @@ const summary = {
   within_20pct: pctWithin(0.2),
   within_50pct: pctWithin(0.5),
   mean_confidence: results.length ? results.reduce((s, r) => s + r.confidence, 0) / results.length : null,
-  jev: useJev,
+  jev_configured: jev.enabled,
 };
 
 const md = [
   `# Estimator eval — ${summary.mode} — ${new Date().toISOString()}`,
   "",
-  `register: \`${registerPath}\` (${reg.rowCount} rows) · evalset: \`${evalsetPath}\` · jev: ${useJev ? "on" : "off"}`,
+  `register: \`${registerPath}\` (${reg.rowCount} rows) · evalset: \`${evalsetPath}\` · jev configured: ${jev.enabled ? "on" : "off"}`,
+  "Jev configured means a gateway client was available, not that every ranking, screening, or strategy call succeeded; provider failures retain deterministic fallbacks.",
   "",
   retrospective ? "Retrospective mode exposes later quotes and outcomes; its accuracy is not quote-time accuracy." :
     "A quote-time cutoff excludes same-day/future quotes and later-dated revisions/letters, and hides wins dated after the cutoff. Earlier records can contain unversioned edits from later dates, so the frozen extract cannot prove a true historical backtest. The fixed evalset intentionally oversamples won and recent quotes; results do not represent natural quote prevalence.",

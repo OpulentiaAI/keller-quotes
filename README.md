@@ -42,11 +42,13 @@ Quoting history extracted from the client's live **Metalsoft FabriTRAK** (Visual
 
 For a cross-platform offline onboarding check and safe request inbox → draft/receipt cycle, see [the 15-minute operator guide](docs/local-automation.md). This does not automatically send customer quotes or connect a request producer.
 
+For the shipped-work trace, shared local/CI verification commands, and remaining activation gates, see [execution and release verification](docs/execution.md).
+
 Skills in `.agents/skills/` document the workflows:
 
 - **keller-quote-estimator** — request → quote procedure
 - **keller-quote-register** — this dataset's schema, provenance, and quirks
-- **keller-estimator-evals** — leave-one-out eval harness (`evals/`) + hill-climbing guide; current baseline: 98.8% coverage, median APE 46.3%, 24.3% within ±20% (`evals/report-baseline.md`)
+- **keller-estimator-evals** — cutoff-aware frozen-snapshot replay (`evals/`) + hill-climbing guide; verified baseline: 94.8% coverage, median APE 53.0%, 23.2% of priced cases within ±20% ([provenance and limits](docs/execution.md#pricing-evidence)). The original `evals/report-baseline.md` exposes future data and is not quote-time accuracy.
 - **polygres** — connect to and query the register in Polygres (Postgres + embeddings + graph + FTS)
 - **keller-data-analysis** — data-analysis workflow adapted to this dataset (SQL recipes, charting, grain rules)
 
