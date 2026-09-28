@@ -140,7 +140,7 @@ export function retrieve(
 
   return [...scored.entries()]
     .map(([g, s]) => {
-      const status = wonAtCutoff(g) ? "won" : "open";
+      const status = wonAtCutoff(g) ? "won" : g.breaks.every((row) => row.status === "unknown") ? "unknown" : "open";
       const redact = (row: typeof g.head) => ({
         ...row,
         status,

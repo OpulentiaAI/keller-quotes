@@ -4,6 +4,8 @@ This repository can price a local request **offline** and write a draft for manu
 
 For the separate **complete order-proposal** schema and CLI, see [pricing evaluations and orders](pricing-evals-and-orders.md). That path requires explicit line identities and shipping/tax and blocks a grand total when any price is unknown. The inbox worker described here still accepts the older `EstimateRequest` schema and emits quote drafts; its receipts do not certify the new order-completeness contract.
 
+`quotes.csv` contains historical internal calculations, not verified customer-letter prices. The [document-evidence workflow](document-evidence.md) produces a separate, conservative customer-price register from locally transcribed and reconciled PDFs. Pass that file explicitly as `--register` to use it; do not overwrite the frozen register or silently switch a running scheduler. The existing receipt pins the chosen register's exact bytes, and document-backed analogs retain their source references for review.
+
 ## 0–5 minutes: install and check
 
 Install Node 24 or newer on Windows, macOS, or Linux. In a checkout containing `quotes.csv`, run:

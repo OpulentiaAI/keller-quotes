@@ -269,7 +269,8 @@ export function renderOrderMarkdown(order: PricedOrder): string {
       `Request line: ${md(JSON.stringify(order.request.parts.find((part) => part.line_id === line.line_id)))}  `,
       `Pricing reason: ${md(line.pricing_reason)}  `,
       ...line.warnings.map((warning) => `- Warning: ${md(warning)}`),
-      ...line.analogs.map((analog) => `- Analog ${md(analog.quote_no)} (${md(analog.quote_date)}): ${md(analog.part_no)}; ${md(analog.description)}; ${md(analog.customer)}; ${md(analog.status)}; score ${analog.score}`),
+      ...line.analogs.map((analog) => `- Analog ${md(analog.quote_no)} (${md(analog.quote_date)}): ${md(analog.part_no)}; ${md(analog.description)}; ${md(analog.customer)}; ${md(analog.status)}; score ${analog.score}; price basis ${md(analog.price_evidence.price_basis)}${analog.price_evidence.price_basis === "customer_quote_pdf"
+        ? `; source ${md(analog.price_evidence.source_document)}; PDF SHA-256 ${md(analog.price_evidence.source_document_sha256)}; transcript SHA-256 ${md(analog.price_evidence.source_transcript_sha256)}; source field ${md(analog.price_evidence.source_price_field)}; quote letter ${md(analog.quote_letter)}; letter date ${md(analog.letter_date)}` : ""}`),
       "",
     ]),
     "## Blockers", "", ...(order.blockers.length ? order.blockers.map((blocker) => `- ${md(blocker)}`) : ["None"]), "",

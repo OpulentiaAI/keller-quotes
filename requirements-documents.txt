@@ -1,0 +1,2 @@
+firecrawl-anydoc==0.2.4
+dbfread==2.0.7

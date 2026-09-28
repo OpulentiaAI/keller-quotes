@@ -20,16 +20,17 @@ The 2026-09-24 coordination record reported local passes and explicitly left liv
 
 ## One verification path for developers and CI
 
-Use Node 24 or newer. From the repository root:
+Use Node 24 or newer and Python 3.12. From the repository root (with an active Python virtual environment):
 
 ```sh
 cd estimator
 npm ci
 cd ..
+python -m pip install -r requirements-documents.txt
 node scripts/verify.mjs
 ```
 
-The verifier runs estimator/eval tests, the TypeScript build, a compiled CLI smoke that validates fully priced offline output, and local worker/export/capability tests. It resolves paths from its own location and expands script test paths without a shell glob. It stops on failure, does not install dependencies, and strips gateway and production database credentials from child processes. This proves local behavior, not integration readiness. CI calls this same entry point rather than maintaining a separate checklist.
+The verifier runs estimator/eval tests, the TypeScript build, synthetic PDF-transcription and document-register tests, a compiled CLI smoke that validates fully priced offline output, and local worker/export/capability tests. It resolves paths from its own location and expands script test paths without a shell glob. It stops on failure, does not install dependencies, and strips gateway and production database credentials from child processes. This proves local behavior, not integration readiness or corpus-wide extraction accuracy. CI calls this same entry point rather than maintaining a separate checklist. Actual document processing also needs the local tools in [document evidence](document-evidence.md).
 
 Database tests are a separate explicit mode. Start a **disposable local** PostgreSQL 16 server whose test role can create databases, install Python dependencies, then run:
 

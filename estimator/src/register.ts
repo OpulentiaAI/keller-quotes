@@ -1,6 +1,49 @@
 import { readFileSync } from "node:fs";
 import { parse } from "csv-parse/sync";
-import type { QuoteRow } from "./types.js";
+import type { PriceEvidence, QuoteRow } from "./types.js";
+
+const INTERNAL: PriceEvidence = { price_basis: "internal_quote_calculation" };
+
+function validDate(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+    !Number.isNaN(Date.parse(`${value}T00:00:00Z`)) &&
+    new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value;
+}
+
+function validateEvidence(value: unknown, row: QuoteRow): PriceEvidence {
+  if (value === undefined) return INTERNAL;
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`invalid price evidence for quote ${row.quote_no}`);
+  const evidence = value as Record<string, unknown>;
+  if (evidence.price_basis === "internal_quote_calculation") {
+    if (Object.keys(evidence).some((key) => key !== "price_basis")) throw new Error(`internal price has document metadata for quote ${row.quote_no}`);
+    return INTERNAL;
+  }
+  if (evidence.price_basis !== "customer_quote_pdf") throw new Error(`invalid price basis for quote ${row.quote_no}`);
+  const path = evidence.source_document;
+  if (typeof path !== "string" || !path.toLowerCase().endsWith(".pdf") || path.startsWith("/") || path.includes("\\") ||
+    path.includes(":") || path.split("/").some((segment) => !segment || segment === "." || segment === ".." || /[\x00-\x1f\x7f]/.test(segment))) {
+    throw new Error(`unsafe source document path for quote ${row.quote_no}`);
+  }
+  for (const key of ["source_document_sha256", "source_transcript_sha256"] as const) {
+    if (typeof evidence[key] !== "string" || !/^[a-f0-9]{64}$/i.test(evidence[key])) {
+      throw new Error(`invalid ${key} for quote ${row.quote_no}`);
+    }
+  }
+  if (evidence.source_price_field !== "PRICE" && evidence.source_price_field !== "QUOTEPRICE") {
+    throw new Error(`invalid source_price_field for quote ${row.quote_no}`);
+  }
+  if (Object.keys(evidence).some((key) => !["price_basis", "source_document", "source_document_sha256", "source_transcript_sha256", "source_price_field"].includes(key))) {
+    throw new Error(`unexpected price evidence for quote ${row.quote_no}`);
+  }
+  if (!row.quote_letter.trim() || !validDate(row.letter_date) || !validDate(row.quote_date)) {
+    throw new Error(`document price requires quote letter and valid dates for quote ${row.quote_no}`);
+  }
+  return {
+    ...evidence,
+    source_document_sha256: (evidence.source_document_sha256 as string).toLowerCase(),
+    source_transcript_sha256: (evidence.source_transcript_sha256 as string).toLowerCase(),
+  } as PriceEvidence;
+}
 
 export function normalizePartNo(p: string): string {
   return p.toUpperCase().replace(/[^A-Z0-9]/g, "");
@@ -63,12 +106,24 @@ export class QuoteRegister {
     this.rowCount = rows.length;
     const byQuote = new Map<string, QuoteRow[]>();
     for (const r of rows) {
+      r.price_evidence = validateEvidence(r.price_evidence, r);
       const key = r.quote_no + "|" + (r.item_no || "");
       const arr = byQuote.get(key);
       if (arr) arr.push(r);
       else byQuote.set(key, [r]);
     }
     for (const [key, rs] of byQuote) {
+      const documents = rs.map((r) => {
+        const evidence = r.price_evidence!;
+        return JSON.stringify(evidence.price_basis === "customer_quote_pdf" ? [
+          evidence.price_basis, evidence.source_document, evidence.source_document_sha256,
+          evidence.source_transcript_sha256, evidence.source_price_field,
+          r.quote_date, r.quote_letter, r.letter_date,
+        ] : [evidence.price_basis]);
+      });
+      if (documents.some((document) => document !== documents[0])) {
+        throw new Error(`conflicting price evidence or dates in quote/item ${key}`);
+      }
       rs.sort((a, b) => (a.quantity ?? 0) - (b.quantity ?? 0));
       const head = rs.find((r) => r.unit_price !== null) ?? rs[0]!;
       const pn = normalizePartNo(head.part_no);
@@ -139,6 +194,7 @@ export class QuoteRegister {
       user_quote: r.user_quote ?? "",
       newsellpri: num(r.newsellpri),
       comment: r.comment ?? "",
+      price_evidence: csvEvidence(r),
     }));
     return new QuoteRegister(rows);
   }
@@ -163,4 +219,26 @@ export class QuoteRegister {
       .map(([i, hits]) => ({ group: this.groups[i]!, hits }))
       .sort((a, b) => b.hits - a.hits);
   }
+}
+
+function csvEvidence(row: Record<string, string>): PriceEvidence {
+  const basis = row.price_basis ?? "";
+  const fields = ["source_document", "source_document_sha256", "source_transcript_sha256", "source_price_field"] as const;
+  const hasDocumentMetadata = fields.some((field) => !!row[field]);
+  if (!basis) {
+    if (hasDocumentMetadata) throw new Error("document metadata requires price_basis");
+    return INTERNAL;
+  }
+  if (basis === "internal_quote_calculation") {
+    if (hasDocumentMetadata) throw new Error("internal price cannot have document metadata");
+    return INTERNAL;
+  }
+  if (basis !== "customer_quote_pdf") throw new Error(`unknown price_basis: ${basis}`);
+  return {
+    price_basis: basis,
+    source_document: row.source_document ?? "",
+    source_document_sha256: row.source_document_sha256 ?? "",
+    source_transcript_sha256: row.source_transcript_sha256 ?? "",
+    source_price_field: row.source_price_field as "PRICE" | "QUOTEPRICE",
+  };
 }

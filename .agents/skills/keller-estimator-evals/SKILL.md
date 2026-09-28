@@ -7,6 +7,8 @@ description: Run leave-one-out evaluations of the Keller quote estimator against
 
 The full workflow is documented in `docs/pricing-evals-and-orders.md`. In addition to historical replay, `evals/run-orders.ts` grades synthetic request-to-order tasks from persisted JSON/Markdown artifacts using deterministic, all-pass rubrics inspired by Harvey Labs. These are workflow correctness checks, not evidence that historical prices are accurate.
 
+The frozen eval targets come from internal `QUOTQTYS` calculations, which can differ from printed customer quotations. Document reconciliation is a separate measurement, not a new estimator accuracy score. Keep the fixed set unchanged. A customer-price evaluation needs document-verified targets, source-quote exclusion, quote-time cutoffs, explicit coverage/held counts, and a separately versioned dataset; never present replacing the targets as an accuracy improvement. See `docs/document-evidence.md`.
+
 The eval set (`evals/evalset.jsonl`) is sampled from the register itself: each case replays a historical quote line as a fresh pricing request, with the source quote excluded from its own analogs. The default harness also excludes quotes, revisions, and letters on/after the case date, and hides wins not known before then. It scores predicted unit price vs the actual quoted price. This is a cutoff-aware **frozen-snapshot replay**, not a true backtest: earlier rows may contain later unversioned changes. The eval sample intentionally overweights won and recent quotes, so its metrics do not represent natural production prevalence.
 
 ## Current baseline (cutoff-aware, offline deterministic path)
