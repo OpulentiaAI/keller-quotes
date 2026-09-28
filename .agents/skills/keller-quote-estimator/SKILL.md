@@ -7,11 +7,23 @@ description: Prepare reviewed Keller customer-quote drafts and complete internal
 
 Start with [the register's price-basis rules](../keller-quote-register/SKILL.md). For historical **issued customer prices**, prefer a selected `customer_quote_pdf` corpus exported read-only to a private CSV by [the Polygres guide](../polygres/SKILL.md). The CLI otherwise defaults to frozen `internal_quote_calculation` prices through its symlink; that is a separate fallback diagnostic, **never** a silent substitution or a validated current sell price. Document prices have unknown outcomes, and neither historical basis validates today's material/labor/routing costs.
 
+In the Ars Umbris `Keller Codex` profile, `keller_quote` is the runnable internal order-draft path: supply an explicit approved customer-PDF corpus ID, a JSON `OrderRequest`, and a named human reviewer. It invokes the offline order CLI against a read-only corpus export, accepts supported operator price/cost inputs, and returns structured `order`, `markdown`, `review`, blockers/state, and private artifact references. Those response fields contain sensitive customer, analog, and cost details: keep the entire tool result in an approved private review channel, never forward its Markdown to a customer. `BLOCKED` is incomplete; `PRICED_REQUIRES_REVIEW` is complete arithmetic, not an approved or delivered quote. For source inspection beyond Polygres, `keller_sources` provides bounded read-only source-set listing, file reads, DBF schema, and exact-quote DBF rows; historical routing/material records are not verified present-day rates. The CLI steps below remain the standalone operator workflow, not the only Ars Umbris draft interface.
+
 ## Intake and evidence review
+
+Preserve every supplied customer_id when building keller_quote's OrderRequest, even though the schema marks it optional. Compare supplied identity fields with the returned order.request before handing the draft to review.
 
 Record customer/RFQ/date, stable line IDs, part number **and drawing revision**, quantity and UOM for each line, material grade/thickness/yield, finish/outside work, tolerances, lead time/delivery, and unresolved specification questions. Ask for missing information before asserting equivalence. An exact normalized part number across different customers, revisions, materials or UOM does not prove interchangeability. A drawing/PDF needs human-checked extracted attributes; the estimator does not interpret drawings. Never access the remote manufacturing host, source DBFs, or PDFs merely to rederive already verified historical evidence.
 
 For a historical draft, pin the selected register path/hash and inspect each usable analog's quote letter/date, source PDF/transcript hashes and source price field. Check revision, material, process, UOM, quantity-break curve and source-event timing; retain the full source unit precision and validate the printed extension. Do not use unverified `won`/`open` as sales outcomes, invoice or supplier-PO amounts as quote prices, or mix internal and PDF prices within a curve. A missing/weak/old/mismatched analog means **hold that line** for a human-supported cost build or explicit operator price; it is not license to invent a price. `confidence` and `price_low`/`price_high` are uncalibrated diagnostics, not approval gates or promised customer ranges.
+
+In reissue handoffs, state the PDF's displayed unit beside the verified full-precision unit and explain any difference. Reconcile quantity × full unit to the printed extension; extension cent-rounding does not explain a separate unit-display discrepancy.
+
+Before replacing a Keller evidence-shortage hold with an explicit price, record a source-versus-request comparison for material, finish, revision and geometry, with evidence for each claimed match or justified adjustment. Unresolved price-critical gaps keep the line held.
+
+For Keller analog transfers, an unknown material or finish adjustment is not a zero adjustment. Do not copy an unchanged source unit because its page is silent about the requested process; retain the hold until compatible issued evidence or authorized costing supports the amount.
+
+In analogy-based Keller handoffs, show the page's displayed unit beside the verified full-precision unit and reconcile quantity times full unit to the printed extension. Explain any display difference only from verified evidence; cent-rounding of the extension is a separate operation.
 
 Run the estimate CLI only after choosing a register. This minimal example is synthetic and intentionally forces the deterministic offline path; put real customer requests/outputs in approved private storage outside the checkout:
 

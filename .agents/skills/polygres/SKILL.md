@@ -9,6 +9,12 @@ The normalized legacy `customers`, `parts`, `quotes`, `quote_qty_breaks`, `quote
 
 ## Safe read access
 
+Keller Workflow uses the CC stdio transport without launching Claude. External agents can invoke its graph, evidence and quote tools using their own model connection; the host's native Codex CLI login is not required.
+
+If Keller MCP discovery fails before a tool response, compare --runtime-root exactly with the operator's pinned launch command before retrying. Do not repeat an unverified path unchanged or infer that model login is required.
+
+Use the explicitly selected `Keller Workflow` profile for an external MCP-capable agent, or `Keller Codex` for the optional native host session. Both expose the same scoped evidence and draft tools; the transport does not choose the evaluating model. The [workspace guide](../../../docs/arsumbris-workspace.md) documents discovery and private per-call audit traces.
+
 Check whether the existing configured `POLYGRES_DIRECT_URL`, `POLYGRES_DATABASE_URL`, and expected database name are available in the current runtime before requesting access. Do not print a DSN/password or put one in a report. The direct URL is for psycopg and `scripts/document-evidence-db.py`; the pooled URL may include `pgbouncer=true`, which libpq does not accept. For remote evidence CLI access, the **effective direct URL must contain** `sslmode=verify-full` and `sslrootcert=/etc/ssl/certs/ca-certificates.crt`; the CLI enforces this plus `--expected-database`. Use an approved connection string assembled without displaying its value. In standalone SQL, use read-only transactions, parameterized values and a confirmed database identity. No control-plane/MCP registration, plan change, reimport, or credentials refresh is needed to read the existing corpus.
 
 Select an actual public `corpus_id` rather than guessing the newest ingestion. A read-only discovery query is:
@@ -19,6 +25,10 @@ from document_corpora order by ingested_at desc;
 ```
 
 The timestamp helps identify a snapshot; it is **not** quote chronology or a global latest pointer. Choose the explicit approved corpus from the request and provenance; ask the owner only if that choice is ambiguous, and never infer "latest" from ingestion time. Then use the CLI from repository root with a private, **new** output path (read-only commands; do not use `load --apply`):
+
+In the Ars Umbris `Keller Codex` profile, prefer `keller_polygres` for bounded read-only `corpora`, `search`, `page`, and `prices` retrieval: pass the explicit corpus for every action except `corpora`; use exact part/quote filters for prices and a cited source path/page number for page text. It does not expose arbitrary SQL or the full CSV export. `keller_quote` performs its own read-only full-register export before an offline internal order draft, while the standalone CLI below remains available to an authorized operator for private analysis/evaluations. Neither path writes Polygres or authorizes release.
+
+Keller MCP prices/search accepts at most 50 rows per call. When a lookup rejects its pagination arguments, correct them within the documented bounds before concluding that eligible evidence is unavailable or out of scope.
 
 ```sh
 python scripts/document-evidence-db.py search 'synthetic bracket' \

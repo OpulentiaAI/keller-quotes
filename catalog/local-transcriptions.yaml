@@ -1,0 +1,5 @@
+type: keller.source
+role: private text extraction and verified customer-price derivative
+locator: transcripts source set in ignored .keller-local/arsumbris/sources.json; KELLER_DOCUMENT_EVIDENCE_DIR is the documented locator role
+provenance: PDF source-manifest, transcription summary and records, derivative evidence-manifest and audit; see docs/document-evidence.md.
+limitations: OCR/text extraction can fail or break tables. The derivative selects only independently reconciled letter lines; held/failed documents remain in denominator. No raw transcript or customer register is packaged here.

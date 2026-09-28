@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
+import { grade } from "../../evals/metrics.js";
 
 const repo = join(dirname(fileURLToPath(import.meta.url)), "../..");
 const scratch = mkdtempSync(join(tmpdir(), "keller-eval-benchmark-"));
@@ -48,6 +49,27 @@ function fixtures() {
 }
 
 describe("historical benchmark artifacts", () => {
+  it("rejects future or invalid last-touch dates without requiring legacy stamps", () => {
+    const input = { actual: 10, predicted: 10, quantity: 1, predicted_extended: 10,
+      source_quote_no: "target", quote_date: "2024-01-01", retrospective: false };
+    const analog = { quote_no: "old", quote_date: "2023-01-01", letter_date: "2023-02-01" };
+    expect(grade({ ...input, analog_refs: [analog] }).cutoff_evidence).toMatchObject({ pass: true });
+    expect(grade({ ...input, analog_refs: [{ ...analog, date_stamp: "" }] }).cutoff_evidence)
+      .toMatchObject({ pass: true });
+    expect(grade({ ...input, analog_refs: [{ ...analog, date_stamp: "2023-12-31" }] }).cutoff_evidence)
+      .toMatchObject({ pass: true });
+    expect(grade({ ...input, analog_refs: [{ ...analog, date_stamp: "2024-01-01" }] }).cutoff_evidence)
+      .toMatchObject({ pass: false, reason: expect.stringContaining("last-touch date 2024-01-01") });
+    expect(grade({ ...input, analog_refs: [{ ...analog, date_stamp: "2024-01-02", rev: "B" }] }).cutoff_evidence)
+      .toMatchObject({ pass: false, reason: expect.stringContaining("last-touch date 2024-01-02") });
+    expect(grade({ ...input, analog_refs: [{ ...analog, date_stamp: "2023-02-29" }] }).cutoff_evidence)
+      .toMatchObject({ pass: false, reason: expect.stringContaining("last-touch date 2023-02-29") });
+    expect(grade({ ...input, analog_refs: [{ ...analog, letter_date: "2024-01-01" }] }).cutoff_evidence)
+      .toMatchObject({ pass: false, reason: expect.stringContaining("letter date 2024-01-01") });
+    expect(grade({ ...input, analog_refs: [{ ...analog, quote_date: "2024-01-01" }] }).cutoff_evidence)
+      .toMatchObject({ pass: false, reason: expect.stringContaining("quote date 2024-01-01") });
+  });
+
   it("never grants all-pass to an empty rubric and rejects invalid exposed cutoff dates", () => {
     const script = `import { allPass, grade } from '${join(repo, "evals/metrics.ts")}';
       console.log(JSON.stringify({ empty: allPass({}), invalid: grade({ actual: 10, predicted: 10, quantity: 1,
@@ -75,7 +97,7 @@ describe("historical benchmark artifacts", () => {
     expect(good).toMatchObject({ all_pass: true, quantity: 10, actual_extended: 100, predicted_extended: 100,
       signed_unit_error: 0, signed_extended_error: 0, band_coverage: true });
     expect(good.analog_refs).toEqual([{ quote_no: "A-old", quote_date: "2023-01-01", quote_letter: "",
-      letter_date: "", price_evidence: { price_basis: "internal_quote_calculation" } }]);
+      letter_date: "", date_stamp: "", rev: "", price_evidence: { price_basis: "internal_quote_calculation" } }]);
     expect(miss).toMatchObject({ all_pass: false, signed_unit_error: -10, signed_extended_error: -100 });
     expect(miss.criteria.unit_within_20pct).toMatchObject({ pass: false });
     expect(unpriced).toMatchObject({ all_pass: false, status: "no_analog", ape: null });

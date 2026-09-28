@@ -1,0 +1,7 @@
+[mcp_servers.keller-ars-readonly]
+command = "node"
+args = ["/ABSOLUTE/PATH/TO/keller-quotes/scripts/start-arsumbris-mcp-client.mjs", "--profile", "Keller Graph Readonly"]
+
+[mcp_servers.keller-polygres-readonly]
+command = "node"
+args = ["/ABSOLUTE/PATH/TO/keller-quotes/scripts/start-arsumbris-mcp-client.mjs", "--profile", "Keller Polygres Readonly"]

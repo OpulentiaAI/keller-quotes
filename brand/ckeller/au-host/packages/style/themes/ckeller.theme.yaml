@@ -1,4 +1,4 @@
-type: theme
+type: theme::style
 name: CKeller
 styles:
   - ./ckeller.theme.css

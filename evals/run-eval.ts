@@ -125,7 +125,8 @@ for (const [i, c] of cases.entries()) {
   const actualExtended = actual !== null && Number.isFinite(quantity * actual) ? quantity * actual : null;
   const predictedExtended = line?.extended_price !== null && Number.isFinite(line?.extended_price) ? line!.extended_price : null;
   const refs = (line?.analogs ?? []).map((a) => ({ quote_no: a.quote_no, quote_date: a.quote_date,
-    letter_date: a.letter_date, quote_letter: a.quote_letter, price_evidence: a.price_evidence }));
+    letter_date: a.letter_date, date_stamp: a.date_stamp, rev: a.rev,
+    quote_letter: a.quote_letter, price_evidence: a.price_evidence }));
   const criteria = grade({ actual: c.actual_unit_price, predicted, quantity, predicted_extended: predictedExtended,
     source_quote_no: sourceQuoteNo, quote_date: c.quote_date, retrospective, analog_refs: refs });
   const ape = priced && c.actual_unit_price > 0 ? Math.abs(predicted - c.actual_unit_price) / c.actual_unit_price : null;
@@ -167,7 +168,7 @@ const md = [
   `Selected case IDs SHA256: \`${provenance.selected_case_ids_sha256}\`; exposed analog reference bases: \`${JSON.stringify(analogBasis)}\`. Full target PDF/transcript/price-field and analog price-basis provenance are in the private JSON report.`,
   "Jev configured means a gateway client was available, not that every ranking, screening, or strategy call succeeded; provider failures retain deterministic fallbacks.", "",
   retrospective ? "Retrospective mode exposes later quotes and outcomes; its accuracy is not quote-time accuracy." :
-    "A quote-time cutoff excludes same-day/future quotes and later-dated revisions/letters, and hides wins dated after the cutoff. Exposed analog refs include quote and letter dates and price evidence, but not revision dates. Earlier records can contain unversioned edits from later dates, so the frozen extract cannot prove a true historical backtest. The fixed evalset intentionally oversamples won and recent quotes; results do not represent natural quote prevalence.", "",
+    "A quote-time cutoff excludes same-day/future quotes and later-dated revisions/letters, and hides wins dated after the cutoff. Exposed analog refs include quote dates and any recorded letter/last-touch dates, revision and price evidence; missing metadata cannot be verified. Earlier records can contain unversioned edits from later dates, so the frozen extract cannot prove a true historical backtest. The fixed evalset intentionally oversamples won and recent quotes; results do not represent natural quote prevalence.", "",
   "| metric | value |", "|---|---|",
   `| cases | ${summary.cases} |`, `| priced | ${summary.priced} |`, `| no analog | ${summary.no_analog} |`,
   `| unreplayable | ${summary.unreplayable} |`, `| coverage (priced / all cases) | ${pct(summary.coverage)} |`,

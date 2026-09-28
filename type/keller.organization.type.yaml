@@ -1,0 +1,8 @@
+#: A party's role in this workspace without customer-level confidential records.
+fields:
+  #: Public display name for the participating organization.
+  name: String
+  #: Its responsibility in the quoting workflow.
+  role: String
+  #: Release or access boundary relevant to this workspace.
+  boundary: String

@@ -1,0 +1,30 @@
+extends: mcp.tool::au-mcp-sdk
+fields:
+  #: Choose corpora to discover public IDs, search to find cited PDF pages, prices for verified issued customer-quote prices, or page to read a cited PDF page.
+  action: [corpora, search, prices, page]
+  #: Explicit public corpus ID (64 lowercase hex characters); required except for corpora. Never infer the latest corpus.
+  corpus?: String
+  #: Page-text search phrase, required for search (not a numeric price source).
+  query?: String
+  #: Exact part number for prices; at least part_no or quote_no is required.
+  part_no?: String
+  #: Exact quote number to narrow search or prices.
+  quote_no?: String
+  #: Optional document kind for search.
+  kind?: [quote, invoice, packing_slip, supplier_po, certificate, other, unknown]
+  #: Exact source_path from a search result; required for page.
+  source_path?: String
+  #: 1-based page number within the source PDF, required for page.
+  page_number?: Number{>=1 & integer}
+  #: Result count for search/prices (default 20, maximum 50), or characters for page (default 4000, maximum 4000).
+  limit?: Number{>=1 & integer}
+  #: Result offset for search/prices, or character offset within a page (default 0).
+  offset?: Number{>=0 & integer}
+meta:
+  - type: plugin-runtime-meta::au-mcp-sdk
+    entry: ./arsumbris/polygres/tool.ts
+    contractVersion: 0
+  - type: tool-access-meta::au-mcp-sdk
+    broker: none
+  - type: tool-presentation-meta::au-mcp-sdk
+    description: "Read-only Keller Polygres evidence. Discover corpus IDs with corpora; pass an explicit corpus for page-text search, verified customer-PDF prices by exact part/quote, or a cited source_path/page_number. For prices/search, limit is 1..50 rows (default 20), offset is 0..100000; for page, limit is 1..4000 characters (default 4000), offset is 0..1000000, and page_number is 1..100000. Paginate with next_offset; an empty filtered page may still have more results. Search is not numeric authority; prices have unknown outcome and never merge with internal calculation quotes. Bounded output; no SQL or data mutation."

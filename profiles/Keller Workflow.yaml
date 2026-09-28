@@ -1,0 +1,23 @@
+type: agent-profile::au-mcp-sdk
+adapter: "[[mcp.adapter.cc::au-mcp-adapter-cc]]"
+skills:
+  - "[[keller-quote-estimator]]"
+  - "[[keller-quote-register]]"
+  - "[[keller-estimator-evals]]"
+  - "[[skills/polygres]]"
+  - "[[keller-data-analysis]]"
+inject:
+  - "[[keller-orientation]]"
+tools:
+  - "[[mcp.tool.au_files::au-mcp-core]]"
+  - "[[mcp.tool.au_instances_of::au-mcp-core]]"
+  - "[[mcp.tool.au_members::au-mcp-core]]"
+  - "[[mcp.tool.au_type::au-mcp-core]]"
+  - "[[mcp.tool.au_resolved::au-mcp-core]]"
+  - "[[mcp.tool.au_follow::au-mcp-core]]"
+  - "[[mcp.tool.au_diagnostics::au-mcp-core]]"
+  - "[[mcp.tool.read_file_pinned::au-mcp-core]]"
+  - "[[mcp.tool.keller_polygres]]"
+  - "[[mcp.tool.keller_quote]]"
+  - "[[mcp.tool.keller_sources]]"
+nativeToolAllowlist: []

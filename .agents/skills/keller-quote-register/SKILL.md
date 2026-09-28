@@ -16,6 +16,8 @@ The immutable `quotes.csv` and `quotes.json.gz` represent 179,608 quantity-break
 
 The separately derived `customer_quote_pdf` register contains only conservatively verified issued-quote letter lines. It is not an override of the frozen CSV. Its `status` is `unknown`; it retains the source document and AnyDoc transcript hashes, letter number/date, source price field, quantity, full source unit price, and printed extension. Source `quote_date` in this derivative is **set to the verified `letter_date`**, not the original `QUOTEN` date; `date_stamp` is the maximum known source revision/letter date. Do not claim the derivative corrected an original date. The builder permits up to five decimal places in source prices; preserve all reported precision even when the printed two-decimal unit looks truncated. Confirm `quantity × full source unit price` reconciles to the printed extension and keep all breaks of a price curve from one compatible verified letter/provenance. Never fill gaps from internal calculations without clearly changing the basis and obtaining review. See [document evidence](../../../docs/document-evidence.md).
 
+In Ars Umbris, `keller_polygres` retrieves bounded, explicitly selected customer-PDF evidence; `keller_sources` can inspect the separately bound private `fabritrak`, `pdfs`, `transcripts`, and `manufacturing-audit` sets read-only. Use `sets`, `list`, `read`, `dbf_schema`, or exact `quote_no`-filtered `dbf_rows` only when the original evidence or an unresolved provenance gap requires inspection. Neither source reader validates today's manufacturing cost or changes the register's price basis.
+
 For local frozen-register queries, use a CSV parser rather than physical-line `grep` or comma-splitting `awk`:
 
 ```sh
