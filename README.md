@@ -75,7 +75,7 @@ Skills in `.agents/skills/` document the workflows:
 
 - **keller-quote-estimator** — request → quote procedure
 - **keller-quote-register** — this dataset's schema, provenance, and quirks
-- **keller-estimator-evals** — cutoff-aware frozen-snapshot replay (`evals/`) + hill-climbing guide; verified baseline: 94.8% coverage, median APE 53.0%, 23.2% of priced cases within ±20% ([provenance and limits](docs/execution.md#pricing-evidence)). The original `evals/report-baseline.md` exposes future data and is not quote-time accuracy.
+- **keller-estimator-evals** — cutoff-aware frozen-snapshot replay (`evals/`) + hill-climbing guide; see the [reference baseline](docs/execution.md#pricing-evidence) and [measured pricing proposal, validation, and tradeoffs](docs/pricing-optimization.md). The original `evals/report-baseline.md` exposes future data and is not quote-time accuracy.
 - **polygres** — connect to and query the register in Polygres (Postgres + embeddings + graph + FTS)
 - **keller-data-analysis** — data-analysis workflow adapted to this dataset (SQL recipes, charting, grain rules)
 
