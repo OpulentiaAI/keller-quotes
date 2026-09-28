@@ -6,6 +6,15 @@ The completed expanded baseline/matched phase is reported in the [interim result
 
 Keep the original customer PDFs, verified target provenance, private oracle, scope, trace, answer, judgment and report outside Git in owner-private storage. Before freezing a case, separately preflight original target PDFs and their price/extension provenance. Freeze the raw scope bytes and SHA-256 before the worker runs; the client filters future and held-out prices/pages and limits raw-source/file access. The grader independently checks the scope file's private ownership, non-symlink path, hash, eligible rows and exclusion of **all** target quote numbers. Each logged MCP row must carry `evaluation_scope_sha256` equal to the oracle's scope hash. If no admissible analogy exists, hold the case rather than manufacturing a price; held attempts stay in the attempted denominator and cannot all-pass.
 
+Before launching either a **worker or independent judge**, create a new normative-only rubric view from the immutable operator criteria source:
+
+```sh
+python3 scripts/prepare-worker-rubric.py \
+  --source "$PRIVATE_ORIGINAL_CRITERIA" --out "$NEW_PRIVATE_WORKER_RUBRIC"
+```
+
+Use an existing owner-private (0700) directory outside the checkout and a nonexistent output filename; the tool creates the file 0600 without overwriting the original. It projects exactly `version`, `population`, `validation_weight`, `judge_weight`, `acceptance`, `validation`, and `judge`, preserving their values without changing the frozen V1–V5/J1–J5 criterion prose, weights or thresholds. Operator-only metadata, including previous outcomes, stays in the original, which is **never** delivered to a worker or judge. Record the source and output SHA-256 and normative equality proof emitted by the command in the private run manifest; freeze the view bytes before delivery. Both worker and judge read **only this view**, not the original criteria file. Independently inspect the projected text and every other worker/judge context channel for result disclosures: projection removes metadata by key but cannot certify arbitrary criterion prose is blind-safe.
+
 ## Contracts
 
 Oracle v1 is `{schema_version:1,population:'blinded-historical-quote-workflow',case_id,request,reviewer_identity,targets,scope}`. `request` contains `case_id,order_id,quote_date,customer,customer_id,corpus,reviewer,charges:{shipping,tax},requested_lines:[{line_id,part_no,description,quantity,uom:'pieces',revision,notes}]`. The separate `targets` array maps each requested `line_id` to `quote_no,item_no,quantity,unit_price,extended_price,source_document,source_document_sha256`. Full-precision target units and cent-rounded printed extensions are validated in the oracle, never delivered to the worker. `reviewer_identity` establishes a named human with a nonblank source. `scope` holds an absolute owner-private JSON `path` and SHA-256 of its **raw bytes**.

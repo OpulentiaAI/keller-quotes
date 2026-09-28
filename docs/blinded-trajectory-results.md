@@ -1,5 +1,7 @@
 # Blinded workflow trajectory reconstruction
 
+**Integrity correction:** a later [context audit](blinded-context-integrity.md) found prior aggregate outcomes in every original trace. The recorded criterion transitions below remain unchanged, but the non-alias pairs are retrospective comparisons, not clean prior-result-blinded validation.
+
 This is a retrospective analysis of the same 18 retained attempts on six development RFQs, not a new model evaluation or a regrading. It captures 406 delivered MCP calls and recent-message snapshots for all 18 workers. The snapshots are **not full session event histories**; the complete scoped MCP audits are retained separately. Recorded checkout, model and working-tree content hashes identify the historical configuration without substituting current HEAD. See the [trajectory procedure](mcp-trajectory-analysis.md) and [numerical-error analysis](blinded-price-variance-results.md).
 
 ## Aggregate gains concealed individual losses
