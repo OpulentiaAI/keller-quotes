@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { test } from 'node:test'
 import { exchange, openAudit, parseArgs } from '../call-arsumbris-tool.mjs'
 import { loadEvaluationScope, sameDecimal } from '../mcp-evaluation-scope.mjs'
@@ -148,6 +148,24 @@ test('scoped CLI preflight failure records only a hash-bound safe result', t => 
   assert.equal(event.evaluation_scope_sha256, result.evaluation_scope_sha256)
   assert.equal(event.result, null)
   assert.equal(event.error, 'runtime preflight failed')
+})
+
+test('scoped CLI rejects audit aliases before appending or starting runtime', t => {
+  for (const alias of [path => path, path => `${dirname(path)}/./scope.json`, path => `${dirname(path)}//scope.json`]) {
+    const f = fixture(t)
+    const audit = alias(f.path)
+    const original = readFileSync(f.path)
+    const originalHash = createHash('sha256').update(original).digest('hex')
+    const run = spawnSync(process.execPath, [cli, '--list', '--evaluation-scope', f.path, '--audit', audit,
+      '--runtime-root', join(f.privateDir, 'absent-runtime')], { encoding: 'utf8', cwd: root })
+    assert.equal(run.status, 1)
+    assert.equal(run.stdout, '')
+    assert.match(run.stderr, /\[audit\]/)
+    assert.doesNotMatch(run.stderr, /synthetic-case|absent-runtime|scope\.json/)
+    assert.deepEqual(readFileSync(f.path), original)
+    assert.equal(createHash('sha256').update(readFileSync(f.path)).digest('hex'), originalHash)
+    assert.equal(f.guard().sha256, originalHash)
+  }
 })
 
 test('selected corpus, excluded pages and selectors are refused before backend calls', async t => {

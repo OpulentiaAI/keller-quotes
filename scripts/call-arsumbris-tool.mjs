@@ -66,7 +66,7 @@ export function parseRequest(text) {
   return request
 }
 
-export function openAudit(path) {
+export function openAudit(path, scopeFile) {
   const parent = dirname(path)
   if (parent === path || path === parse(path).root) throw new Error('Audit path must name a private file')
   let current = parse(parent).root
@@ -85,6 +85,9 @@ export function openAudit(path) {
     const stat = fstatSync(fd)
     if (!stat.isFile() || stat.nlink !== 1 || stat.uid !== process.getuid() || (stat.mode & 0o177) || !(stat.mode & 0o200)) {
       throw new Error('Audit file must be owner-private (0600), regular, and unlinked elsewhere')
+    }
+    if (scopeFile && stat.dev === scopeFile.dev && stat.ino === scopeFile.ino) {
+      throw new Error('Audit file must differ from evaluation scope')
     }
     return fd
   } catch (error) {
@@ -160,7 +163,7 @@ async function main() {
     startedAt = new Date().toISOString()
     if (evaluationScope) guard = loadEvaluationScope(evaluationScope, resolve(dirname(fileURLToPath(import.meta.url)), '..'))
     stage = 'audit'
-    if (audit) fd = openAudit(audit)
+    if (audit) fd = openAudit(audit, guard?.fileIdentity)
     stage = 'runtime'
     const root = requireRuntime(runtimeRoot)
     stage = 'workspace'

@@ -139,7 +139,7 @@ export function loadEvaluationScope(path, publicRoot = process.cwd()) {
     if (current.dev !== stat.dev || current.ino !== stat.ino || current.size !== stat.size || createHash('sha256').update(readFileSync(path)).digest('hex') !== sha256) throw new Error('Evaluation scope changed')
   }
   verify()
-  return { scope, sha256, verify, documents, allowed, prices, analogs }
+  return { scope, sha256, fileIdentity: { dev: stat.dev, ino: stat.ino }, verify, documents, allowed, prices, analogs }
 }
 
 function matchesPrice(price, row) {

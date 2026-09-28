@@ -11,6 +11,8 @@ Ars Umbris `keller_quote` builds reviewed internal order drafts and `keller_sour
 
 ## Run reproducible, offline experiments
 
+Before starting a scored MCP batch, use the documented service launcher and verify a real evidence read and draft generation. Successful tool discovery alone does not validate backend dependencies.
+
 For short **model-driven workflow** evaluations, use fresh Luna-max worker contexts for three frozen RFQs through `Keller Workflow` standard MCP, then a separate Luna-max judge. Freeze request/oracle/criteria/model/skill hashes, retain every tool response and persisted draft, and preselect a fresh three-question batch before editing skills. Mechanical validation and judging receive equal weight, but their failures cannot cancel each other. See [the workflow evaluation contract](../../../docs/mcp-workflow-evaluations.md) for V1–V5/J1–J5, grader invocation, adversarial calibration and the separate learning-review loop. These tests do not replace the historical replay below.
 
 Require every mechanical validator and independent judge criterion for a completed all-pass. A judge's acceptance of evidence and communication cannot override a failed request-identity check; keep that case in the attempted denominator.
