@@ -1,5 +1,7 @@
 # MCP quoting-workflow evaluation results
 
+The [blinded historical-price workflow interim results](blinded-mcp-workflow-results.md) cover a separate population; their 18 attempts do not change or pool with the reissue results below.
+
 This is a public-safe aggregate of historical-source **reissue** evaluations at code revision `6b495696c34d44bcaf5db34cb57d677f5258a40a`. Requesters authorized proposing specified historical prices; the exercise measured source retrieval and complete, pending-review draft fidelity, not blind price prediction, current costs, customer release, or business outcomes. Workers and independent judges used `codex/gpt-6-luna` at max reasoning with fast mode over real standard MCP through the existing CC transport, without a native Codex login or a Claude model. The [evaluation contract](mcp-workflow-evaluations.md) defines the frozen five mechanical (V) and five judge (J) criteria: each contributes 50% to a diagnostic score, but a completed all-pass requires all ten and a persisted `PRICED_REQUIRES_REVIEW` draft.
 
 ## Valid-fixture batches

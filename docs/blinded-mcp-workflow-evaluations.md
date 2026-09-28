@@ -2,6 +2,8 @@
 
 This is a separate population, `blinded-historical-quote-workflow`, not an update to the exact-reissue rubric or its results. The worker receives a frozen RFQ and application-scoped prior evidence, but **never** the target prices, target documents or oracle. The scope is enforced by the MCP client, not by OS isolation between agents sharing a user account. A human must review every proposed price; a plausible proposal is neither an authorized reissue nor a current-cost, terms, or delivery guarantee.
 
+The completed expanded baseline/matched phase is reported in the [interim results](blinded-mcp-workflow-results.md).
+
 Keep the original customer PDFs, verified target provenance, private oracle, scope, trace, answer, judgment and report outside Git in owner-private storage. Before freezing a case, separately preflight original target PDFs and their price/extension provenance. Freeze the raw scope bytes and SHA-256 before the worker runs; the client filters future and held-out prices/pages and limits raw-source/file access. The grader independently checks the scope file's private ownership, non-symlink path, hash, eligible rows and exclusion of **all** target quote numbers. Each logged MCP row must carry `evaluation_scope_sha256` equal to the oracle's scope hash. If no admissible analogy exists, hold the case rather than manufacturing a price; held attempts stay in the attempted denominator and cannot all-pass.
 
 ## Contracts
