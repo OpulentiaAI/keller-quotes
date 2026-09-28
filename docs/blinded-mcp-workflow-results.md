@@ -22,6 +22,8 @@ The five unaffected matched cases produced priced drafts, but **all five failed 
 
 The [price-variance analysis](blinded-price-variance-results.md) reconstructs the first-call-to-final numerical changes and the diagnosed pricing misses without changing those verdicts.
 
+The [trajectory reconstruction](blinded-trajectory-results.md) follows the recorded actions behind four individual criterion losses that the aggregate gains conceal, and documents the ongoing capture and independently reviewed learning procedure.
+
 A subsequent protocol audit found **three development `keller_polygres` search results** that exposed references or excerpts for **two originally reserved confirmation sources**: one result in baseline and two in matched. This does **not** establish that workers observed full target prices. Initial scopes excluded each case's own target, not the global reserved confirmation set, so the original 30 cannot be called an untouched independent holdout despite zero confirmation RFQs having run. The frozen files were preserved and the two exposed cases quarantined in a separate status record. **Confirmation is blocked** until replacements are selected and new versioned scopes globally exclude reserved sources from every route, including automatic quote analogs. No clean replacement set has yet been frozen; the 28/30 gate does not authorize reuse of the compromised set.
 
 ## What changed, and what remains unproven
