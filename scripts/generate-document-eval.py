@@ -144,7 +144,7 @@ def generate(register, destination, count):
         'register_sha256': digest(raw), 'cases_sha256': digest(data),
         'generator_sha256': digest(Path(__file__).read_bytes()),
         'selection': 'SHA256 salted family rank, then independently salted break rank; one break per family; no outcomes/errors used',
-        'cutoff': 'customer letter_date exclusive (the dated price-bearing PDF event); input register quote_date required equal letter_date; original QUOTEN date is unavailable; later revisions excluded by estimator date_stamp filter',
+        'cutoff': 'customer letter_date exclusive (recorded quote-letter/inquiry date, not independent proof of when the price-bearing PDF was issued or available); input register quote_date required equal letter_date; original QUOTEN date is unavailable; later revisions excluded by estimator date_stamp filter',
         'limits': 'Verified PDF targets are issued customer quote prices, not costs or confirmed sales. Frozen snapshot, not a true backtest. Different-register comparison is a data-source experiment, not estimator improvement.',
     }
     created_case = False

@@ -32,6 +32,8 @@ QUOTE_ID = re.compile(r"\bQuote\s*#\s*:\s*([0-9]{7})(?!\d)", re.I)
 LETTER_ID = re.compile(r"\bLetter\s*:\s*([0-9]{8})(?!\d)", re.I)
 PART_ID = re.compile(r"\bP/N\s*:\s*(.*?)(?=\b(?:Comment|Rev)\s*:|\n|$)", re.I | re.S)
 DATE_ID = re.compile(r"\bInquiry\s+Date\s*:\s*([0-9]{2}/[0-9]{2}/[0-9]{2})\b", re.I)
+FOOTER_BY = re.compile(r"^\s*#*\s*(?:\|\s*|[-*]\s*)?By\s*:\s*(.*)$", re.I)
+FOOTER_DATE_TOKEN = re.compile(r"(?<![\w/])[0-9]{1,4}[/\-][^\s|,;]+")
 PRICE_HEADER = re.compile(r"\bDescription\s+Quantity\s+Price\s+Each\s+Extended\s+Price\b", re.I)
 
 
@@ -148,6 +150,43 @@ def parse_document(markdown, letter, reference_date):
         inquiry = date(reference_date.year // 100 * 100 + short_year, month, day)
     except ValueError:
         raise Hold("invalid_inquiry_date") from None
+    footer_dates = set()
+    lines = clean.splitlines()
+    for index, line in enumerate(lines):
+        match = FOOTER_BY.match(line)
+        if not match:
+            continue
+        footer = match.group(1)
+        if index + 1 < len(lines) and re.match(
+                r"^\s*#*\s*\|?\s*(?:Date\s*:|[0-9]{1,4}[/\-])", lines[index + 1], re.I):
+            footer += " " + lines[index + 1].strip().lstrip("| ")
+        if re.search(r"\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|"
+                     r"Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|"
+                     r"Nov(?:ember)?|Dec(?:ember)?)\s+[0-9]{1,2}\b", footer, re.I):
+            raise Hold("invalid_printed_footer_date")
+        for label in re.finditer(r"\bDate\s*:", footer, re.I):
+            if not re.match(r"[0-9]{1,4}[/\-]", footer[label.end():].lstrip()):
+                raise Hold("invalid_printed_footer_date")
+        tokens = [found.group().rstrip(".)]}") for found in FOOTER_DATE_TOKEN.finditer(footer)]
+        for token in tokens:
+            numeric = re.fullmatch(r"([0-9]{1,2})([/\-])([0-9]{1,2})\2([0-9]{2}|[0-9]{4})", token)
+            iso = re.fullmatch(r"([0-9]{4})-([0-9]{1,2})-([0-9]{1,2})", token)
+            if not numeric and not iso:
+                raise Hold("invalid_printed_footer_date")
+            try:
+                if numeric:
+                    month, day, year = int(numeric[1]), int(numeric[3]), int(numeric[4])
+                    if len(numeric[4]) == 2:
+                        year += reference_date.year // 100 * 100
+                else:
+                    year, month, day = (int(piece) for piece in iso.groups())
+                footer_dates.add(date(year, month, day))
+            except ValueError:
+                raise Hold("invalid_printed_footer_date") from None
+    if len(footer_dates) > 1:
+        raise Hold("ambiguous_printed_footer_date")
+    if footer_dates and inquiry not in footer_dates:
+        raise Hold("printed_footer_date_mismatch")
     headers = list(PRICE_HEADER.finditer(clean))
     if not headers:
         raise Hold("missing_price_table_header")

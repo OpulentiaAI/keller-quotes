@@ -64,12 +64,14 @@ The new output directory contains `document-quotes.csv`, `evidence-manifest.json
 
 The builder deliberately accepts a limited, auditable subset:
 
-- A quote-letter filename must agree with the document's quotation title, letter number, quote ID, part identity, and date, and resolve to an unambiguous source letter line and original quote group. Multi-item/multi-quote or inconsistent identities are held rather than guessed.
+- A quote-letter filename must agree with the document's quotation title, letter number, quote ID, part identity, and inquiry date, and resolve to an unambiguous source letter line and original quote group. An observed `By:`/footer date that conflicts with the inquiry date, or is malformed or ambiguous, holds the document. A footer without an observed date remains supported but does **not** verify its printing chronology. Multi-item/multi-quote or inconsistent identities are held rather than guessed.
 - Every source quantity break must match exactly one ordered printed quantity/unit-price/extension row. Duplicate, missing, extra, ambiguous, or unreconciled rows hold the document. Text PDFs use independent layout extraction; fully OCR'd PDFs require complete page attribution before their transcript can be used.
 - A usable `PRICE` or `QUOTEPRICE` must reproduce both the truncated displayed unit price and the rounded extension with decimal arithmetic. Full stored price precision is retained; the displayed unit price is never substituted for it. Different fields that cannot be distinguished from the printed evidence are held.
-- Only one fully verified letter supplies a quote/item curve. The latest verified letter is selected; same-date ambiguity is held. The letter date becomes the price's evidence date, and later source revision dates remain visible to cutoff filtering.
+- Only one accepted letter supplies a quote/item curve. The latest accepted letter is selected by its DBF letter date; same-date ambiguity is held. The letter date remains the price's recorded evidence date, and later source revision dates remain visible to cutoff filtering. Agreement of observed dates is a consistency check, not proof of original issuance or availability at that time; a print date is not silently substituted for the letter date.
 
 Supplier POs, invoices, certificates, manuals, and other transcripts remain available for separate analysis but never enter the customer-price register. Internal cost, markup, and alternate-price fields are cleared in the derivative. Outcome is `unknown`: printing a letter or posting quote history does not prove a won order. A smaller verified register is preferable to silently filling gaps with another price basis.
+
+Printed quantity, unit-price, and extension matches verify the numeric amounts, not the price-bearing PDF's historical availability. This validation applies only when building a **new** bundle: existing built corpora retain their prior contents and dates, so a code fix does not repair or regrade them. Review their chronology separately before relying on historical cutoff claims.
 
 ## Use the evidence in the existing workflow
 

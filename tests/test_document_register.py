@@ -174,6 +174,50 @@ class DocumentEvidenceTest(unittest.TestCase):
         self.tables["QUOTLETT"][0]["REVISION_D"] = date(2069, 7, 6)
         self.assertEqual(self.verify(document(day="07/06/69"))[2][0]["quote_date"], "2069-07-06")
 
+    def test_updated_quote_with_later_printed_by_date_is_held(self):
+        content = document().replace("By: Page 1", "By: ANALYST 07/19/26 Page 1")
+        content += "Updated quote, see revised quantities.\n"
+        self.held("printed_footer_date_mismatch", content)
+        self.held("printed_footer_date_mismatch",
+                  document().replace("By: Page 1", "By: ANALYST\n07/19/26"))
+        self.assertEqual(self.verify(document())[2][0]["quote_date"], "2026-07-06")
+        with tempfile.TemporaryDirectory() as temp:
+            register = Path(temp) / "register.csv"
+            with register.open("w", newline="") as file:
+                writer = csv.DictWriter(file, fieldnames=COLUMNS)
+                writer.writeheader()
+                writer.writerows(self.originals)
+            record = {"source_sha256": "a" * 64, "transcript_sha256": "b" * 64, "pages": 1}
+            with patch.object(builder, "layout_text", return_value=content):
+                data, manifest, audit = builder.render(
+                    register, self.tables, [(NAME, record, content, Path(temp) / NAME)], {})
+            self.assertEqual(len(list(csv.DictReader(io.StringIO(data)))), 0)
+            self.assertEqual(audit[0]["reason"], "printed_footer_date_mismatch")
+            self.assertEqual(manifest["counts"]["held_documents"], 1)
+
+    def test_matching_printed_footer_dates_in_plain_and_markdown(self):
+        for footer in ("By: ANALYST 07/06/26 Page 1",
+                       "By: 7/6/2026",
+                       "| **By:** ANALYST 2026-07-06 |",
+                       "- **By:** 07-06-26",
+                       "By: ANALYST\n  07/06/26",
+                       "## By : ANALYST\n| Date: 07/06/26 |"):
+            with self.subTest(footer=footer):
+                content = document().replace("By: Page 1", footer)
+                self.assertEqual(self.verify(content)[2][0]["quote_date"], "2026-07-06")
+
+    def test_ambiguous_or_invalid_printed_footer_dates_are_held(self):
+        for footer, reason in (("By: 07/06/26 07/19/26", "ambiguous_printed_footer_date"),
+                               ("By: 02/30/26", "invalid_printed_footer_date"),
+                               ("By: 07/xx/26", "invalid_printed_footer_date"),
+                               ("By: ANALYST\n  07/xx/26", "invalid_printed_footer_date"),
+                               ("By: July 19, 2026", "invalid_printed_footer_date"),
+                               ("By: ANALYST\nDate: pending", "invalid_printed_footer_date"),
+                               ("By: 07/06/26 Date: pending", "invalid_printed_footer_date"),
+                               ("By: 2026-07-", "invalid_printed_footer_date")):
+            with self.subTest(footer=footer):
+                self.held(reason, document().replace("By: Page 1", footer))
+
     def test_multiquote_multiitem_and_duplicate_dbf_lines_hold(self):
         self.tables["QUOTLINE"].append(dict(self.tables["QUOTLINE"][0]))
         self.held("ambiguous_or_missing_letter_line")

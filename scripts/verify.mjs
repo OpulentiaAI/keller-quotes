@@ -89,6 +89,7 @@ const main = () => {
   run(process.execPath, [tsc, '--project', join(repo, 'evals/tsconfig.json')], repo, 'evaluation typecheck');
   run('python', ['-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_pdf_transcription.py', '-v'], repo, 'PDF transcription tests');
   run('python', ['-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_document_register.py', '-v'], repo, 'document register tests');
+  run('python', ['-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_generate_document_eval.py', '-v'], repo, 'document evaluation generator tests');
   run('python', ['-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_arsumbris*.py', '-v'], repo, 'Ars Umbris workspace and tool tests');
   run('python', ['-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_blinded*.py', '-v'], repo, 'blinded MCP workflow grader tests');
   run('python', ['-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_mcp_trajectory.py', '-v'], repo, 'sealed MCP trajectory tests');
