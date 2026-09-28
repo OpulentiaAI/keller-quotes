@@ -11,9 +11,13 @@ In the Ars Umbris `Keller Codex` profile, `keller_quote` is the runnable interna
 
 ## Intake and evidence review
 
+Preserve every supplied customer_id when building keller_quote's OrderRequest, even though the schema marks it optional. Compare supplied identity fields with the returned order.request before handing the draft to review.
+
 Record customer/RFQ/date, stable line IDs, part number **and drawing revision**, quantity and UOM for each line, material grade/thickness/yield, finish/outside work, tolerances, lead time/delivery, and unresolved specification questions. Ask for missing information before asserting equivalence. An exact normalized part number across different customers, revisions, materials or UOM does not prove interchangeability. A drawing/PDF needs human-checked extracted attributes; the estimator does not interpret drawings. Never access the remote manufacturing host, source DBFs, or PDFs merely to rederive already verified historical evidence.
 
 For a historical draft, pin the selected register path/hash and inspect each usable analog's quote letter/date, source PDF/transcript hashes and source price field. Check revision, material, process, UOM, quantity-break curve and source-event timing; retain the full source unit precision and validate the printed extension. Do not use unverified `won`/`open` as sales outcomes, invoice or supplier-PO amounts as quote prices, or mix internal and PDF prices within a curve. A missing/weak/old/mismatched analog means **hold that line** for a human-supported cost build or explicit operator price; it is not license to invent a price. `confidence` and `price_low`/`price_high` are uncalibrated diagnostics, not approval gates or promised customer ranges.
+
+In reissue handoffs, state the PDF's displayed unit beside the verified full-precision unit and explain any difference. Reconcile quantity × full unit to the printed extension; extension cent-rounding does not explain a separate unit-display discrepancy.
 
 Run the estimate CLI only after choosing a register. This minimal example is synthetic and intentionally forces the deterministic offline path; put real customer requests/outputs in approved private storage outside the checkout:
 

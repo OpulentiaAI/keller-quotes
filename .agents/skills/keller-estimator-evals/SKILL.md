@@ -11,6 +11,10 @@ Ars Umbris `keller_quote` builds reviewed internal order drafts and `keller_sour
 
 ## Run reproducible, offline experiments
 
+For short **model-driven workflow** evaluations, use fresh Luna-max worker contexts for three frozen RFQs through `Keller Workflow` standard MCP, then a separate Luna-max judge. Freeze request/oracle/criteria/model/skill hashes, retain every tool response and persisted draft, and preselect a fresh three-question batch before editing skills. Mechanical validation and judging receive equal weight, but their failures cannot cancel each other. See [the workflow evaluation contract](../../../docs/mcp-workflow-evaluations.md) for V1–V5/J1–J5, grader invocation, adversarial calibration and the separate learning-review loop. These tests do not replace the historical replay below.
+
+Require every mechanical validator and independent judge criterion for a completed all-pass. A judge's acceptance of evidence and communication cannot override a failed request-identity check; keep that case in the attempted denominator.
+
 Run from the repository root after `(cd estimator && npm ci)`. Use owner-only private directories outside the checkout for real target sets, PDF-register exports, and reports; create new filenames for every run. Select/export a verified corpus read-only as described by [Polygres](../polygres/SKILL.md). The generator validates the full input CSV's required provenance **field formats**, `customer_quote_pdf` basis, unknown outcome, five-decimal source precision and cent-rounded extension, then selects one break per normalized part family by independent salted SHA ranks. It hashes the CSV and writes a v2 JSONL and manifest, but **does not open PDFs or transcripts or recompute their hashes**: source authenticity/reconciliation depends on the upstream verified export and original review. It does not write to Polygres or the checkout.
 
 ```sh

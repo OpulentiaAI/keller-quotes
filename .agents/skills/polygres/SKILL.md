@@ -9,6 +9,12 @@ The normalized legacy `customers`, `parts`, `quotes`, `quote_qty_breaks`, `quote
 
 ## Safe read access
 
+Keller Workflow uses the CC stdio transport without launching Claude. External agents can invoke its graph, evidence and quote tools using their own model connection; the host's native Codex CLI login is not required.
+
+If Keller MCP discovery fails before a tool response, compare --runtime-root exactly with the operator's pinned launch command before retrying. Do not repeat an unverified path unchanged or infer that model login is required.
+
+Use the explicitly selected `Keller Workflow` profile for an external MCP-capable agent, or `Keller Codex` for the optional native host session. Both expose the same scoped evidence and draft tools; the transport does not choose the evaluating model. The [workspace guide](../../../docs/arsumbris-workspace.md) documents discovery and private per-call audit traces.
+
 Check whether the existing configured `POLYGRES_DIRECT_URL`, `POLYGRES_DATABASE_URL`, and expected database name are available in the current runtime before requesting access. Do not print a DSN/password or put one in a report. The direct URL is for psycopg and `scripts/document-evidence-db.py`; the pooled URL may include `pgbouncer=true`, which libpq does not accept. For remote evidence CLI access, the **effective direct URL must contain** `sslmode=verify-full` and `sslrootcert=/etc/ssl/certs/ca-certificates.crt`; the CLI enforces this plus `--expected-database`. Use an approved connection string assembled without displaying its value. In standalone SQL, use read-only transactions, parameterized values and a confirmed database identity. No control-plane/MCP registration, plan change, reimport, or credentials refresh is needed to read the existing corpus.
 
 Select an actual public `corpus_id` rather than guessing the newest ingestion. A read-only discovery query is:
