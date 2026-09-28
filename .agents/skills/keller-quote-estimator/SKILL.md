@@ -19,6 +19,12 @@ For a historical draft, pin the selected register path/hash and inspect each usa
 
 In reissue handoffs, state the PDF's displayed unit beside the verified full-precision unit and explain any difference. Reconcile quantity × full unit to the printed extension; extension cent-rounding does not explain a separate unit-display discrepancy.
 
+Before replacing a Keller evidence-shortage hold with an explicit price, record a source-versus-request comparison for material, finish, revision and geometry, with evidence for each claimed match or justified adjustment. Unresolved price-critical gaps keep the line held.
+
+For Keller analog transfers, an unknown material or finish adjustment is not a zero adjustment. Do not copy an unchanged source unit because its page is silent about the requested process; retain the hold until compatible issued evidence or authorized costing supports the amount.
+
+In analogy-based Keller handoffs, show the page's displayed unit beside the verified full-precision unit and reconcile quantity times full unit to the printed extension. Explain any display difference only from verified evidence; cent-rounding of the extension is a separate operation.
+
 Run the estimate CLI only after choosing a register. This minimal example is synthetic and intentionally forces the deterministic offline path; put real customer requests/outputs in approved private storage outside the checkout:
 
 ```json
