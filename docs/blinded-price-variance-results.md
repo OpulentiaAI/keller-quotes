@@ -1,5 +1,7 @@
 # Blinded historical quote workflow: price variance
 
+**Integrity correction:** a later [worker-context audit](blinded-context-integrity.md) found prior aggregate outcomes in all 18 traces. The arithmetic below remains unchanged and useful diagnostically, but none of these cohorts is cleanly blinded to prior results. Original alias/coverage exclusions are not a statement of overall blinding validity.
+
 This is a numerical reconstruction of the **18 existing workflow attempts on six RFQs**, not a new model-driven evaluation. Their original scores and the inclusive ±20% V3 tolerance are unchanged; the full all-ten-criterion gate remains **0/18**. The 27 actual quote-tool calls comprise 18 priced responses (one in the alias-invalid attempt), one unpriced response, and eight denied calls in the startup-invalid cohort. Final-answer copies are not additional calls. The prior 24 reissues and the separate 50-case prediction diagnostic are different populations and are not pooled here.
 
 Signed unit-price error is `(proposed unit / hidden historical target unit − 1) × 100%`; negative means under target, positive means over target. Absolute percentage error (APE) discards direction. The APE-change column is **final APE minus first-call APE** in percentage points (pp), so negative means improvement. These percentages do not reveal dollar-price differences: an equal percentage miss can represent different dollar errors at different target prices, and an extended-dollar miss also depends on quantity. No private prices or quantities are reported.
