@@ -2,6 +2,8 @@
 
 Use `codex/gpt-6-luna` at max reasoning for the quoting workers and an independent judge. A host's Codex CLI login is not required: `Keller Workflow` exposes the same eleven tools through standard MCP, using the existing CC transport without launching a Claude model. Start the headless engine and MCP daemon as described in [the workspace guide](arsumbris-workspace.md), then discover the surface with `node scripts/call-arsumbris-tool.mjs --list --runtime-root <runtime-directory>`.
 
+See the [public-safe aggregate results](mcp-workflow-evaluation-results.md) for valid batches, retained invalid attempts, calibration, limitations, and verification status.
+
 ## Freeze before running
 
 Each run contains exactly three RFQs, with one fresh worker context per question. Freeze the request content, private independent source oracle, selected corpus/register hash, criterion version, model/effort, runtime lock, and actual skill content hashes before observing outputs. Record the checkout SHA too: a working-tree skill hash, rather than HEAD alone, identifies what the worker actually read. Retain a separate fresh three-question batch before making changes. Workers may read their requests and the rubric, but never the oracle, prior results, another worker's output, or the database outside MCP.
