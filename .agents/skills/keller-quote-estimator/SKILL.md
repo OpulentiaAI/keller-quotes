@@ -17,6 +17,8 @@ Record customer/RFQ/date, stable line IDs, part number **and drawing revision**,
 
 For a historical draft, pin the selected register path/hash and inspect each usable analog's quote letter/date, source PDF/transcript hashes and source price field. Check revision, material, process, UOM, quantity-break curve and source-event timing; retain the full source unit precision and validate the printed extension. Do not use unverified `won`/`open` as sales outcomes, invoice or supplier-PO amounts as quote prices, or mix internal and PDF prices within a curve. A missing/weak/old/mismatched analog means **hold that line** for a human-supported cost build or explicit operator price; it is not license to invent a price. `confidence` and `price_low`/`price_high` are uncalibrated diagnostics, not approval gates or promised customer ranges.
 
+For Keller historical eligibility, reconcile the PDF's printed By date with its Inquiry Date and register dates. Conflicting dates do not establish prior availability; retain the chronology blocker rather than treating the inquiry date as verified issuance.
+
 In reissue handoffs, state the PDF's displayed unit beside the verified full-precision unit and explain any difference. Reconcile quantity × full unit to the printed extension; extension cent-rounding does not explain a separate unit-display discrepancy.
 
 Before replacing a Keller evidence-shortage hold with an explicit price, record a source-versus-request comparison for material, finish, revision and geometry, with evidence for each claimed match or justified adjustment. Unresolved price-critical gaps keep the line held.
