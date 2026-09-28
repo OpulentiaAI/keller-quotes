@@ -2,7 +2,7 @@
 """Grade a separately blinded historical quote proposal and its scoped MCP trace."""
 
 import argparse
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal, DecimalException, ROUND_HALF_UP
 from hashlib import sha256
 import importlib.util
 import json
@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import re
 import stat
+from statistics import median
 
 
 spec = importlib.util.spec_from_file_location('reissue_workflow_helpers', Path(__file__).with_name('grade-mcp-workflow.py'))
@@ -186,6 +187,196 @@ def validate_scope(scope, oracle, request, targets, cutoff):
                 str(Path(p).relative_to(root)) in public_contracts | skills
                 for p in scope['allowed_files']), 'invalid allowed public file')
     return rows
+
+
+def price_diagnostics(request, targets, answer, events, grading_result):
+    turns = []
+    samples = []
+    wanted = {line['line_id']: line for line in request['requested_lines']} if request is not None else {}
+    target_by_id = {target['line_id']: target for target in targets} if targets is not None else {}
+    for ordinal, event in enumerate(events if isinstance(events, list) else [], 1):
+        if not isinstance(event, dict) or event.get('tool') != 'keller_quote':
+            continue
+        turn = {'audit_ordinal': ordinal, 'state': 'malformed', 'draft_id': None,
+                'input_provenance': [], 'lines': []}
+        turns.append(turn)
+        inputs = event.get('inputs')
+        try:
+            submitted = json.loads(inputs.get('request')) if isinstance(inputs, dict) else None
+        except (ValueError, TypeError):
+            submitted = None
+        parts = submitted.get('parts') if isinstance(submitted, dict) else None
+        input_lines_match = same_lines(parts, wanted)
+        for lid in wanted:
+            matching = [part for part in parts if isinstance(part, dict) and part.get('line_id') == lid] if isinstance(parts, list) else []
+            pricing = matching[0].get('pricing') if len(matching) == 1 else None
+            input_identity_valid = input_lines_match and len(matching) == 1 and \
+                matching[0].get('part_no') == wanted[lid]['part_no'] and \
+                type(matching[0].get('quantity')) is int and matching[0]['quantity'] == wanted[lid]['quantity']
+            if len(matching) != 1 or not isinstance(pricing, dict) and pricing is not None:
+                provenance = {'line_id': lid, 'mode': 'unknown', 'pricing_inputs': None,
+                              'input_identity_valid': input_identity_valid}
+            elif pricing is None:
+                provenance = {'line_id': lid, 'mode': 'automatic', 'pricing_inputs': None,
+                              'input_identity_valid': input_identity_valid}
+            else:
+                method = pricing.get('method')
+                provenance = {'line_id': lid, 'mode': {'unit_price': 'explicit_unit_price',
+                              'cost_plus': 'cost_plus'}.get(method, 'unknown') if isinstance(method, str) else 'unknown',
+                              'pricing_inputs': pricing, 'input_identity_valid': input_identity_valid}
+            turn['input_provenance'].append(provenance)
+        result = event.get('result')
+        if result is None:
+            turn['state'] = 'error' if event.get('error') else 'held'
+            continue
+        if not isinstance(result, dict):
+            continue
+        if result.get('isError'):
+            turn['state'] = 'error'
+            continue
+        try:
+            payload = helpers.parsed_tool(event)
+            require(isinstance(payload, dict), 'quote payload is not an object')
+        except (ValueError, TypeError, KeyError, IndexError, AttributeError):
+            continue
+        turn['draft_id'] = payload.get('draft_id') if isinstance(payload.get('draft_id'), str) else None
+        order = payload.get('order')
+        lines = order.get('lines') if isinstance(order, dict) else None
+        if not isinstance(lines, list):
+            continue
+        turn['state'] = ('success' if payload.get('state') == 'PRICED_REQUIRES_REVIEW' else
+                         'unpriced' if any(isinstance(line, dict) and line.get('unit_price') is None for line in lines)
+                         else 'held')
+        for lid, requested in wanted.items():
+            target = target_by_id[lid]
+            item = {'line_id': lid, 'quantity': requested['quantity'], 'state': 'invalid',
+                    'reason': None, 'target_unit_price': target['unit_price'],
+                    'proposed_unit_price': None, 'unit_delta_usd': None,
+                    'signed_percentage_error_pp': None, 'ape_pp': None,
+                    'squared_unit_error_usd2': None, 'squared_percentage_error_pp2': None,
+                    'expected_extension_usd': None, 'recorded_extension_usd': None,
+                    'target_extension_usd': target['extended_price'],
+                    'expected_minus_recorded_extension_usd': None,
+                    'recorded_minus_target_extension_usd': None}
+            turn['lines'].append(item)
+            if not next(p['input_identity_valid'] for p in turn['input_provenance'] if p['line_id'] == lid):
+                item['reason'] = 'missing, duplicate, or wrong input line identity'
+                continue
+            matches = [line for line in lines if isinstance(line, dict) and line.get('line_id') == lid]
+            if len(matches) != 1 or len(lines) != len(wanted) or any(
+                    not isinstance(line, dict) or not isinstance(line.get('line_id'), str) or
+                    line['line_id'] not in wanted for line in lines):
+                item['reason'] = 'missing, duplicate, or unexpected line identity'
+                continue
+            line = matches[0]
+            part = line.get('part')
+            if not isinstance(part, dict) or part.get('part_no') != requested['part_no'] or \
+                    type(part.get('quantity')) is not int or part['quantity'] != requested['quantity']:
+                item['reason'] = 'wrong part or quantity identity'
+                continue
+            if line.get('unit_price') is None or line.get('extended_price') is None:
+                item['state'] = 'unpriced'
+                item['reason'] = 'unit or recorded extension missing'
+                continue
+            try:
+                proposed = dec(line['unit_price'], 'proposed unit', True)
+                recorded = dec(line['extended_price'], 'recorded extension', True)
+                target_unit = dec(target['unit_price'], 'target unit', True)
+                target_extension = dec(target['extended_price'], 'target extension', True)
+                delta = proposed - target_unit
+                percentage = delta / target_unit * 100
+                expected = (proposed * requested['quantity']).quantize(CENT, rounding=ROUND_HALF_UP)
+                item.update(state='priced', reason=None, proposed_unit_price=str(proposed),
+                            unit_delta_usd=str(delta), signed_percentage_error_pp=str(percentage),
+                            ape_pp=str(abs(percentage)), squared_unit_error_usd2=str(delta ** 2),
+                            squared_percentage_error_pp2=str(percentage ** 2),
+                            expected_extension_usd=str(expected), recorded_extension_usd=str(recorded),
+                            expected_minus_recorded_extension_usd=str(expected - recorded),
+                            recorded_minus_target_extension_usd=str(recorded - target_extension))
+                samples.append((delta, percentage))
+            except (ValueError, TypeError, DecimalException, OverflowError) as exc:
+                item['reason'] = str(exc)
+
+    def stats(values, unit):
+        if not values:
+            return {'mean_signed_error': None, 'mean_absolute_error': None, 'median_absolute_error': None,
+                    'mse': None, 'rmse': None, 'population_variance': None, 'population_sd': None,
+                    'unit': unit}
+        n = Decimal(len(values))
+        mean = sum(values) / n
+        mse = sum(value ** 2 for value in values) / n
+        variance = sum((value - mean) ** 2 for value in values) / n
+        return {'mean_signed_error': str(mean), 'mean_absolute_error': str(sum(map(abs, values)) / n),
+                'median_absolute_error': str(median(map(abs, values))), 'mse': str(mse),
+                'rmse': str(mse.sqrt()), 'population_variance': str(variance),
+                'population_sd': str(variance.sqrt()), 'unit': unit}
+
+    final_draft = answer.get('draft') if isinstance(answer, dict) else None
+    final_state = _diagnostic_draft_state(final_draft, wanted)
+    matches = [turn for turn in turns if isinstance(final_draft, dict) and turn['draft_id'] is not None and
+               turn['draft_id'] == final_draft.get('draft_id') and
+               isinstance(events[turn['audit_ordinal'] - 1].get('result'), dict) and
+               not events[turn['audit_ordinal'] - 1]['result'].get('isError') and
+               _diagnostic_payload(events[turn['audit_ordinal'] - 1]) == final_draft]
+    decisions = answer.get('pricing_decisions') if isinstance(answer, dict) else None
+    final_order = final_draft.get('order') if isinstance(final_draft, dict) else None
+    adopted = final_state == 'priced_draft' and isinstance(final_order, dict) and \
+        isinstance(final_order.get('lines'), list) and \
+        isinstance(decisions, list) and same_lines(decisions, wanted) and all(
+        isinstance(decision, dict) and amount_equal(decision.get('proposed_unit_price'),
+        next((line.get('unit_price') for line in final_order['lines']
+              if isinstance(line, dict) and line.get('line_id') == decision['line_id']), None))
+        for decision in decisions)
+    percentage_stats = stats([sample[1] for sample in samples], 'percentage points; squared metrics pp²')
+    percentage_stats['mape_pp'] = percentage_stats['mean_absolute_error']
+    percentage_stats['median_ape_pp'] = percentage_stats['median_absolute_error']
+    return {'non_acceptance_diagnostic': True,
+            'warning': 'Repeated calls and multiple lines within one attempt are descriptive, not independent cases or cohort accuracy.',
+            'oracle_valid': request is not None,
+            'grading_result': {'all_pass': grading_result['all_pass'],
+                               'validation_passed': grading_result['validation_passed'],
+                               'judge_passed': grading_result['judge_passed'],
+                               'v_context': {key: grading_result['criteria'][key] for key in VALIDATION}},
+            'final': {'state': final_state,
+                      'draft_id': final_draft.get('draft_id') if isinstance(final_draft, dict) else None,
+                      'linked_audit_ordinal': matches[0]['audit_ordinal'] if len(matches) == 1 else None,
+                      'pricing_decisions_match_draft': adopted,
+                      'pricing_decision_state': 'priced_proposal' if adopted else 'held_or_null',
+                      'pricing_decisions': decisions},
+            'turns': turns, 'finite_priced_line_count': len(samples),
+            'unit_error_usd': stats([sample[0] for sample in samples], 'USD; squared metrics USD²'),
+            'percentage_error_pp': percentage_stats}
+
+
+def _diagnostic_payload(event):
+    try:
+        return helpers.parsed_tool(event)
+    except (ValueError, TypeError, KeyError, IndexError, AttributeError):
+        return None
+
+
+def _diagnostic_draft_state(draft, wanted):
+    if not isinstance(draft, dict):
+        return 'held_or_null'
+    order = draft.get('order')
+    lines = order.get('lines') if isinstance(order, dict) else None
+    if not same_lines(lines, wanted) or not isinstance(order.get('state'), str) or \
+            draft.get('state') != order['state'] or draft['state'] not in ('PRICED_REQUIRES_REVIEW', 'BLOCKED'):
+        return 'malformed_draft'
+    for line in lines:
+        part = line.get('part')
+        wanted_part = wanted[line['line_id']]
+        if not isinstance(part, dict) or part.get('part_no') != wanted_part['part_no'] or \
+                type(part.get('quantity')) is not int or part['quantity'] != wanted_part['quantity']:
+            return 'malformed_draft'
+        if line.get('unit_price') is None or line.get('extended_price') is None:
+            return 'unpriced_draft'
+        try:
+            dec(line['unit_price'], 'final unit', True)
+            dec(line['extended_price'], 'final extension', True)
+        except (ValueError, TypeError):
+            return 'malformed_draft'
+    return 'priced_draft' if draft['state'] == 'PRICED_REQUIRES_REVIEW' else 'held_draft'
 
 
 def grade(oracle, answer, events, judge=None, artifact_snapshot=None, expected_hashes=None):
@@ -498,12 +689,14 @@ def grade(oracle, answer, events, judge=None, artifact_snapshot=None, expected_h
                 reasons[key].append(f'invalid judge: {exc}')
     vp = sum(not reasons[k] for k in VALIDATION)
     jp = sum(not reasons[k] for k in JUDGE)
-    return {'population': 'blinded-historical-quote-workflow', 'case_id': case_id,
+    report = {'population': 'blinded-historical-quote-workflow', 'case_id': case_id,
             'criteria': {k: {'passed': not v, 'reasons': v} for k, v in reasons.items()},
             'validation_passed': vp, 'judge_passed': jp, 'validation_score': vp / 5,
             'judge_score': jp / 5, 'combined_score': (vp + jp) / 10,
             'all_pass': vp == jp == 5 and draft is not None and
             isinstance(draft, dict) and draft.get('state') == 'PRICED_REQUIRES_REVIEW'}
+    report['price_diagnostics'] = price_diagnostics(request, targets, answer, events, report)
+    return report
 
 
 def main():
@@ -540,6 +733,8 @@ def main():
         result['validation_score'] = 0
         result['combined_score'] = result['judge_score'] / 2
         result['all_pass'] = False
+        result['price_diagnostics']['grading_result']['validation_passed'] = 0
+        result['price_diagnostics']['grading_result']['all_pass'] = False
     parent = args.out.parent
     require(parent.is_dir() and not parent.is_symlink() and parent.stat().st_uid == os.getuid() and
             parent.stat().st_mode & 0o077 == 0, 'output directory must be owner-private')
