@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "keller-ars-readonly": {
+      "command": "node",
+      "args": ["/ABSOLUTE/PATH/TO/keller-quotes/scripts/start-arsumbris-mcp-client.mjs", "--profile", "Keller Graph Readonly"]
+    },
+    "keller-polygres-readonly": {
+      "command": "node",
+      "args": ["/ABSOLUTE/PATH/TO/keller-quotes/scripts/start-arsumbris-mcp-client.mjs", "--profile", "Keller Polygres Readonly"]
+    }
+  }
+}

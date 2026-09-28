@@ -1,0 +1,2 @@
+type: workspace-startup::au-host-sdk
+initialComposition: "[[workspace-layout]]"

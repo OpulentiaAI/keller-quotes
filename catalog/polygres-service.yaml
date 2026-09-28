@@ -1,0 +1,4 @@
+type: keller.organization
+name: Polygres
+role: Hosted Postgres register and additive document evidence corpus.
+boundary: Query only the explicit approved Keller database/corpus with read-only access; no new import, schema change, or capacity increase is authorized.

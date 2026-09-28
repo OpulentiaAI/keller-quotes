@@ -1,0 +1,16 @@
+extends: mcp.tool::au-mcp-sdk
+fields:
+  #: Explicit public ID of the verified historical PDF-price corpus, 64 lowercase hex characters; never infer latest.
+  corpus: String
+  #: JSON string matching the estimator OrderRequest contract. Operator unit_price/cost_plus inputs require a reason; missing charges or prices keep the draft BLOCKED.
+  request: String
+  #: Name of the human estimator assigned to review this internal draft; naming a reviewer does not approve or release it.
+  reviewer: String
+meta:
+  - type: plugin-runtime-meta::au-mcp-sdk
+    entry: ./arsumbris/quote/tool.ts
+    contractVersion: 0
+  - type: tool-access-meta::au-mcp-sdk
+    broker: none
+  - type: tool-presentation-meta::au-mcp-sdk
+    description: "Draft an INTERNAL offline Keller order from a JSON OrderRequest against an explicit, verified customer-PDF price corpus. Persists private order.json/order.md and returns opaque artifact refs, state, blockers and provenance; assigns a named human reviewer. Historical quotes are nominal, outcomes unknown, and not current costs. Never approves or releases a customer quote."

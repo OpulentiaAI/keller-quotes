@@ -1,0 +1,5 @@
+type: keller.source
+role: frozen internal quote calculation register
+locator: quotes.csv and quotes.json.gz in keller-quotes
+provenance: FabriTRAK DBF extract; QUOTQTYS.UNIT_SELL calculated breaks, one row per break in the CSV.
+limitations: Not necessarily a customer-issued price; posted-history status is not a verified win or loss. Do not silently substitute for verified PDF prices.

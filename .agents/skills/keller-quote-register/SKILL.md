@@ -1,70 +1,33 @@
 ---
 name: keller-quote-register
-description: Reference for the C. Keller Mfg. FabriTRAK quote register (quotes.csv / quotes.json.gz) — schema, table provenance, field quirks, and how to query or extend it. Use when querying the data, adding fields, or debugging estimator analogs.
+description: Reference for frozen FabriTRAK calculation quotes and separately verified customer-PDF quote registers; use for schema, provenance, date, precision, and source selection.
 ---
 
-# Keller Quote Register
+# Keller quote registers: keep price bases separate
 
-One row per **quote qty/price break** — 179,608 rows covering 40,111 part-quotes (quote_no+item), 1994–2026. Source: `C:\Vftw\KELLER` Visual FoxPro tables, extracted read-only via TeamViewer on 2026-09-21.
+The immutable `quotes.csv` and `quotes.json.gz` represent 179,608 quantity-break rows for 40,111 part-quotes (`quote_no` plus `item_no`), dated 1994–2026. `estimator/data/quotes.csv` symlinks to this **internal-calculation** source. There are 2,210 placeholder breaks with no usable unit price. These are frozen local exports of the read-only September 2026 `C:\Vftw\KELLER` FabriTRAK snapshot, not a live cost feed or verified accepted-order history.
 
-## Files
-
-- `quotes.csv` — canonical flat table, Excel-openable.
-- `quotes.json.gz` — same rows as JSON (`gunzip` it; 132 MB unpacked).
-- `estimator/data/quotes.csv` is a checked-in symlink to `../../quotes.csv`; the estimate CLI resolves it relative to its module. Pass `--register` explicitly on checkouts that do not preserve symlinks.
-
-## Provenance (which FoxPro table feeds what)
-
-| Register fields | Source table | Notes |
+| Fields | Original source | Interpretation |
 |---|---|---|
-| quote_no, part_no, description, customer_id, quote_date (`ORG_DATE`), date_stamp, rev, drawing_no, rfq_no, buyer_name, salesperson, to_quote, comment | `QUOTEN.DBF` (40,111) | one row per part-quote |
-| quantity, unit_price, unit_cost, extended_price, markup, del_seq | `QUOTQTYS.DBF` (177,417) | internal calculation breaks; not necessarily printed customer quote prices; `extended_price = quantity × unit_price`; `DEL` means number of deliveries |
-| quote_letter, letter_date, customer name | `QUOTLINE.DBF` → `QUOTLETT.DBF` | letter→quote link; `CNAME` resolved to `customer` |
-| material | `QUOTLEIT.DBF` | sparse — most material info lives in `comment` text |
-| status, won_date | `QUOTHIST.DBF` | original export assumes presence ⇒ `won`; `POST_D` means posted date, not verified acceptance |
+| `quote_no`, `item_no`, `part_no`, `description`, `customer_id`, `quote_date`, `date_stamp`, `rev`, `drawing_no`, `rfq_no`, `to_quote`, `comment` | `QUOTEN.DBF` | Original quote date and last touch differ; `to_quote=0000000` means original. `comment` can hold material/finish text and embedded newlines. |
+| `quantity`, `unit_price`, `unit_cost`, `extended_price`, `markup`, `del_seq` | `QUOTQTYS.DBF` | Internal calculation breaks, which can differ from printed letters; `DEL` counts deliveries. |
+| `quote_letter`, `letter_date`, customer name, sparse `material` | `QUOTLINE`/`QUOTLETT`/`QUOTLEIT` | Names may be blank without a letter; join by `customer_id`. |
+| `status`, `won_date` | `QUOTHIST.DBF` | `won` is an **unverified posted-history label**, not a confirmed sale; `open` is not a loss. `QUOTEHN` is empty. |
 
-Not yet extracted into the flat files: `VENDQUOT` (vendor quotes, 12,779), `QUOTOPER`/`QUOTTOO`/`QUOTQA` (ops/tooling/fixture detail), `QUOTEH/M/O` (markup matrices). The full DBF tree exists in the original 351 MB zip (regenerate by re-extracting if needed).
+The separately derived `customer_quote_pdf` register contains only conservatively verified issued-quote letter lines. It is not an override of the frozen CSV. Its `status` is `unknown`; it retains the source document and AnyDoc transcript hashes, letter number/date, source price field, quantity, full source unit price, and printed extension. Source `quote_date` in this derivative is **set to the verified `letter_date`**, not the original `QUOTEN` date; `date_stamp` is the maximum known source revision/letter date. Do not claim the derivative corrected an original date. The builder permits up to five decimal places in source prices; preserve all reported precision even when the printed two-decimal unit looks truncated. Confirm `quantity × full source unit price` reconciles to the printed extension and keep all breaks of a price curve from one compatible verified letter/provenance. Never fill gaps from internal calculations without clearly changing the basis and obtaining review. See [document evidence](../../../docs/document-evidence.md).
 
-## Field quirks that matter
+In Ars Umbris, `keller_polygres` retrieves bounded, explicitly selected customer-PDF evidence; `keller_sources` can inspect the separately bound private `fabritrak`, `pdfs`, `transcripts`, and `manufacturing-audit` sets read-only. Use `sets`, `list`, `read`, `dbf_schema`, or exact `quote_no`-filtered `dbf_rows` only when the original evidence or an unresolved provenance gap requires inspection. Neither source reader validates today's manufacturing cost or changes the register's price basis.
 
-- **The frozen export's `status` is only `won` or `open`.** `QUOTEHN.DBF` is empty. The `won` mapping from posted history is unverified; neither presence nor absence establishes a sale or loss. Never report verified win/loss rates from those labels. Document-derived registers use `unknown`.
-- **`quote_date` vs `date_stamp`**: `quote_date` = original quote date; `date_stamp` = last touch (revisions). Use `quote_date` for era/recency.
-- **Re-quotes**: `to_quote` points to the earlier quote this one re-quotes (`0000000` = original). Useful for price-over-time curves of the same part.
-- **`item_no`/`assembly_no`**: multi-part assemblies group by `assembly_no`.
-- **`customer_id` ↔ `customer`**: name resolved via the most recent `QUOTLETT` for that `COMP_ID`; quotes whose customer never got a letter have `customer` empty — join on `customer_id`.
-- **The frozen CSV prices are historical internal calculations.** They can differ materially from printed customer quote prices. No inflation index or current-cost validation applies. Use the separate document-verified register when customer quote evidence is required; see `docs/document-evidence.md`.
-- **`comment`** carries material/finish free text (e.g. `.048 S.S 304 BRUSHED PVC`) — grep it for material hints `material` misses.
+For local frozen-register queries, use a CSV parser rather than physical-line `grep` or comma-splitting `awk`:
 
-## Common queries
-
-```bash
-# exact part history (all breaks)
-csvgrep -c part_no -m '96-0085-00' quotes.csv   # or: grep ',96-0085-00,' quotes.csv
-
-# a customer's quotes
-awk -F, '$6=="000317"' quotes.csv
-
-# python
-python3 - <<'EOF'
+```sh
+python3 - <<'PY'
 import csv
-rows=[r for r in csv.DictReader(open('quotes.csv')) if r['status']=='won']
-print(len(rows))
-EOF
+with open('quotes.csv', newline='', encoding='utf-8') as source:
+    rows = (r for r in csv.DictReader(source) if r['part_no'] == 'SYNTHETIC-PART')
+    for r in rows:
+        print(r['quote_no'], r['item_no'], r['quantity'], r['unit_price'])
+PY
 ```
 
-For programmatic access use `estimator/src/register.ts` (`QuoteRegister.fromCsv`) — it groups breaks per quote and builds part_no/customer/token indexes.
-
-## Extending the register
-
-For PDF evidence, run the local AnyDoc transcription and conservative document-register builder in `docs/document-evidence.md`. Preserve the original CSV/JSON and source DBFs. Keep PDFs, transcripts, manifests, and derived customer data in private storage outside the checkout. A transcript is not a structured-price oracle: quantity, displayed unit price, and extension must be reconciled together against the original PDF and the letter line. Preserve full source precision; a displayed two-decimal price can be truncated while its extension uses the unrounded value.
-
-To add fields (e.g. ops detail from `QUOTOPER`): re-extract `C:\Vftw\KELLER` (see session history / TeamViewer device 1321305824), join the new table on `QUOTE_NO`, regenerate CSV+JSON, bump this README's provenance table. Never hand-edit `quotes.csv`.
-
-## Polygres mirror
-
-The register is also loaded into a Polygres Postgres database — normalized
-tables + embedding/graph/FTS retrieval layers. Use it for semantic analog
-search, re-quote lineage traversal, and fuzzy part lookup instead of scanning
-the CSV. Connection, schema map, and query recipes live in the **polygres**
-skill (`polygres`) and `docs/polygres.md`. The CSV remains the source of truth;
-the DB is a derived copy — regenerate via `scripts/load.py`.
+That synthetic part will usually return no rows; replace the filter only for authorized private analysis. The normalized Polygres legacy tables are a **mirror** of these calculations; the four separate document-evidence tables and explicit-corpus read-only export provide the verified price source. [Polygres](../polygres/SKILL.md) describes safe retrieval. Do not run `scripts/load.py` to load document prices, hand-edit frozen inputs, or revisit source PDFs/DBFs just to quote against the already verified corpus. New source extraction, importer writes, and capacity decisions require separate authorization and post-import hash/row proofs. [The estimator guide](../keller-quote-estimator/SKILL.md) explains the review gate for an actual request.

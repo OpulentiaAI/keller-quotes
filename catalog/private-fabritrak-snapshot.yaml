@@ -1,0 +1,5 @@
+type: keller.source
+role: historical DBF/FPT manufacturing and quote source snapshot
+locator: fabritrak source set in ignored .keller-local/arsumbris/sources.json; KELLER_DBF_SNAPSHOT_DIR is the documented locator role
+provenance: FabriTRAK read-only extract with audited 2026-09-27 source files; see README.md and docs/decision-quality.md.
+limitations: Historical formulas/rates are not validated present-day routing or costs; no mutation of live FabriTRAK or source DBFs is authorized. Location requires an approved local binding.

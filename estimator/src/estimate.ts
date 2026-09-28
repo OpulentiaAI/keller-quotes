@@ -13,7 +13,7 @@ export interface EstimateOptions {
   jev?: JevClient;
   /** Max candidates passed to Jev ranking per part. */
   rankLimit?: number;
-  /** Run Jev screening on the top-N ranked analogs. */
+  /** Max top-ranked candidates to screen per part; only admitted candidates can be priced (0 holds). */
   screenTopN?: number;
   /** quote_no values to exclude from analogs (eval leave-one-out). */
   exclude?: Set<string>;
@@ -117,16 +117,16 @@ async function estimatePart(
     );
   }
 
-  // Screen the top few; drop rejects.
+  const screeningBudget = Math.min(opts.screenTopN, opts.rankLimit);
+  if (candidates.length > screeningBudget) {
+    const skipped = candidates.length - screeningBudget;
+    warnings.push(`screening budget skipped ${skipped} analog${skipped === 1 ? "" : "s"}`);
+  }
   const screened: typeof candidates = [];
-  for (const [i, c] of candidates.entries()) {
-    if (i >= opts.screenTopN) {
-      screened.push(c);
-      continue;
-    }
+  for (const c of candidates.slice(0, screeningBudget)) {
     const v = await jev.screenCandidate(part, c);
-    if (v === "reject") {
-      warnings.push(`rejected analog ${c.row.quote_no}`);
+    if (v !== "admit") {
+      warnings.push(`${v === "reject" ? "rejected" : "quarantined"} analog ${c.row.quote_no}`);
       continue;
     }
     screened.push(c);
@@ -134,7 +134,7 @@ async function estimatePart(
   candidates = screened;
 
   const strategy = await jev.chooseStrategy(part, candidates);
-  const priced = price(part.quantity, candidates.slice(0, opts.rankLimit), {
+  const priced = price(part.quantity, candidates, {
     strategy,
     jevProbabilities: verdict.probabilities,
     customerId: req.customer_id,
@@ -145,14 +145,14 @@ async function estimatePart(
   if (priced.unit_price === null) {
     warnings.push("no usable price breaks in analogs — manual pricing needed");
   }
-  if (!candidates.length) warnings.push("no historical analogs found");
+  if (!candidates.length) warnings.push("no admitted historical analogs found");
   if (priced.points.length && priced.points.every((p) => p.status !== "won")) {
     warnings.push(priced.points.some((p) => p.status !== "open")
       ? "no verified won-quote analogs — outcomes include unknown/unverified history"
       : "no won-quote analogs — all references are open history");
   }
   if (priced.unit_price !== null && priced.points.some((point) =>
-    candidates.slice(0, opts.rankLimit).some((candidate) => candidate.row.quote_no === point.quote_no &&
+    candidates.some((candidate) => candidate.row.quote_no === point.quote_no &&
       candidate.row.price_evidence?.price_basis !== "customer_quote_pdf"))) {
     warnings.push("price uses internal quote calculations, not verified issued customer-quote prices");
   }
@@ -169,9 +169,11 @@ async function estimatePart(
     confidence: priced.confidence,
     method: priced.method,
     status_basis: verdict.source === "jev" ? `jev+${strategy}` : `fallback:${strategy}`,
-    analogs: candidates.slice(0, 5).map((c) => ({
+    analogs: candidates.map((c) => ({
       quote_no: c.row.quote_no,
       quote_date: c.row.quote_date,
+      date_stamp: c.row.date_stamp,
+      rev: c.row.rev,
       customer: c.row.customer.trim(),
       part_no: c.row.part_no,
       description: c.row.description,

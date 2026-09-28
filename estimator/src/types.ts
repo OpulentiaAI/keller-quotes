@@ -97,6 +97,8 @@ export interface LineEstimate {
   analogs: {
     quote_no: string;
     quote_date: string;
+    date_stamp?: string;
+    rev?: string;
     customer: string;
     part_no: string;
     description: string;
