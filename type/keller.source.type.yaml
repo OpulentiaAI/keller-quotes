@@ -1,0 +1,10 @@
+#: A public pointer to an evidence collection; never a copy of private source records.
+fields:
+  #: Distinguishes the source's pricing or operational role.
+  role: String
+  #: Public locator or the name of an environment variable for an approved private locator.
+  locator: String
+  #: Origin and verification boundary of this collection.
+  provenance: String
+  #: What must not be inferred from this source.
+  limitations: String

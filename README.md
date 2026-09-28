@@ -1,3 +1,24 @@
+---
+type: au.engine.readme::au-engine
+tldr: C. Keller Mfg. historical FabriTRAK quote evidence, estimator workflows, and an Ars Umbris workspace for reviewed internal drafts.
+---
+
+# Repo Overview
+
+## What this is
+
+A historical quote evidence register and an Ars Umbris workspace for C. Keller Mfg. It distinguishes internal calculations, issued customer-price documents, and private manufacturing sources.
+
+## How to use this
+
+Start with [the Ars Umbris workspace guide](docs/arsumbris-workspace.md) or the five canonical workflows in `.agents/skills/`. All quoted prices and internal proposals require a named human reviewer before any customer release.
+
+The `Keller Codex` profile has bounded read-only Polygres and private-source tools plus `keller_quote` for an offline internal order draft. Its structured order, Markdown, and review output remains private; the tool does not approve or send a quote, and it does not establish the ≥90% completed-quoting goal.
+
+## How to extend this
+
+Keep source payloads and connection bindings outside the tracked tree. Add typed public catalog pointers and tests when introducing another source role, preserving provenance and held/failure accounting.
+
 # C. Keller Mfg. — FabriTRAK quoting data extract
 
 Quoting history extracted from the client's live **Metalsoft FabriTRAK** (Visual FoxPro) database.

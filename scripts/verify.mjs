@@ -88,6 +88,8 @@ const main = () => {
   run(process.execPath, [tsc, '--project', join(repo, 'evals/tsconfig.json')], repo, 'evaluation typecheck');
   run('python', ['-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_pdf_transcription.py', '-v'], repo, 'PDF transcription tests');
   run('python', ['-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_document_register.py', '-v'], repo, 'document register tests');
+  run('python', ['-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_arsumbris*.py', '-v'], repo, 'Ars Umbris workspace and tool tests');
+  run('python', ['-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_blinded*.py', '-v'], repo, 'blinded MCP workflow grader tests');
   required(cli, 'compiled estimator CLI missing after build; check the TypeScript build output');
   const output = run(process.execPath, [cli, fixture, '--offline', '--register', join(repo, 'quotes.csv')],
     estimator, 'compiled CLI offline smoke', 'pipe');
