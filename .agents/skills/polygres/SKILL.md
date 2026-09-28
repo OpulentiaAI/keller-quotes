@@ -42,6 +42,7 @@ Secrets live in Devin org secrets — never print, log, or commit them:
 | `quote_qty_breaks` | one per source CSV row | `is_placeholder` rows preserve the 179,608-row grain for breakless quotes |
 | `quote_letters` + `quote_letter_lines` | QUOTLETT headers + per-quote lines | `material` and per-link `letter_date` live here; apply migration `0005_letter_line_date.sql` before a refresh on an older DB. Letters are NOT graph nodes (Nano unit budget) |
 | `estimates` / `estimate_lines` | estimator output, request-id keyed | generated estimates — never mix with real history |
+| `document_corpora` / `evidence_documents` / `evidence_page_sets` / `verified_document_prices` | optional private PDF snapshots | compact internal keys, validated document-grain JSONB page packs plus `evidence_pages` read-only view, and separately verified customer prices; no core price override, graph or pgContext points |
 
 Row counts after the baseline load: customers 258, parts 38,091, quotes 40,111,
 quote_qty_breaks 179,608 (2,210 placeholders), quote_letters 23,822,
@@ -101,6 +102,19 @@ select * from graph.cypher(
 - Trigram indexes for fuzzy match: `parts.part_no`, `parts.drawing_no`,
   `parts.description`, `customers.customer_name`, `quotes.comment`
   (`similarity(a,b)`, `a % b`, `ilike`).
+
+### Optional document evidence
+
+Only use these tables after an approved private import and a measured Nano
+storage fit. Discover imported corpus IDs with
+`select corpus_id, ingested_at, document_count, page_count, price_count from document_corpora order by ingested_at desc`,
+then pass the chosen ID explicitly to `scripts/document-evidence-db.py search`,
+`prices`, or `export`. No implicit latest snapshot exists. Source PDF/page
+hashes support citations, but only validated customer-quote rows in
+`verified_document_prices` supply prices. Outcomes remain `unknown`; these
+prices never replace `quote_qty_breaks` or prove payment, sale, or current cost.
+See `docs/polygres-document-evidence.md` for preparation, TLS, import guards,
+and local capacity measurement.
 
 ## Budgets (Nano tier)
 

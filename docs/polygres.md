@@ -102,6 +102,28 @@ For a disposable local PostgreSQL instance, run the DB regressions with
 `KELLER_TEST_DATABASE_URL=postgresql://.../postgres python3 -m unittest discover -s tests -v`.
 The tests refuse non-loopback hosts and never require a gateway key.
 
+## Optional private document evidence
+
+`db/migrations/0006_document_evidence.sql` and `scripts/document-evidence-db.py`
+add four separate tables only after an explicitly approved private bundle import:
+`document_corpora` pins immutable snapshots with a compact internal key,
+`evidence_documents` stores PDF and AnyDoc provenance, `evidence_page_sets`
+stores independently extracted page text and hashes in validated, compressed
+document arrays, while the `evidence_pages` view exposes numbered pages with
+document-candidate English FTS and per-page filtering,
+and `verified_document_prices` stores customer-quote-PDF
+prices tied to existing quote IDs. No PDF binaries, embedding points, or graph
+nodes are added. Existing quote and break prices remain untouched. Document
+prices stay opt-in with `status=unknown`; a printed quote or invoice does not
+establish an outcome or current manufacturing cost.
+
+Discover available snapshots read-only with
+`select corpus_id, ingested_at, document_count, page_count, price_count from document_corpora order by ingested_at desc`;
+choose a corpus ID explicitly for each `search`, `prices`, or `export` request.
+There is no global latest pointer or automatic override of legacy history.
+See [the private evidence import and capacity guide](polygres-document-evidence.md)
+before considering a load against Nano storage limits.
+
 Note: `graph.build()` executes as internal role `graph_sync_owner` — grant it
 access to every node table before building (`grant all on customers, parts,
 quotes to graph_sync_owner` was needed here).
