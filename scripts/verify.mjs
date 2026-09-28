@@ -85,6 +85,7 @@ const main = () => {
   if (!estimatorTests.length) throw new Error('no estimator/test/*.test.ts files found');
   run(process.execPath, [vitest, 'run', '--maxWorkers=2', ...estimatorTests], estimator, 'estimator tests');
   run(process.execPath, [tsc], estimator, 'TypeScript build');
+  run(process.execPath, [tsc, '--project', join(estimator, 'tsconfig.test.json')], estimator, 'estimator test typecheck');
   run(process.execPath, [tsc, '--project', join(repo, 'evals/tsconfig.json')], repo, 'evaluation typecheck');
   run('python', ['-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_pdf_transcription.py', '-v'], repo, 'PDF transcription tests');
   run('python', ['-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_document_register.py', '-v'], repo, 'document register tests');
