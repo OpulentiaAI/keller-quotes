@@ -74,7 +74,8 @@ describe("historical benchmark artifacts", () => {
     const [good, miss, unpriced, unreplayable] = artifact.results;
     expect(good).toMatchObject({ all_pass: true, quantity: 10, actual_extended: 100, predicted_extended: 100,
       signed_unit_error: 0, signed_extended_error: 0, band_coverage: true });
-    expect(good.analog_refs).toEqual([{ quote_no: "A-old", quote_date: "2023-01-01" }]);
+    expect(good.analog_refs).toEqual([{ quote_no: "A-old", quote_date: "2023-01-01", quote_letter: "",
+      letter_date: "", price_evidence: { price_basis: "internal_quote_calculation" } }]);
     expect(miss).toMatchObject({ all_pass: false, signed_unit_error: -10, signed_extended_error: -100 });
     expect(miss.criteria.unit_within_20pct).toMatchObject({ pass: false });
     expect(unpriced).toMatchObject({ all_pass: false, status: "no_analog", ape: null });
@@ -125,6 +126,10 @@ describe("historical benchmark artifacts", () => {
       (r: any) => { r.provenance.configuration.limit = 2; },
       (r: any) => { r.results[0].actual = 999; },
       (r: any) => { r.results[0].quantity = 999; },
+      (r: any) => { r.results[0].target = { price_basis: "customer_quote_pdf", quote_letter: "L1",
+        source_document: "OUTPUT/letter.pdf", source_document_sha256: "a".repeat(64),
+        source_transcript_sha256: "b".repeat(64), source_price_field: "PRICE",
+        unit_price: "10", printed_extension: "100.00" }; },
       (r: any) => { r.results[0].id = "miss"; },
       (r: any) => { r.results = []; r.summary.cases = 0; },
     ]) {

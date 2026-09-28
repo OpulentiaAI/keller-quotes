@@ -1,12 +1,14 @@
 import { readFileSync, writeFileSync } from "node:fs";
-import { aggregate, allPass, assertSafeOutputs, grade, sliceMetrics, CRITERIA, type EvalResult } from "./metrics.js";
+import { createHash } from "node:crypto";
+import { aggregate, allPass, assertSafeOutputs, grade, printedTargetReconciles, sliceMetrics, CRITERIA, type EvalResult } from "./metrics.js";
 
 interface Report {
   schema_version: number;
   provenance: {
     register_sha256: string; evalset_sha256: string;
     estimator_eval_source_lock_sha256: string;
-    configuration: { mode: string; limit: number | null; jev_requested: boolean; jev_configured: boolean;
+    selected_case_ids_sha256?: string;
+    configuration: { mode: string; limit: number | null; sample?: number | null; seed?: string | null; jev_requested: boolean; jev_configured: boolean;
       exclusion: string; cutoff: string | null };
   };
   summary: ReturnType<typeof aggregate> & { mode: string; jev_configured: boolean };
@@ -24,18 +26,34 @@ function readReport(path: string): Report {
   const config = report.provenance.configuration;
   if (!config || !["retrospective", "cutoff-aware"].includes(config.mode) ||
     !(config.limit === null || Number.isSafeInteger(config.limit) && config.limit >= 0) ||
+    (config.sample !== undefined && !(config.sample === null || Number.isSafeInteger(config.sample) && config.sample >= 0)) ||
+    (config.sample !== undefined && (config.sample === null ? config.seed !== null : !config.seed || config.limit !== null)) ||
     typeof config.jev_requested !== "boolean" || typeof config.jev_configured !== "boolean" ||
     config.exclusion !== "source quote_no" || config.cutoff !== (config.mode === "retrospective" ? null : "case quote_date exclusive")) {
     throw new Error(`${path}: invalid effective configuration`);
   }
   if (report.summary.cases !== report.results.length) throw new Error(`${path}: inconsistent case count`);
+  if (report.provenance.selected_case_ids_sha256) {
+    const digest = createHash("sha256").update(JSON.stringify(report.results.map((r) => r.id))).digest("hex");
+    if (digest !== report.provenance.selected_case_ids_sha256) throw new Error(`${path}: inconsistent selected case digest`);
+  }
   const ids = new Set<string>();
   for (const r of report.results) {
     if (!r || typeof r.id !== "string" || !r.id || ids.has(r.id)) throw new Error(`${path}: duplicate or empty case ID`);
     ids.add(r.id);
-    if (!r.source_quote_no || typeof r.quote_date !== "string" || typeof r.quantity !== "number" ||
+    if (typeof r.source_quote_no !== "string" || (r.status !== "unreplayable" && !r.source_quote_no.trim()) ||
+      r.source_quote_no !== r.source_quote_no.trim() || typeof r.quote_date !== "string" || typeof r.quantity !== "number" ||
       (r.actual !== null && typeof r.actual !== "number") || !r.slices || !r.criteria || typeof r.all_pass !== "boolean" ||
       !["priced", "no_analog", "unreplayable"].includes(r.status)) throw new Error(`${path}: malformed case ${r.id}`);
+    if (r.target && (r.target.price_basis !== "customer_quote_pdf" ||
+      !r.target.quote_letter || !r.target.source_document ||
+      !/^[a-f0-9]{64}$/.test(r.target.source_document_sha256) ||
+      !/^[a-f0-9]{64}$/.test(r.target.source_transcript_sha256) ||
+      !["PRICE", "QUOTEPRICE"].includes(r.target.source_price_field) ||
+      !printedTargetReconciles(r.target.unit_price, r.quantity, r.target.printed_extension) ||
+      Number(r.target.unit_price) !== r.actual || r.slices.source_status !== "unknown")) {
+      throw new Error(`${path}: invalid target provenance ${r.id}`);
+    }
     for (const criterion of CRITERIA) if (typeof r.criteria[criterion]?.pass !== "boolean" ||
       typeof r.criteria[criterion]?.reason !== "string") throw new Error(`${path}: missing criterion ${criterion} in ${r.id}`);
     if (r.all_pass !== allPass(r.criteria)) throw new Error(`${path}: inconsistent all-pass ${r.id}`);
@@ -71,6 +89,9 @@ export function compare(baseline: Report, candidate: Report) {
   for (const key of ["register_sha256", "evalset_sha256"] as const) {
     if (baseline.provenance[key] !== candidate.provenance[key]) throw new Error(`incompatible ${key}`);
   }
+  if (baseline.provenance.selected_case_ids_sha256 !== candidate.provenance.selected_case_ids_sha256) {
+    throw new Error("incompatible selected case digest");
+  }
   if (JSON.stringify(baseline.provenance.configuration) !== JSON.stringify(candidate.provenance.configuration)) {
     throw new Error("incompatible effective configuration/mode/limit");
   }
@@ -80,7 +101,8 @@ export function compare(baseline: Report, candidate: Report) {
     const b = prior.get(r.id);
     if (!b) throw new Error(`incompatible case selection: ${r.id}`);
     if (b.actual !== r.actual || b.quantity !== r.quantity || b.source_quote_no !== r.source_quote_no ||
-      b.quote_date !== r.quote_date) throw new Error(`incompatible actual, quantity, source, or date for ${r.id}`);
+      b.quote_date !== r.quote_date || JSON.stringify(b.target ?? null) !== JSON.stringify(r.target ?? null))
+      throw new Error(`incompatible target, actual, quantity, source, or date for ${r.id}`);
     for (const key of ["quote_era", "quantity_band", "source_status", "split"] as const) {
       if (b.slices[key] !== r.slices[key]) throw new Error(`incompatible selection/slice ${key} for ${r.id}`);
     }

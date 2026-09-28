@@ -1,74 +1,46 @@
 ---
 name: keller-quote-estimator
-description: Turn a C. Keller Mfg. pricing request (parts, quantities, materials, drawing references) into a priced quote using the FabriTRAK quote register and TypeSafe Jev analog ranking. Use when asked to quote, estimate, or price parts against Keller quote history.
+description: Prepare reviewed Keller customer-quote drafts and complete internal priced-order proposals using explicitly chosen historical evidence or operator-supported current costs; use for pricing requests and RFQs.
 ---
 
-# Keller Quote Estimator
+# Price a Keller request without inventing evidence
 
-Estimator pipeline: pricing request → historical analog retrieval → Jev rank/screen/strategy → qty-break interpolation → priced quote draft. It lives in `estimator/`; the estimate CLI resolves the checked-in `estimator/data/quotes.csv` symlink relative to its module, independently of the working directory. Pass `--register quotes.csv` from the repository root on checkouts that do not preserve symlinks.
+Start with [the register's price-basis rules](../keller-quote-register/SKILL.md). For historical **issued customer prices**, prefer a selected `customer_quote_pdf` corpus exported read-only to a private CSV by [the Polygres guide](../polygres/SKILL.md). The CLI otherwise defaults to frozen `internal_quote_calculation` prices through its symlink; that is a separate fallback diagnostic, **never** a silent substitution or a validated current sell price. Document prices have unknown outcomes, and neither historical basis validates today's material/labor/routing costs.
 
-## What's needed from the user
+## Intake and evidence review
 
-The default frozen CSV contains internal calculation prices, not verified printed customer prices. Prefer an explicitly supplied document-verified register built with `docs/document-evidence.md` when available, and retain its PDF/transcript provenance in the draft. Do not silently mix supplier costs, invoice prices, customer quotations, and internal calculations. The original export's `won` labels are inferred from posted history, not independently verified sales.
+Record customer/RFQ/date, stable line IDs, part number **and drawing revision**, quantity and UOM for each line, material grade/thickness/yield, finish/outside work, tolerances, lead time/delivery, and unresolved specification questions. Ask for missing information before asserting equivalence. An exact normalized part number across different customers, revisions, materials or UOM does not prove interchangeability. A drawing/PDF needs human-checked extracted attributes; the estimator does not interpret drawings. Never access the remote manufacturing host, source DBFs, or PDFs merely to rederive already verified historical evidence.
 
-When asked for a **fully priced order**, use `estimator/src/order-cli.ts` and the contract in `docs/pricing-evals-and-orders.md`, not the older estimate total. Require stable line IDs, order/customer/date, and explicit shipping and tax amounts; operator unit prices or cost build-ups need reasons. Missing prices/charges must produce a blocked artifact with no grand total. The resulting JSON/Markdown is an internal proposal containing cost inputs and historical evidence, never authorization for customer delivery or fulfillment.
+For a historical draft, pin the selected register path/hash and inspect each usable analog's quote letter/date, source PDF/transcript hashes and source price field. Check revision, material, process, UOM, quantity-break curve and source-event timing; retain the full source unit precision and validate the printed extension. Do not use unverified `won`/`open` as sales outcomes, invoice or supplier-PO amounts as quote prices, or mix internal and PDF prices within a curve. A missing/weak/old/mismatched analog means **hold that line** for a human-supported cost build or explicit operator price; it is not license to invent a price. `confidence` and `price_low`/`price_high` are uncalibrated diagnostics, not approval gates or promised customer ranges.
 
-- The **pricing request**: parts list with whatever the customer supplied — part numbers, descriptions, quantities, material/finish, drawing numbers, RFQ number, customer name. Accept it in any form (text, image, spreadsheet); normalize into `request.json`.
-- Optionally: whether an authorized Jev ranking call should run. It needs `AI_GATEWAY_API_KEY` in the environment (org secret). Without it the estimator still works — deterministic fallback, `status_basis` reads `fallback:*`. The committed offline evaluation does not establish a Jev accuracy improvement; compare matched runs before claiming one. The scheduled draft worker always runs offline.
+Run the estimate CLI only after choosing a register. This minimal example is synthetic and intentionally forces the deterministic offline path; put real customer requests/outputs in approved private storage outside the checkout:
 
-## Procedure
-
-1. **Normalize the request** into the input schema. Write a `request.json`:
-
-   ```json
-   {
-     "customer": "IPEG, INC.",
-     "customer_id": "000317",
-     "rfq_no": "RFQ-123",
-     "parts": [
-       {
-         "part_no": "96-0085-00",
-         "description": "RETAINER PLATE",
-         "quantity": 250,
-         "material": "PAINTLOK",
-         "drawing_ref": "RAL-0214",
-         "notes": "anything the customer said that isn't a column"
-       }
-     ]
-   }
-   ```
-
-   - `quantity` is required per part. Everything else is optional but each field improves retrieval: `part_no` (exact match is strongest), `drawing_ref` (matches `DRAWING_NO` in the register — this is how customer drawings/visualizations connect), `material`/`finish` (matched against `MATERIAL` and `COMMENT` text), `description` (token overlap).
-   - If the request arrives as an image or PDF drawing, extract part numbers, descriptions, materials, and quantities first (read it directly, or OCR via the vision tooling available to you), then fill the JSON. The estimator does not do vision.
-
-2. **Run the estimator** from the repo root:
-
-   ```bash
-   cd estimator && npm ci   # first time only
-   cd ..
-   ./estimator/node_modules/.bin/tsx estimator/src/cli.ts request.json --csv quote.csv
-   ```
-
-   Add `--offline` to force the deterministic path even when `AI_GATEWAY_API_KEY` is set. Output: full `QuoteEstimate` JSON to stdout (lines with `unit_price`, `extended_price`, `price_low`/`price_high` (weighted p25/p75), `confidence`, `method`, `analogs` with Jev probabilities, `warnings`), plus a flat CSV if `--csv` is given.
-
-3. **Require human review before external delivery**. The estimator drafts; an agent may assist, but a named human must approve pricing and scope:
-   - `warnings` flag "no historical analogs", "no won-quote analogs", or rejected analogs — price those lines manually.
-   - `confidence` < ~0.3 means thin or old evidence — flag for estimator review, don't send as-is.
-   - Check the analog's **price basis**: the default register uses internal calculations; document-backed rows reconcile to printed historical quotations. Neither establishes current material/labor rates, and there is no inflation normalization.
-   - `analogs[]` shows exactly which historical quotes drove each price — cite them to the customer if asked "how did you get this number".
-
-4. **Hand off** the draft (JSON/CSV), preserving `analogs` and `warnings` for the human reviewer. Only the existing human-approved delivery channel may send a customer quote; the estimator and scheduled worker do not authorize delivery.
-
-## Anti-patterns
-
-- Do not edit `quotes.csv` or treat it as mutable — it is the frozen extract. Corrections go through re-extraction from FabriTRAK.
-- Do not bypass the analog layer and hand Jev (or any model) the whole register to "pick a price" — Jev only ranks/screens prevalidated candidates; it never generates prices.
-- Do not evaluate a historical quote with the source quote visible to retrieval — pass `EstimateOptions.exclude` through the library or use the eval harness, which also supplies the quote-time cutoff. The live CLI does not expose these options; see the evals skill.
-- Do not treat `status: "open"` as lost — QUOTEHN is empty; open includes silently-lost history.
-
-## Verification
-
-```bash
-# from the repository root, after cd estimator && npm ci && cd ..
-node scripts/verify.mjs
+```json
+{
+  "customer": "SYNTHETIC CUSTOMER",
+  "parts": [{"part_no": "SYNTHETIC-PART", "description": "Demo bracket",
+             "quantity": 10, "material": "Example steel", "drawing_ref": "DEMO-REV-A"}]
+}
 ```
+
+```sh
+# Run from repository root after: (cd estimator && npm ci)
+node estimator/node_modules/tsx/dist/cli.mjs estimator/src/cli.ts \
+  "$PRIVATE_REQUEST_JSON" --register "$SELECTED_VERIFIED_CSV" --offline
+```
+
+`--register` must be explicit. If no verified register is available, either hold or deliberately choose `--register quotes.csv --offline` and label **every** resulting figure internal-calculation-only. `AI_GATEWAY_API_KEY` can otherwise enable hosted Jev; `--offline` removes that dependency. A separately authorized `--jev` evaluation would be needed to demonstrate ranking value. The estimate CLI's `total` can sum priced lines despite missing prices, so do **not** treat it as a complete order total. Preserve private analog details for the reviewer, but never cite another customer's internal quote, cost, identity, or source PDF to the customer. Prepare a separately reviewed customer-safe explanation through the approved channel.
+
+For a fresh cost-backed proposal, get operator-supported **current** material price and UOM conversion, yield/scrap, minimum lot, actual routing/labor/setup, outside processing, and lead time. The 13 active manufacturing DBF formulas alone do not verify present rates/times; absent inputs and independent positive actual operation times block a cost guarantee. Do not fill those gaps by extrapolating a frozen formula or guessing inflation.
+
+## Complete internal priced order
+
+Use `estimator/src/order-cli.ts`, not the estimate CLI, for a requested complete priced-order proposal. It requires stable `line_id`s, order/date/customer, positive integer **piece** quantity, and explicit shipping/tax **amounts** (including zero only when the operator explicitly supplies zero). For non-piece UOM, clarify and convert with the operator before submitting; do not guess a conversion. Each line may use historical analogs with no `pricing`, an explicit positive operator `unit_price` (up to four decimals) plus reason, or a supported `cost_plus` build. Cost-plus takes `material_per_unit`, `labor_per_unit`, `outside_per_unit`, `setup_total`, `margin_pct`, reason; its divisor `1 - margin_pct/100` treats margin as **gross margin**, not markup. Source PDF unit evidence may have five decimals, but the order's operator-entered unit price is limited to four: preserve the original precision in evidence and review the rounding explicitly.
+
+```sh
+node estimator/node_modules/tsx/dist/cli.mjs estimator/src/order-cli.ts \
+  "$PRIVATE_ORDER_REQUEST_JSON" --register "$SELECTED_VERIFIED_CSV" \
+  --out "$NEW_PRIVATE_ORDER_DIRECTORY"
+```
+
+See the fully synthetic [order request example](../../../estimator/examples/order-request.json) and [input/output contract](../../../docs/pricing-evals-and-orders.md). The output directory must not exist. Exit `3` / `BLOCKED` still writes internal artifacts but **no total** for any unresolved line, shipping or tax; exit `0` / `PRICED_REQUIRES_REVIEW` is arithmetically complete, **not approved**. Validation failure exits `2`. Named human review must confirm scope, costs, evidence, price, terms and customer-safe communication before any existing approved external-delivery process. `order.json` and `order.md` expose costs, analogs, and history: never send them directly to a customer. This workflow does not book an order, email a customer, accept payment, initiate fulfillment or enable a scheduler. See [the eval guide](../keller-estimator-evals/SKILL.md) for what the historical performance evidence can and cannot justify.
