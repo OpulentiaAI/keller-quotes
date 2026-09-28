@@ -1,0 +1,26 @@
+extends: mcp.tool::au-mcp-sdk
+fields:
+  #: Discover configured source sets, list one directory, read bounded file bytes, or inspect/filter a FabriTRAK DBF.
+  action: [sets, list, read, dbf_schema, dbf_rows]
+  #: Owner-bound source set; required except for sets.
+  source_set?: [fabritrak, pdfs, transcripts, manufacturing-audit]
+  #: Relative directory or file path within the source set; empty or omitted means root for list.
+  path?: String
+  #: Directory-entry offset for list, byte offset for read, or physical record offset for dbf_rows.
+  offset?: Number{>=0 & integer}
+  #: Maximum entries for list (50), bytes for read (4096), or matching rows for dbf_rows (5).
+  limit?: Number{>=1 & integer}
+  #: For read: utf-8, latin-1 or base64. Text offsets and continuations are byte offsets.
+  encoding?: [utf-8, latin-1, base64]
+  #: Exact quote number to filter a DBF with a QUOTE_NO column; supply exactly one of quote_no or record_id for dbf_rows.
+  quote_no?: String
+  #: Exact catalog record identifier in a DBF with one of ID, FORM_ID, OPER_ID; alternative to quote_no, never a caller-selected column.
+  record_id?: String
+meta:
+  - type: plugin-runtime-meta::au-mcp-sdk
+    entry: ./arsumbris/sources/tool.ts
+    contractVersion: 0
+  - type: tool-access-meta::au-mcp-sdk
+    broker: none
+  - type: tool-presentation-meta::au-mcp-sdk
+    description: "Read-only, owner-bound Keller private source sets: inventory, directory listing, bounded source-file bytes and exact-quote or exact-catalog-ID FabriTRAK DBF rows/schema. No arbitrary paths, predicates, SQL, or writes. Citations identify source set and relative path; historical vendor prices and estimated times are not verified current costs."

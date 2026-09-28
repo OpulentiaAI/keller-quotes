@@ -20,6 +20,8 @@ from document_corpora order by ingested_at desc;
 
 The timestamp helps identify a snapshot; it is **not** quote chronology or a global latest pointer. Choose the explicit approved corpus from the request and provenance; ask the owner only if that choice is ambiguous, and never infer "latest" from ingestion time. Then use the CLI from repository root with a private, **new** output path (read-only commands; do not use `load --apply`):
 
+In the Ars Umbris `Keller Codex` profile, prefer `keller_polygres` for bounded read-only `corpora`, `search`, `page`, and `prices` retrieval: pass the explicit corpus for every action except `corpora`; use exact part/quote filters for prices and a cited source path/page number for page text. It does not expose arbitrary SQL or the full CSV export. `keller_quote` performs its own read-only full-register export before an offline internal order draft, while the standalone CLI below remains available to an authorized operator for private analysis/evaluations. Neither path writes Polygres or authorizes release.
+
 ```sh
 python scripts/document-evidence-db.py search 'synthetic bracket' \
   --expected-database "$DB_NAME" --corpus "$CORPUS_ID" --kind quote --limit 20

@@ -1,0 +1,24 @@
+type: au.engine.repo::au-engine
+name: keller-quotes
+description: C. Keller Mfg. quoting workspace, evidence catalog, and reviewed internal proposal guidance.
+remote: https://github.com/opulentiaai/keller-quotes.git
+deps:
+  - name: au-mcp-sdk
+  - name: au-mcp-core
+  - name: au-mcp-adapter-codex
+  - name: au-mcp-adapter-cc
+  - name: style
+  - name: agent-sessions
+  - name: au-host-sdk
+  - name: aup-reader
+  - name: aup-workspace-sidebar
+  - name: bento
+  - name: column
+  - name: editor
+  - name: file-tree
+  - name: intent
+  - name: media-viewers
+  - name: placeholder-picker
+  - name: sandwich
+  - name: tabs
+  - name: terminal

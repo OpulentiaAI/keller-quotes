@@ -1,0 +1,7 @@
+type: agent-profile::au-mcp-sdk
+adapter: "[[mcp.adapter.cc::au-mcp-adapter-cc]]"
+skills: []
+inject: []
+tools:
+  - "[[mcp.tool.keller_polygres]]"
+nativeToolAllowlist: []

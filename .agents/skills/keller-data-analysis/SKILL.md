@@ -7,6 +7,8 @@ description: Analyze Keller historical quote calculations and verified customer-
 
 Choose the evidence and grain before calculating anything. The frozen `quotes.csv`/`quotes.json.gz` has 179,608 break rows for 40,111 part-quotes, including 2,210 zero-quantity placeholders. Its price basis is `internal_quote_calculation`, not a validated issued customer price. For issued customer-price questions, prefer a **selected, explicit corpus** of `customer_quote_pdf` prices exported read-only from Polygres; keep it separate from the original register. See [the register guide](../keller-quote-register/SKILL.md) for provenance and [Polygres](../polygres/SKILL.md) for corpus selection and connection.
 
+The Ars Umbris profile exposes bounded `keller_polygres` price/page reads and `keller_sources` read-only private source inspection, not general SQL, large exports, or a shell. Use them for evidence lookup and small cited checks; use the standalone approved private workflow below for aggregate SQL or full-register analysis. Neither the source reader nor `keller_quote` is an evaluation or automatic customer-release tool.
+
 ## Query and interpret
 
 1. Define population, date field, unit of analysis, and price basis. A break count is not a quote count; use `count(distinct quote_no)` for unique quote numbers, or `(quote_no,item_no)` for part-quotes. Exclude `is_placeholder` from price arithmetic. A verified PDF's `quote_date` is the verified letter date, not a recovered original `QUOTEN` date; `date_stamp` may be a later revision. Ingestion time is not quote time.

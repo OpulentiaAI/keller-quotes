@@ -1,0 +1,4 @@
+type: keller.organization
+name: C. Keller Mfg.
+role: Manufacturing quote owner and named human reviewer of costs, terms, and customer-safe communication.
+boundary: The historical evidence workspace cannot approve a sell price, book an order, or release material to a customer on Keller's behalf.

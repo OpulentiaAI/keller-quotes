@@ -1,0 +1,33 @@
+{
+  "release": "0.0.1-alpha",
+  "upstream": "https://github.com/arsumbris",
+  "hostOverlay": {
+    "commit": "ddeae46f0926adaa0c26aa47979d03fb1a143067",
+    "path": "brand/ckeller/au-host",
+    "fileCount": 25
+  },
+  "repositories": {
+    "arsumbris": "a9f6cceedb191b8504443222d55d3106f9f36ba9",
+    "au-agent-guides": "ddc33339c73278ed2b9a178030d9d94924e43224",
+    "au-base-types": "0a0c9770ffd2672b3e9937046721811c99d1d178",
+    "au-competency": "6f23713425b2ba58b7361471badd58f63ca0642b",
+    "au-defaults": "0879c5ef432b468b9fa0e4a3e52d2fb58d2ec504",
+    "au-engine": "46f12389d4d4833fed51640a48cf938516433106",
+    "au-engine-sdk": "ffeca7a745af6f8069d5d2151fc96bae964825dd",
+    "au-govern": "8bf899b90a80081f328caacb0102ed47145b242d",
+    "au-host": "0e85fb1731fdef2d6196618aff5a2a567e621866",
+    "au-ingest": "5b3c22f930231ed12c964dce0144a35b5562ef9d",
+    "au-mcp": "3ddc3b62ed0b339a89a57f11026676df18d3b2eb",
+    "au-mcp-adapter-cc": "333b2117f338cd4815eeeb9ab7b3932b29fa7d62",
+    "au-mcp-adapter-codex": "3b0e3a3cf67b3143819c61c590efc85d36c23bc5",
+    "au-mcp-core": "25e0625e553c237671bba9a3a8c173a889dddf02",
+    "au-mcp-sdk": "91209bb00cebde36e6454207a89e257f20573577",
+    "au-rules": "4be3274a4ed5b1d197652285ea253c651b50e484",
+    "au-skills": "d32336d25b6ad2513976cba15ed69f30d6d1b38f",
+    "au-tree-research": "65faf72fc107bb8eef84675e01bda18513d8b49a",
+    "au-type-codegen": "e3c63da4afc77c2979ea06763c8c1045bcd93644",
+    "au-type-system": "066fd06b224bc46358273ebfbc82b6b8863e9885",
+    "au-weave": "24320734e2436e8c75d44a7ff9afb6a330569840",
+    "au-writing-style": "163b5597583364649b0bd896575ae4167e436719"
+  }
+}
