@@ -4,6 +4,27 @@ Use `codex/gpt-6-luna` at max reasoning for the quoting workers and an independe
 
 See the [public-safe aggregate results](mcp-workflow-evaluation-results.md) for valid batches, retained invalid attempts, calibration, limitations, and verification status.
 
+## Opt-in blinded evidence scope
+
+For genuinely blinded historical cases, prepare an owner-private (`0700` directory, `0600` regular file), absolute scope JSON outside Git and run every MCP call, including discovery, through `node scripts/call-arsumbris-tool.mjs --list|--call --evaluation-scope "$PRIVATE_SCOPE" --audit "$PRIVATE_TRACE"`. Reuse the exact scope bytes throughout one attempt. The caller binds each worker-visible response and audit event, including failures, to their SHA-256; preserve the scope hash with the frozen case manifest. A malformed or changed scope fails closed. This is an opt-in guarded **client view of the actual standard MCP backend**, not a separate mock backend or a change to the normal unscoped profile.
+
+Schema version 1 has exactly these fields (dates are valid `YYYY-MM-DD`; `date_stamp` may be `""`):
+
+```text
+{schema_version:1, case_id, corpus, quote_date, excluded_quote_nos:[string],
+ request:{order_id, quote_date, customer, customer_id, reviewer,
+          parts:[{line_id, part_no, quantity}], charges:{shipping,tax}},
+ eligible_prices:[{quote_no,item_no,quantity,unit_price,extended_price,
+                   quote_date,letter_date,date_stamp,part_no,customer_id,
+                   source_price_field,price_basis,status,source_path,
+                   pdf_sha256,transcript_sha256}],
+ allowed_files:[absolute canonical public skill/contract/synthetic-example paths]}
+```
+
+Build `eligible_prices` from the independently verified, hash-frozen register, never from the target's heldout prices. Exclude the **entire** target quote and every row with an invalid or nonprior quote, letter, or last-touch date; exclude an entire document if its page text also contains heldout or future prices. Keep source paths, document/transcript hashes, every quantity break, and full price precision; an empty `item_no` is valid. Only `customer_quote_pdf` rows with unknown outcome and strictly earlier dates qualify. Freeze the request identity, named reviewer, exact requested lines and supplied shipping/tax in the scope. Do not put a private oracle or heldout price in the scope. The guard matches complete verified price/provenance identities with exact decimal-equivalent amounts; it never treats search snippets or page text as verified numeric price authority. Besides canonical skills and public type definitions, the allowlist accepts only the public contracts `docs/pricing-evals-and-orders.md`, `estimator/src/order.ts`, and `estimator/src/types.ts`, plus explicitly synthetic examples.
+
+Scoped discovery exposes only `read_file_pinned`, `au_diagnostics`, `au_type`, `keller_polygres`, and `keller_quote`. Pinned reads accept only listed canonical public files; graph navigation and raw source readers are refused. Polygres is confined to the selected corpus, filters prices and search hits to eligible evidence, retains backend pagination offsets even when a filtered page is empty, and refuses excluded documents before page calls. Quote inputs and returned request/review must match the scope; any ineligible returned analog rejects the entire draft, including otherwise blocked drafts. Successful and blocked valid draft payloads are unchanged for persisted-artifact comparison. Malformed/error responses and alternate MCP content channels cannot enter the guarded audit. Keep all scope, trace, and response files private. This is application-level filtering on a shared OS account, **not an OS sandbox**: a worker with direct shell or database access can bypass the client. The grader must additionally require scope-bound traces and independently inspect price evidence before crediting a blinded result.
+
 ## Freeze before running
 
 Each run contains exactly three RFQs, with one fresh worker context per question. Freeze the request content, private independent source oracle, selected corpus/register hash, criterion version, model/effort, runtime lock, and actual skill content hashes before observing outputs. Record the checkout SHA too: a working-tree skill hash, rather than HEAD alone, identifies what the worker actually read. Retain a separate fresh three-question batch before making changes. Workers may read their requests and the rubric, but never the oracle, prior results, another worker's output, or the database outside MCP.

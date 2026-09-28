@@ -3,22 +3,26 @@ import { constants, closeSync, fstatSync, lstatSync, openSync, readFileSync, wri
 import { dirname, isAbsolute, join, parse, resolve, sep } from 'node:path'
 import { pathToFileURL, fileURLToPath } from 'node:url'
 import { options, requireRuntime, requireWorkspace, requireProfile } from './arsumbris-runtime.mjs'
+import { afterScopedCall, beforeScopedCall, loadEvaluationScope, scopedToolList, ScopedPaginationError } from './mcp-evaluation-scope.mjs'
 
 const profileName = 'Keller Workflow'
-const usage = 'usage: node scripts/call-arsumbris-tool.mjs <--list|--call> [--runtime-root DIR] [--workspace DIR] [--audit /private/session.jsonl] [--timeout-ms N]'
+const usage = 'usage: node scripts/call-arsumbris-tool.mjs <--list|--call> [--runtime-root DIR] [--workspace DIR] [--audit /private/session.jsonl] [--evaluation-scope /private/scope.json] [--timeout-ms N]'
 
 export function parseArgs(argv) {
   const args = [...argv]
   const mode = args.shift()
   if (!['--list', '--call'].includes(mode)) throw new Error(usage)
-  let audit, timeout = 600000
+  let audit, evaluationScope, timeout = 600000
   const runtimeArgs = []
   for (let i = 0; i < args.length; i++) {
-    if (['--audit', '--timeout-ms', '--runtime-root', '--workspace'].includes(args[i]) && args[i + 1] && !args[i + 1].startsWith('--')) {
+    if (['--audit', '--evaluation-scope', '--timeout-ms', '--runtime-root', '--workspace'].includes(args[i]) && args[i + 1] && !args[i + 1].startsWith('--')) {
       const key = args[i++], value = args[i]
       if (key === '--audit') {
         if (audit !== undefined) throw new Error(usage)
         audit = value
+      } else if (key === '--evaluation-scope') {
+        if (evaluationScope !== undefined) throw new Error(usage)
+        evaluationScope = value
       } else if (key === '--timeout-ms') {
         if (!/^[1-9]\d*$/.test(value) || !Number.isSafeInteger(Number(value))) throw new Error(usage)
         timeout = Number(value)
@@ -26,7 +30,8 @@ export function parseArgs(argv) {
     } else throw new Error(usage)
   }
   if (audit !== undefined && (!isAbsolute(audit) || audit.split(sep).includes('..'))) throw new Error('Audit path must be absolute and contain no parent traversal')
-  return { mode, audit, timeout, ...options(runtimeArgs) }
+  if (evaluationScope !== undefined && (!audit || !isAbsolute(evaluationScope) || evaluationScope.split(sep).includes('..'))) throw new Error('Evaluation scope requires --audit and an absolute scope path')
+  return { mode, audit, evaluationScope, timeout, ...options(runtimeArgs) }
 }
 
 export function parseRequest(text) {
@@ -88,22 +93,28 @@ export function openAudit(path) {
   }
 }
 
-export async function exchange(client, mode, request, timeout, record = () => {}) {
+export async function exchange(client, mode, request, timeout, record = () => {}, guard) {
   const startedAt = new Date().toISOString()
   const tool = mode === '--list' ? 'tools/list' : request.name
   const inputs = mode === '--list' ? {} : request.arguments
-  let result, error
+  let result, error, errorCode
+  let phase = guard && mode === '--call' ? 'policy' : 'backend'
   try {
+    if (guard && mode === '--call') beforeScopedCall(tool, inputs, guard)
+    phase = 'backend'
     if (mode === '--list') {
       const tools = []
       let cursor
+      let pages = 0
       do {
         const page = await client.listTools(cursor ? { cursor } : undefined, { timeout })
         if (!Array.isArray(page?.tools) || page.tools.some(item => typeof item?.name !== 'string')) throw new Error('Invalid MCP tools response')
+        if (guard && (Object.keys(page).some(key => !['tools', 'nextCursor'].includes(key)) ||
+            (page.nextCursor !== undefined && (typeof page.nextCursor !== 'string' || !page.nextCursor)) || ++pages > 100)) throw new Error('Invalid scoped MCP tools response')
         tools.push(...page.tools)
         cursor = page.nextCursor
       } while (cursor)
-      result = { tools }
+      result = guard ? scopedToolList({ tools }, guard) : { tools }
     } else {
       result = await client.callTool({ name: tool, arguments: inputs }, undefined, { timeout })
       if (!result || typeof result !== 'object' || !Array.isArray(result.content) ||
@@ -111,27 +122,43 @@ export async function exchange(client, mode, request, timeout, record = () => {}
           (result.isError !== undefined && typeof result.isError !== 'boolean')) {
         throw new Error('Invalid MCP tool response')
       }
+      if (guard) result = afterScopedCall(tool, inputs, result, guard)
     }
   } catch (cause) {
-    error = cause.message === 'Invalid MCP tool response' || cause.message === 'Invalid MCP tools response'
+    if (guard) {
+      result = undefined
+      if (phase === 'policy' && cause instanceof ScopedPaginationError) {
+        error = cause.message
+        errorCode = cause.code
+      } else if (phase === 'policy') {
+        error = 'Evaluation scope denied this request'
+        errorCode = 'EVALUATION_SCOPE_DENIED'
+      } else {
+        error = 'Guarded MCP response unavailable'
+        errorCode = 'GUARDED_MCP_UNAVAILABLE'
+      }
+    } else error = cause.message === 'Invalid MCP tool response' || cause.message === 'Invalid MCP tools response'
       ? cause.message : 'MCP request failed'
   }
-  const entry = { startedAt, completedAt: new Date().toISOString(), tool, inputs, result: result ?? null }
+  const entry = { startedAt, completedAt: new Date().toISOString(), tool, inputs, result: result ?? null,
+    ...(guard ? { evaluation_scope_sha256: guard.sha256 } : {}) }
   if (error) entry.error = error
+  if (errorCode) entry.error_code = errorCode
   record(entry)
   const { inputs: _inputs, ...response } = entry
   return { ...response, ...(mode === '--call' && result?.isError ? { error: 'MCP tool returned an error' } : {}) }
 }
 
 async function main() {
-  let fd, client, mode, request, startedAt
+  let fd, client, mode, request, startedAt, guard
   let stage = 'input'
   try {
     const args = parseArgs(process.argv.slice(2))
     mode = args.mode
-    const { audit, timeout, runtimeRoot, workspace } = args
+    const { audit, evaluationScope, timeout, runtimeRoot, workspace } = args
     request = mode === '--call' ? parseRequest(readFileSync(0, 'utf8')) : undefined
     startedAt = new Date().toISOString()
+    if (evaluationScope) guard = loadEvaluationScope(evaluationScope, resolve(dirname(fileURLToPath(import.meta.url)), '..'))
     stage = 'audit'
     if (audit) fd = openAudit(audit)
     stage = 'runtime'
@@ -157,13 +184,14 @@ async function main() {
     } catch {
       const row = { startedAt, completedAt: new Date().toISOString(),
         tool: mode === '--list' ? 'tools/list' : request.name,
-        inputs: mode === '--list' ? {} : request.arguments, result: null, error: 'MCP connection failed' }
+        inputs: mode === '--list' ? {} : request.arguments, result: null, error: 'MCP connection failed',
+        ...(guard ? { evaluation_scope_sha256: guard.sha256 } : {}) }
       record(row)
       const { inputs: _inputs, ...withoutInputs } = row
       response = withoutInputs
     }
     stage = 'request'
-    if (!response) response = await exchange(client, mode, request, timeout, record)
+    if (!response) response = await exchange(client, mode, request, timeout, record, guard)
     console.log(JSON.stringify(response))
     if (response.error) process.exitCode = 1
   } catch {
@@ -180,7 +208,8 @@ async function main() {
     if (fd !== undefined && ['runtime', 'workspace', 'profile', 'client-dependencies'].includes(stage)) {
       const row = { startedAt, completedAt: new Date().toISOString(),
         tool: mode === '--list' ? 'tools/list' : request.name,
-        inputs: mode === '--list' ? {} : request.arguments, result: null, error: `${stage} preflight failed` }
+        inputs: mode === '--list' ? {} : request.arguments, result: null, error: `${stage} preflight failed`,
+        ...(guard ? { evaluation_scope_sha256: guard.sha256 } : {}) }
       try {
         writeSync(fd, `${JSON.stringify(row)}\n`)
         const { inputs: _inputs, ...response } = row
