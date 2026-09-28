@@ -4,26 +4,19 @@ import {
   descTokens,
   normalizeCustomer,
   normalizePartNo,
+  partBigrams,
   type QuoteGroup,
 } from "./register.js";
 
-function bigrams(s: string): Set<string> {
-  const out = new Set<string>();
-  for (let i = 0; i < s.length - 1; i++) out.add(s.slice(i, i + 2));
-  return out;
-}
-
-function dice(a: string, b: string): number {
+function dice(a: string, A: ReadonlySet<string>, b: string, B: ReadonlySet<string>): number {
   if (!a || !b) return 0;
-  const A = bigrams(a);
-  const B = bigrams(b);
   if (!A.size || !B.size) return a === b ? 1 : 0;
   let inter = 0;
   for (const x of A) if (B.has(x)) inter++;
   return (2 * inter) / (A.size + B.size);
 }
 
-function jaccard(a: string[], b: string[]): number {
+function jaccard(a: readonly string[], b: readonly string[]): number {
   const A = new Set(a);
   const B = new Set(b);
   if (!A.size || !B.size) return 0;
@@ -55,12 +48,18 @@ export function retrieve(
   const beforeCutoff = (date: string) => Boolean(opts.asOf && /^\d{4}-\d{2}-\d{2}$/.test(date) &&
     !Number.isNaN(Date.parse(`${date}T00:00:00Z`)) &&
     new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) === date && date < opts.asOf);
-  const excluded = (g: QuoteGroup) =>
-    (opts.exclude?.has(g.head.quote_no) ?? false) ||
-    (opts.asOf !== undefined && g.breaks.some((b) =>
-      !beforeCutoff(b.quote_date) ||
-      (b.date_stamp !== "" && !beforeCutoff(b.date_stamp)) ||
-      (b.letter_date !== "" && !beforeCutoff(b.letter_date))));
+  const exclusion = new Map<QuoteGroup, boolean>();
+  const excluded = (g: QuoteGroup) => {
+    const cached = exclusion.get(g);
+    if (cached !== undefined) return cached;
+    const result = (opts.exclude?.has(g.head.quote_no) ?? false) ||
+      (opts.asOf !== undefined && g.breaks.some((b) =>
+        !beforeCutoff(b.quote_date) ||
+        (b.date_stamp !== "" && !beforeCutoff(b.date_stamp)) ||
+        (b.letter_date !== "" && !beforeCutoff(b.letter_date))));
+    exclusion.set(g, result);
+    return result;
+  };
   const wonAtCutoff = (g: QuoteGroup) => g.breaks.every((b) =>
     b.status === "won" && beforeCutoff(b.won_date));
   const wantPn = part.part_no ? normalizePartNo(part.part_no) : "";
@@ -83,18 +82,19 @@ export function retrieve(
 
   // 1. Part-number matching
   if (wantPn) {
+    const wantBigrams = partBigrams(wantPn);
     for (const g of reg.exactPart(part.part_no!)) {
       bump(g, 1.0, "exact part_no");
     }
     if (scored.size < 200) {
       for (const g of reg.groups) {
         if (scored.has(g)) continue;
-        const pn = normalizePartNo(g.head.part_no);
+        const { partNo: pn, partBigrams: pnBigrams } = g.search;
         if (!pn) continue;
         if (pn.startsWith(wantPn) || wantPn.startsWith(pn)) {
           bump(g, 0.75, "part_no prefix");
         } else {
-          const d = dice(wantPn, pn);
+          const d = dice(wantPn, wantBigrams, pn, pnBigrams);
           if (d >= 0.8) bump(g, d * 0.8, `part_no fuzzy ${d.toFixed(2)}`);
         }
       }
@@ -105,7 +105,7 @@ export function retrieve(
   const wantDwg = part.drawing_ref ? normalizePartNo(part.drawing_ref) : "";
   if (wantDwg) {
     for (const g of reg.groups) {
-      const dw = normalizePartNo(g.head.drawing_no);
+      const dw = g.search.drawingNo;
       if (dw && (dw === wantDwg || dw.startsWith(wantDwg) || wantDwg.startsWith(dw))) {
         bump(g, 0.85, "drawing_no match");
       }
@@ -115,7 +115,7 @@ export function retrieve(
   // 2. Description-token candidates
   if (wantToks.length) {
     for (const { group, hits } of reg.tokenCandidates(wantToks).slice(0, 400)) {
-      const j = jaccard(wantToks, descTokens(group.head.description));
+      const j = jaccard(wantToks, group.search.descriptionTokens);
       const s = Math.min(0.9, hits / wantToks.length) * 0.5 + j * 0.5;
       if (s >= 0.15) bump(group, s * 0.9, `desc tokens ${hits}/${wantToks.length}`);
     }
@@ -140,7 +140,7 @@ export function retrieve(
 
   return [...scored.entries()]
     .map(([g, s]) => {
-      const status = wonAtCutoff(g) ? "won" : "open";
+      const status = wonAtCutoff(g) ? "won" : g.breaks.every((row) => row.status === "unknown") ? "unknown" : "open";
       const redact = (row: typeof g.head) => ({
         ...row,
         status,

@@ -1,0 +1,82 @@
+type: composition::au-host-sdk
+intent-routing:
+  wires:
+    - intent: "[[open-intent::intent]]"
+      mode: fallback
+      source: "[[^^tree]]"
+      targets:
+        - "[[^^document-tabs]]"
+  defaults:
+    - intent: "[[open-intent::intent]]"
+      roles: ["[[tabs::tabs]]"]
+      mode: priority
+slot-defaults:
+  placeholder: "[[placeholder-picker::placeholder-picker]]"
+viewer-defaults:
+  defaults:
+    - opens: yaml
+      viewer: "[[editor-pane::editor]]"
+    - opens: yml
+      viewer: "[[editor-pane::editor]]"
+    - opens: md
+      viewer: "[[aup-reader::aup-reader]]"
+    - opens: pdf
+      viewer: "[[pdf-viewer::media-viewers]]"
+    - opens: "*"
+      viewer: "[[editor-pane::editor]]"
+windows:
+  - "[[^^au-window-primary]]"
+projections:
+  - ^: au-window-primary
+    content: "[[^^workspace]]"
+    primary: true
+    type: window::au-host-sdk
+  - ^: workspace
+    center:
+      child: "[[^^documents]]"
+      type: sandwich-slot::sandwich
+    left:
+      child: "[[^^sidebar]]"
+      hideHeader: true
+      label: Keller evidence
+      size: 270
+      type: sandwich-slot::sandwich
+      minSize: 200
+    right:
+      child: "[[^^session-tabs]]"
+      hideHeader: true
+      label: Review agent
+      size: 330
+      type: sandwich-slot::sandwich
+      minSize: 220
+    type: sandwich::sandwich
+  - ^: sidebar
+    body: "[[^^tree]]"
+    type: aup-workspace-sidebar::aup-workspace-sidebar
+  - ^: tree
+    type: file-tree::file-tree
+  - ^: documents
+    root: "[[^^document-tabs]]"
+    type: bento::bento
+  - ^: document-tabs
+    type: tabs::tabs
+    defaultOpenMode: permanent
+    tabs:
+      - "[[^^reader]]"
+    newTabPosition: after-source
+    activeTab: reader
+  - ^: reader
+    type: aup-reader::aup-reader
+    file: start here.md
+  - ^: session-tabs
+    emptyPlaceholder: "[[placeholder-picker::placeholder-picker]]"
+    replaceEmptyPlaceholderOnOpen: true
+    startView: "[[^^session-launcher]]"
+    startViewCompactWhen: "[[terminal::terminal]]"
+    tabs: []
+    type: tabs::tabs
+  - ^: session-launcher
+    type: agent-session-launcher::agent-sessions
+    profile: "[[Keller Codex]]"
+    prompt: clean
+key-sequence-timeout-ms: 1200

@@ -1,0 +1,5 @@
+type: keller.source
+role: original source documents including quote letters, invoices, supplier POs, and manuals
+locator: pdfs source set in ignored .keller-local/arsumbris/sources.json; KELLER_PDF_CORPUS_DIR is the documented locator role
+provenance: Read-only 2026-09-27/28 manufacturing-host transfer with manifest/hash reconciliation; see docs/document-evidence.md.
+limitations: Filenames are classification hints. Private PDFs are not packaged in Git or the Ars Umbris graph; the approved local path must be separately bound and verified. A supplier PO or invoice is not an issued customer quote.

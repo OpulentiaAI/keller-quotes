@@ -1,0 +1,5 @@
+type: keller.source
+role: read-only source reconciliation and failure accounting
+locator: manufacturing-audit source set in ignored .keller-local/arsumbris/sources.json; KELLER_SOURCE_AUDIT_DIR is the documented locator role
+provenance: Source inventory, reconciliation, and audit findings from the 2026-09-27 DBF/PDF transfer.
+limitations: Audit observations are dated and do not establish current production data or current cost. Private inventories and findings must stay in approved storage.

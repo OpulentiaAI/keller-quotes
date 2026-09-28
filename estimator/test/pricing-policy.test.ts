@@ -137,4 +137,56 @@ describe("quantity relevance and range warnings", () => {
       { jev: new JevClient("") });
     expect(result.lines[0]!.warnings).not.toContain("requested quantity outside all usable analog price-break ranges — manual review needed");
   });
+
+  it("checks ranges only for admitted candidates, not rejected or unscreened exact matches", async () => {
+    const register = new QuoteRegister([
+      row({ quote_no: "outside", part_no: "AB-123", quantity: 10, unit_price: 20 }),
+      row({ quote_no: "bracket", part_no: "AB-123", quantity: 100, unit_price: 9 }),
+      row({ quote_no: "bracket", part_no: "AB-123", quantity: 200, unit_price: 7 }),
+      row({ quote_no: "skipped", part_no: "AB-123", quantity: 150, unit_price: 8 }),
+    ]);
+    const jev = {
+      enabled: false,
+      rankAnalogs: async (_part: unknown, candidates: Candidate[]) => ({
+        rankedIds: ["outside", "bracket", "skipped"], probabilities: {}, source: "jev" as const,
+      }),
+      screenCandidate: async (_part: unknown, c: Candidate) =>
+        c.row.quote_no === "outside" ? "admit" as const : "reject" as const,
+      chooseStrategy: async (_part: unknown, candidates: Candidate[]) => {
+        expect(candidates.map((c) => c.row.quote_no)).toEqual(["outside"]);
+        return "median_won" as const;
+      },
+    } as unknown as JevClient;
+    const result = await estimate(register, { parts: [{ part_no: "AB-123", quantity: 150 }] },
+      { jev, rankLimit: 3, screenTopN: 2 });
+    expect(result.lines[0]!.unit_price).toBe(20);
+    expect(result.lines[0]!.analogs.map((a) => a.quote_no)).toEqual(["outside"]);
+    expect(result.lines[0]!.warnings).toContain("rejected analog bracket");
+    expect(result.lines[0]!.warnings).toContain("screening budget skipped 1 analog");
+    expect(result.lines[0]!.warnings).toContain("requested quantity outside all usable analog price-break ranges — manual review needed");
+  });
+
+  it("holds when exact candidates are quarantined without pricing from other history", async () => {
+    const register = new QuoteRegister([
+      row({ quote_no: "exact", part_no: "AB-123", quantity: 10, unit_price: 20 }),
+      row({ quote_no: "fuzzy", part_no: "AB-124", quantity: 10, unit_price: 30 }),
+    ]);
+    const jev = {
+      enabled: false,
+      rankAnalogs: async (_part: unknown, candidates: Candidate[]) => {
+        expect(candidates.map((c) => c.row.quote_no)).toEqual(["exact"]);
+        return { rankedIds: ["exact"], probabilities: {}, source: "fallback" as const };
+      },
+      screenCandidate: async () => "quarantine" as const,
+      chooseStrategy: async (_part: unknown, candidates: Candidate[]) => {
+        expect(candidates).toEqual([]);
+        return "median_won" as const;
+      },
+    } as unknown as JevClient;
+    const result = await estimate(register, { parts: [{ part_no: "AB-123", quantity: 100 }] }, { jev });
+    expect(result.lines[0]!.unit_price).toBeNull();
+    expect(result.lines[0]!.analogs).toEqual([]);
+    expect(result.lines[0]!.warnings).toContain("quarantined analog exact");
+    expect(result.lines[0]!.warnings).not.toContain("requested quantity outside all usable analog price-break ranges — manual review needed");
+  });
 });

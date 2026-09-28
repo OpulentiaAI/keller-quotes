@@ -1,3 +1,24 @@
+---
+type: au.engine.readme::au-engine
+tldr: C. Keller Mfg. historical FabriTRAK quote evidence, estimator workflows, and an Ars Umbris workspace for reviewed internal drafts.
+---
+
+# Repo Overview
+
+## What this is
+
+A historical quote evidence register and an Ars Umbris workspace for C. Keller Mfg. It distinguishes internal calculations, issued customer-price documents, and private manufacturing sources.
+
+## How to use this
+
+Start with [the Ars Umbris workspace guide](docs/arsumbris-workspace.md) or the five canonical workflows in `.agents/skills/`. All quoted prices and internal proposals require a named human reviewer before any customer release.
+
+The `Keller Codex` profile has bounded read-only Polygres and private-source tools plus `keller_quote` for an offline internal order draft. Its structured order, Markdown, and review output remains private; the tool does not approve or send a quote, and it does not establish the ≥90% completed-quoting goal.
+
+## How to extend this
+
+Keep source payloads and connection bindings outside the tracked tree. Add typed public catalog pointers and tests when introducing another source role, preserving provenance and held/failure accounting.
+
 # C. Keller Mfg. — FabriTRAK quoting data extract
 
 Quoting history extracted from the client's live **Metalsoft FabriTRAK** (Visual FoxPro) database.
@@ -16,11 +37,11 @@ Quoting history extracted from the client's live **Metalsoft FabriTRAK** (Visual
 ## Data model (how tables were joined)
 
 - `QUOTEN.DBF` (40,111 rows) — internal quote record, one row per part quoted. Key `QUOTE_NO`; carries `PART_NO`, `DESCR`, `COMP_ID` (customer id), `ORG_DATE`/`DATE_STAMP`, `REV_NO`, `DRAWING_NO`, `RFQ_NO`, `BUYER_NAME`, `SALES_PERS`, `TO_QUOTE` (re-quote lineage), `COMMENT` (finish/material notes).
-- `QUOTQTYS.DBF` (177,417 rows) — quantity/price breaks per `QUOTE_NO`: `QTY`, `UNIT_SELL` (quoted unit price), `UNIT_COST`, `MARKUP`, `DEL` (break seq). `extended_price = QTY × UNIT_SELL`. Quotes with no price breaks emit a single row with empty qty/price fields.
+- `QUOTQTYS.DBF` (177,417 rows) — internal calculation breaks per `QUOTE_NO`: `QTY`, `UNIT_SELL`, `UNIT_COST`, `MARKUP`, `DEL` (number of deliveries). `extended_price = QTY × UNIT_SELL`. These prices are not necessarily the prices printed on customer quote letters. Quotes with no price breaks emit a single row with empty qty/price fields.
 - `QUOTLINE.DBF` (45,165) — links `QUOTE_NO` → printed quote letter (`QUOTLETTER` + `ITEM`).
 - `QUOTLETT.DBF` (44,962) — quote letter headers: `CNAME` (customer name), `COMP_ID`, `DATE_STAMP` (letter date), `APPROVE_DA`. Used to resolve `customer` names from `COMP_ID` (most recent letter wins) and `letter_date`.
 - `QUOTLEIT.DBF` (215,760) — letter line items; `MATERIAL` pulled into `material` when populated.
-- `QUOTHIST.DBF` (19,546) — posted quote history (`POST_D`). Presence of `QUOTE_NO` here → `status = "won"` (3,997 quotes).
+- `QUOTHIST.DBF` (19,546) — posted quote history (`POST_D`). The original export maps presence of `QUOTE_NO` here to `status = "won"` (3,997 quotes); that mapping is an unverified outcome assumption, not proof of an accepted order or completed sale.
 
 ## Fields
 
@@ -28,7 +49,7 @@ Quoting history extracted from the client's live **Metalsoft FabriTRAK** (Visual
 
 ## Caveats / unpopulated fields
 
-- `status` is only `won` or `open` — the lost-quote outcome table `QUOTEHN.DBF` exists but is empty (0 rows); FabriTRAK never recorded explicit "lost" flags. "open" therefore includes quotes that silently lost or expired. `won_date` = `QUOTHIST.POST_D` where known.
+- The original export's `status` is only `won` or `open`. The lost-quote outcome table `QUOTEHN.DBF` is empty, so neither losses nor win rates can be established from this snapshot alone. `won_date` is the posted-history date, not a verified customer acceptance date. Document-derived registers keep the outcome `unknown`.
 - `material` is sparse — populated only where a quote-letter line carries it (`QUOTLEIT.MATERIAL`); most quotes keep material/finish info in the free-text `comment` (e.g. ".048 S.S 304 BRUSHED PVC").
 - `item_no`/`assembly_no`/`to_quote` relate multi-part assemblies and re-quotes (`TO_QUOTE='0000000'` = original, otherwise the earlier quote it re-quotes).
 - `date_stamp` is the record's last-touch date; `quote_date` (`ORG_DATE`) is the original quote date — they differ where quotes were revised.
@@ -37,6 +58,8 @@ Quoting history extracted from the client's live **Metalsoft FabriTRAK** (Visual
 - Vendor-side quote requests (`VENDQUOT.DBF`, 12,779 rows) and quote ops/tooling detail (`QUOTOPER`, `QUOTTOO`, `QUOTQA`, `QUOTEH/M/O` markup matrices, `QUOTCAD`) were extracted in the zip but are not part of this flat export — ask if you want those too.
 
 ## Estimator
+
+The frozen CSV remains unchanged. For local PDF transcription and a separate, document-verified customer-price register, see [document evidence](docs/document-evidence.md). Quote letters, supplier POs, invoices, and internal calculations are different evidence classes; only independently reconciled customer quote letters enter that derived register. Neither a printed quote nor a reconciled historical price establishes current manufacturing cost or authorizes customer delivery.
 
 `estimator/` is a TypeScript pipeline that turns a pricing request (parts + materials + drawing refs) into a priced quote draft by retrieving historical analogs from this register, ranking/screening them with TypeSafe Jev (`typesafe-ai/jev` via Vercel AI Gateway, deterministic fallback without a key), and interpolating qty/price breaks.
 

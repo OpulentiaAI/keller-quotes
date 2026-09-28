@@ -4,6 +4,8 @@ This proposal changes analog selection and weighting, not the source register, q
 
 **Experimental, not recommended as the default yet:** unit-error metrics improve, but the diagnostic holdout within-20% count and the supplemental sample's aggregate signed-dollar error regress. Business acceptance criteria for underquoting need to be decided before adoption; passing the current unit-metric gate alone is insufficient.
 
+These measurements describe the original pricing-policy replay, before the newer top-N admission pipeline. In the combined estimator, exact preference operates on retrieved, cutoff-safe candidates before ranking. When no exact match is priceable, unusable exact rows cannot consume the bounded screening budget for other evidence. Only screened and admitted candidates can feed strategy, pricing, references, or quantity-range warnings. The historical metrics below do not measure that combined pipeline and cannot establish its accuracy; run a separately scoped, matched evaluation before making such a claim.
+
 ## What the data supports
 
 The baseline development partition has 203 cases, of which 191 are priced. Only seven have usable exact-part history after source exclusion and the quote-time cutoff. Most requests are therefore priced from other parts rather than a previous price for the requested part. Manufacturing dimensions, operation times, and current material/labor costs are not supplied by this evaluation; a historical description or similar part number does not establish equivalent manufacturing cost.
@@ -31,7 +33,7 @@ Policy selection used only the existing **203-case development partition**. The 
 
 The combined policy was selected for the highest within-20% count with unchanged coverage and lower median/mean error. Selection was frozen before scoring a supplemental 500-case set. No new policy was selected or tuned after those validation results.
 
-The implementation prefers usable normalized exact-part candidates **among the retrieved candidates**, before model ranking/screening and pricing. If no priceable exact candidate is returned, the existing pool remains available. It does not reintroduce a source quote, a future/revised quote, or otherwise excluded history. The experiment also searched the broader scored pool; none of the 750 evaluation requests lost all its available exact matches to the existing 12-candidate limit. That observation is not a guarantee about every possible future request.
+The original implementation prefers usable normalized exact-part candidates **among the retrieved candidates**, before model ranking/screening and pricing. If no priceable exact candidate is returned, the original experiment keeps the existing pool; the combined pipeline instead removes unusable exact rows to avoid exhausting its screening budget. Neither reintroduces a source quote, a future/revised quote, or otherwise excluded history. The experiment also searched the broader scored pool; none of the 750 evaluation requests lost all its available exact matches to the existing 12-candidate limit. That observation is not a guarantee about every possible future request.
 
 Pricing multiplies each existing candidate weight by:
 

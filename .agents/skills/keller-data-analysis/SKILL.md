@@ -1,87 +1,33 @@
 ---
 name: keller-data-analysis
-description: Analyze the Keller quoting dataset — answer data questions, write SQL against the Polygres register or queries over quotes.csv, and produce charts/reports. Use for win rates, price trends, customer/part analysis, or any quoting-data question.
+description: Analyze Keller historical quote calculations and verified customer-PDF prices with explicit grains, provenance, and outcome limitations. Use for price trends, customer/part analysis, and quoting-data questions.
 ---
 
-# Data analysis on the Keller quote register
+# Analyze Keller quoting data
 
-Adapted from Devin's builtin data-analysis skill for this repo's two query
-surfaces. Prefer Polygres for anything beyond a trivial grep — the normalized
-schema makes joins and aggregation correct by construction.
+Choose the evidence and grain before calculating anything. The frozen `quotes.csv`/`quotes.json.gz` has 179,608 break rows for 40,111 part-quotes, including 2,210 zero-quantity placeholders. Its price basis is `internal_quote_calculation`, not a validated issued customer price. For issued customer-price questions, prefer a **selected, explicit corpus** of `customer_quote_pdf` prices exported read-only from Polygres; keep it separate from the original register. See [the register guide](../keller-quote-register/SKILL.md) for provenance and [Polygres](../polygres/SKILL.md) for corpus selection and connection.
 
-## Before you start
+The Ars Umbris profile exposes bounded `keller_polygres` price/page reads and `keller_sources` read-only private source inspection, not general SQL, large exports, or a shell. Use them for evidence lookup and small cited checks; use the standalone approved private workflow below for aggregate SQL or full-register analysis. Neither the source reader nor `keller_quote` is an evaluation or automatic customer-release tool.
 
-1. **Pick the surface:**
-   - **Polygres** (default): normalized tables + `graph` + pgContext embeddings
-     + FTS/trigram. See the `polygres` skill for connection and recipes.
-     `POLYGRES_DIRECT_URL` for writes, `POLYGRES_DATABASE_URL` for reads.
-   - **`quotes.csv`** (179,608 rows): fine for quick pandas/awk work; remember it
-     is break-grain — one row per qty/price break, not per quote.
-2. **Read `keller-quote-register` first** for field quirks (status won|open only
-   — no lost; `quote_date` vs `date_stamp`; `to_quote='0000000'` = original;
-   `material` sparse; `comment` holds finish/material verbatim).
-3. **If asked about estimator output**: `estimates`/`estimate_lines` are
-   generated quotes — exclude them from historical analysis.
+## Query and interpret
 
-## Analysis flow
+1. Define population, date field, unit of analysis, and price basis. A break count is not a quote count; use `count(distinct quote_no)` for unique quote numbers, or `(quote_no,item_no)` for part-quotes. Exclude `is_placeholder` from price arithmetic. A verified PDF's `quote_date` is the verified letter date, not a recovered original `QUOTEN` date; `date_stamp` may be a later revision. Ingestion time is not quote time.
+2. Name outcome limitations up front. Frozen `won` means a posted-history mapping, not verified acceptance; `open` does not mean lost. Document prices have `unknown` outcome. Never call `won / (won + open)` a win rate, or infer revenue, payment, or accepted orders from a quote, invoice, or posting.
+3. Use parameterized read-only SQL for grouped historical analysis, filtering price basis and corpus where applicable. Document text search finds **candidate pages**, not numeric prices: verify an issued letter's quantity, full source unit price, extension, PDF hash and transcript hash against `verified_document_prices` and the original private PDF. Do not use arbitrary supplier PO or invoice figures as customer quote prices.
+4. For trends, compare like part revision, drawing, customer, UOM, quantity band and price basis. Historical nominal dollars have no automatic inflation or current-cost adjustment. Report missing fields and small cohorts rather than smoothing them away. Keep private exports/reports outside the checkout.
 
-1. **Frame the grain.** Decide whether the question is per-quote (`quotes`),
-   per-break (`quote_qty_breaks`), per-part (`parts`), per-customer
-   (`customers`), or per-letter (`quote_letters`). Most "how many quotes"
-   questions want `count(distinct quote_no)` semantics, not row counts.
-2. **Validate assumptions before querying**: are won/open pools wanted together
-   or separately? Which era (`quote_date` ranges)? Re-quotes inflate counts —
-   `to_quote is null` isolates originals.
-3. **Query incrementally** — `LIMIT` while exploring; run independent
-   aggregations in one batch; handle nulls explicitly (`customer_name`,
-   `material`, `won_date` are legitimately null).
-4. **Sanity-check**: negative prices, qty=0 placeholder rows
-   (`is_placeholder`), pre-2000 vs 2020s price eras — flag anomalies rather than
-   averaging them away.
-5. **Persist results**: save query outputs to CSV under `out/` (gitignored)
-   before charting.
-
-## Useful patterns (Polygres SQL)
+For example, this query describes the *posted-history label share*, **not a win rate**:
 
 ```sql
--- win rate by customer (real denominators: won is all we can measure)
-select c.customer_name, count(*) quotes,
-       count(*) filter (where q.status='won') won,
-       round(100.0*count(*) filter (where q.status='won')/count(*),1) pct
-from quotes q join customers c using (customer_id)
-group by 1 order by quotes desc;
-
--- unit-price trend for a part (log-log friendly)
-select q.quote_date, b.quantity, b.unit_price
-from quote_qty_breaks b join quotes q using (quote_no)
-join parts p on p.part_id = q.part_id
-where p.part_no = '101104' and not b.is_placeholder
-order by q.quote_date, b.quantity;
-
--- re-quote chains (graph)
-select * from graph.cypher(
-  'MATCH (q:quotes)-[:REQUOTE_OF]->(p:quotes) RETURN p.quote_no, q.quote_no LIMIT 50',
-  null, false);
-
--- semantic analog: nearest part descriptions
-select p.part_no, p.description, s.score
-from pgcontext.search('parts_desc','desc_emb', $1::pgcontext.vector, 20) s
-join parts p on p.id = s.source_key;   -- score = cosine distance, 0 = identical
+select q.customer_id, count(*) as part_quotes,
+       count(*) filter (where q.status = 'won') as posted_history_labels,
+       round(100.0 * count(*) filter (where q.status = 'won') / nullif(count(*), 0), 1)
+         as posted_history_label_pct
+from quotes q
+group by q.customer_id
+order by part_quotes desc;
 ```
 
-## Charts
+For a nominal legacy unit-price trend, join `quote_qty_breaks b` to `quotes q` on `quote_no`, filter `not b.is_placeholder` and a specified part/revision/quantity scope, and label the chart **internal calculations**. Never join `estimates`/`estimate_lines` as though they were source history. See [pricing evals and orders](../../../docs/pricing-evals-and-orders.md) when interpreting estimator accuracy; an eval's priced-only error, all-case coverage, and workflow completeness answer different questions.
 
-- seaborn/matplotlib; colorblind-friendly palette; labeled axes with units;
-  titles state the finding, not the metric name.
-- Price-over-time: scatter of `unit_price` vs `quote_date` colored by qty band;
-  note in the caption that prices are as-quoted nominal dollars (no inflation
-  index) — 1990s analogs read low.
-
-## Communication
-
-- Answer in 1–3 sentences with the chart/table attached; include the SQL used.
-- Flag data issues proactively (empty result → check join keys, grain,
-  placeholders).
-- If a finding is reusable (schema gotcha, useful query), update the
-  `keller-quote-register` or `polygres` skill — don't open a PR for one-off
-  results.
+Use Python's `csv.DictReader` with `newline=''` for local CSV analysis; quoted comments can contain commas and embedded newlines, so line-oriented `awk`/`grep` is unsafe. State both numerator and denominator, attach SQL or reproducible code, identify whether figures are historical calculations or verified customer quotations, and make no customer-facing price recommendation from a population statistic alone.

@@ -70,7 +70,7 @@ const main = () => {
     catch (error) {
       throw new Error(`${error.message}; install Python and dependencies with python -m pip install -r requirements-db.txt`);
     }
-    run('python', ['-m', 'unittest', 'discover', '-s', 'tests', '-v'], repo, 'database tests');
+    run('python', ['-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_db*.py', '-v'], repo, 'database tests');
     return;
   }
 
@@ -83,9 +83,14 @@ const main = () => {
   const estimatorTests = readdirSync(join(estimator, 'test'))
     .filter((name) => name.endsWith('.test.ts')).sort().map((name) => join(estimator, 'test', name));
   if (!estimatorTests.length) throw new Error('no estimator/test/*.test.ts files found');
-  run(process.execPath, [vitest, 'run', ...estimatorTests], estimator, 'estimator tests');
+  run(process.execPath, [vitest, 'run', '--maxWorkers=2', ...estimatorTests], estimator, 'estimator tests');
   run(process.execPath, [tsc], estimator, 'TypeScript build');
   run(process.execPath, [tsc, '--project', join(repo, 'evals/tsconfig.json')], repo, 'evaluation typecheck');
+  run('python', ['-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_pdf_transcription.py', '-v'], repo, 'PDF transcription tests');
+  run('python', ['-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_document_register.py', '-v'], repo, 'document register tests');
+  run('python', ['-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_arsumbris*.py', '-v'], repo, 'Ars Umbris workspace and tool tests');
+  run('python', ['-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_blinded*.py', '-v'], repo, 'blinded MCP workflow grader tests');
+  run('python', ['-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_mcp_trajectory.py', '-v'], repo, 'sealed MCP trajectory tests');
   required(cli, 'compiled estimator CLI missing after build; check the TypeScript build output');
   const output = run(process.execPath, [cli, fixture, '--offline', '--register', join(repo, 'quotes.csv')],
     estimator, 'compiled CLI offline smoke', 'pipe');

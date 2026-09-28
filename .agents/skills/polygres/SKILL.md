@@ -1,127 +1,52 @@
 ---
 name: polygres
-description: Connect to and query the Keller quote register's Polygres database (Postgres + pgContext vectors + graph + full-text). Use when working with the quoting dataset in Polygres — schema, embeddings, graph traversal, or connecting a new agent/tool.
+description: Query Keller's Polygres legacy mirror and explicitly selected, additive customer-PDF evidence corpus; use for safe connections, read-only retrieval, schema, and capacity limits.
 ---
 
-# Polygres — Keller quote register
+# Polygres: two independent Keller price bases
 
-The FabriTRAK quote register (source: `quotes.csv`) also lives in a Polygres
-Postgres database with three retrieval layers on top: pgContext embedding
-collections, the `graph` extension, and Postgres FTS/trigram.
+The normalized legacy `customers`, `parts`, `quotes`, `quote_qty_breaks`, `quote_letters` and `quote_letter_lines` mirror the frozen internal-calculation register. `estimates`/`estimate_lines` are generated drafts, not historical source rows. `quotes.status='won'` is merely an unverified posted-history label; `open` is not a verified loss. The additive document corpus stores verified **issued customer quotation** prices with outcome `unknown`. Never silently join the two bases into a price curve or use text search as numeric authority. See [the register guide](../keller-quote-register/SKILL.md).
 
-## Connection
+## Safe read access
 
-Secrets live in Devin org secrets — never print, log, or commit them:
+Keller Workflow uses the CC stdio transport without launching Claude. External agents can invoke its graph, evidence and quote tools using their own model connection; the host's native Codex CLI login is not required.
 
-| Env var | Endpoint | Use for |
-|---|---|---|
-| `POLYGRES_DATABASE_URL` | pooled (`shared-lower-012.pool.db.polygres.com`, pgbouncer) | app queries, reads |
-| `POLYGRES_DIRECT_URL` | direct (`shared-lower-012.direct.db.polygres.com`) | DDL, migrations, COPY, bulk writes |
-| `POLYGRES_PROJECT_ID` | `peb68ccd10bc4e4ea3b43852` | CLI / MCP wiring |
-| `POLYGRES_DB_PASSWORD` | native role password | only when a tool needs it separately |
+If Keller MCP discovery fails before a tool response, compare --runtime-root exactly with the operator's pinned launch command before retrying. Do not repeat an unverified path unchanged or infer that model login is required.
 
-- Database `app_peb68ccd10bc4e4ea3b43852`, role
-  `project_owner_peb68ccd10bc4e4ea3b43852`, port 5432, TLS `verify-full` supported.
-- Python: `psycopg.connect(os.environ["POLYGRES_DIRECT_URL"])` (psycopg 3).
-- psql: `psql "$POLYGRES_DIRECT_URL"`.
-- The `polygres` CLI (pip, `~/.pyenv/shims/polygres`) exists but control-plane
-  commands return `AUTH_REQUIRED` until `polygres login` (browser OAuth) — do
-  database-level work over SQL instead. `polygres --project $POLYGRES_PROJECT_ID
-  env` prints passwordless connection metadata once logged in.
-- MCP wiring for a future agent:
-  `https://mcp.polygres.com/mcp?project_id=peb68ccd10bc4e4ea3b43852&features=database,graph,context`
-  (features ∈ projects, database, imports, sync, context, graph, debugging, docs).
+Use the explicitly selected `Keller Workflow` profile for an external MCP-capable agent, or `Keller Codex` for the optional native host session. Both expose the same scoped evidence and draft tools; the transport does not choose the evaluating model. The [workspace guide](../../../docs/arsumbris-workspace.md) documents discovery and private per-call audit traces.
 
-## Schema (migrations in `db/migrations/`, applied in order)
+Check whether the existing configured `POLYGRES_DIRECT_URL`, `POLYGRES_DATABASE_URL`, and expected database name are available in the current runtime before requesting access. Do not print a DSN/password or put one in a report. The direct URL is for psycopg and `scripts/document-evidence-db.py`; the pooled URL may include `pgbouncer=true`, which libpq does not accept. For remote evidence CLI access, the **effective direct URL must contain** `sslmode=verify-full` and `sslrootcert=/etc/ssl/certs/ca-certificates.crt`; the CLI enforces this plus `--expected-database`. Use an approved connection string assembled without displaying its value. In standalone SQL, use read-only transactions, parameterized values and a confirmed database identity. No control-plane/MCP registration, plan change, reimport, or credentials refresh is needed to read the existing corpus.
 
-| Table | Grain | Notes |
-|---|---|---|
-| `customers` | one per `customer_id` | `customer_name` only for ids that reached a quote letter; `quote_count`, `first_quote`, `last_quote` |
-| `parts` | deduped `(part_no, drawing_no, description)` | `part_id` pk; `id` = stored generated text alias (pgContext source key); `embedding` pgcontext.vector(512); `fts` generated |
-| `quotes` | one per `quote_no` | `quote_date` (ORG_DATE) vs `date_stamp` (last touch) kept separate; `status` only `'won'`/`'open'` — no lost state (QUOTEHN empty); `to_quote` self-FK re-quote lineage; `comment` verbatim CRLF; `comment_embedding`; `id` source-key alias |
-| `quote_qty_breaks` | one per source CSV row | `is_placeholder` rows preserve the 179,608-row grain for breakless quotes |
-| `quote_letters` + `quote_letter_lines` | QUOTLETT headers + per-quote lines | `material` and per-link `letter_date` live here; apply migration `0005_letter_line_date.sql` before a refresh on an older DB. Letters are NOT graph nodes (Nano unit budget) |
-| `estimates` / `estimate_lines` | estimator output, request-id keyed | generated estimates — never mix with real history |
-
-Row counts after the baseline load: customers 258, parts 38,091, quotes 40,111,
-quote_qty_breaks 179,608 (2,210 placeholders), quote_letters 23,822,
-quote_letter_lines 23,903, requote edges 9,815 (1 dangling target kept null).
-
-## Layer usage
-
-### Embeddings (pgContext)
-
-Collections `parts_desc` (parts.embedding) and `quote_comments`
-(quotes.comment_embedding), both 512-dim cosine, populated by
-`scripts/embed.py` via the Vercel AI Gateway (`openai/text-embedding-3-small`,
-`dimensions=512` — requires `AI_GATEWAY_API_KEY`).
-
-- Source tables MUST have an `id` column — `search` resolves `source_key` to it.
-  That's why `parts.id`/`quotes.id` generated aliases exist.
-- Register rows: `select pgcontext.upsert_points('<collection>', array[<id>...])`.
-  Only upsert rows whose vector column is populated; `backfill_points` registers
-  every row.
-- Query:
-  ```sql
-  select p.part_no, p.description, s.score
-  from pgcontext.search('parts_desc', 'desc_emb', $1::pgcontext.vector, 20) s
-  join parts p on p.id = s.source_key;
-  -- score is cosine DISTANCE: 0.0 = identical, ~1.0 = orthogonal
-  ```
-- Embeddings embed text verbatim — pass the same surface at query time.
-
-### Graph (`graph` extension, Postgres-native Cypher)
-
-Registered nodes: `customers`, `parts`, `quotes`. Edges:
-`quotes.customer_id → customers (QUOTED)`, `quotes.part_id → parts (FOR_PART)`,
-`quotes.to_quote → quotes (REQUOTE_OF)`. Built via `graph.build()`; sync mode
-`trigger` keeps it live on writes.
+Select an actual public `corpus_id` rather than guessing the newest ingestion. A read-only discovery query is:
 
 ```sql
--- re-quote lineage chain
-select * from graph.cypher(
-  'MATCH (q:quotes)-[:REQUOTE_OF]->(p:quotes) RETURN q.quote_no, p.quote_no LIMIT 20',
-  null, false);
--- all quotes for a part
-select * from graph.cypher(
-  'MATCH (q:quotes)-[:FOR_PART]->(p:parts) WHERE p.part_no = ''101104'' RETURN q.quote_no, q.status LIMIT 20',
-  null, false);
+select corpus_id, document_count, page_count, price_count, ingested_at
+from document_corpora order by ingested_at desc;
 ```
 
-- Result rows are capped (~10k) — always `LIMIT` and filter on the label side.
-- Grant note: `graph.build()`/`auto_discover` execute as `graph_sync_owner`;
-  that role holds `GRANT ALL` on the three node tables. New node tables need
-  the same grant before build.
+The timestamp helps identify a snapshot; it is **not** quote chronology or a global latest pointer. Choose the explicit approved corpus from the request and provenance; ask the owner only if that choice is ambiguous, and never infer "latest" from ingestion time. Then use the CLI from repository root with a private, **new** output path (read-only commands; do not use `load --apply`):
 
-### Full-text + fuzzy
+In the Ars Umbris `Keller Codex` profile, prefer `keller_polygres` for bounded read-only `corpora`, `search`, `page`, and `prices` retrieval: pass the explicit corpus for every action except `corpora`; use exact part/quote filters for prices and a cited source path/page number for page text. It does not expose arbitrary SQL or the full CSV export. `keller_quote` performs its own read-only full-register export before an offline internal order draft, while the standalone CLI below remains available to an authorized operator for private analysis/evaluations. Neither path writes Polygres or authorizes release.
 
-- `quotes.fts` (comment+rfq_no+buyer_name) and `parts.fts`
-  (description+part_no+drawing_no) are generated tsvector columns with GIN
-  indexes: `where fts @@ plainto_tsquery('english', $1)`.
-- Trigram indexes for fuzzy match: `parts.part_no`, `parts.drawing_no`,
-  `parts.description`, `customers.customer_name`, `quotes.comment`
-  (`similarity(a,b)`, `a % b`, `ilike`).
+Keller MCP prices/search accepts at most 50 rows per call. When a lookup rejects its pagination arguments, correct them within the documented bounds before concluding that eligible evidence is unavailable or out of scope.
 
-## Budgets (Nano tier)
+```sh
+python scripts/document-evidence-db.py search 'synthetic bracket' \
+  --expected-database "$DB_NAME" --corpus "$CORPUS_ID" --kind quote --limit 20
+python scripts/document-evidence-db.py prices --part 'SYNTHETIC-PART' \
+  --expected-database "$DB_NAME" --corpus "$CORPUS_ID"
+python scripts/document-evidence-db.py export \
+  --expected-database "$DB_NAME" --corpus "$CORPUS_ID" --out "$NEW_PRIVATE_CSV"
+```
 
-- Storage cap 500 MiB — check `select pg_size_pretty(pg_database_size(current_database()))`.
-- 100k embedding points: `select count(*) from pgcontext._collection_points`.
-- 100k graph units (node=1, 10 edges=1): current ≈ 87.5k — letters deliberately
-  excluded; adding them (+23.8k nodes) would overflow.
-- `pgcontext.collection_limits('<name>')` shows per-collection caps (all unset).
+`search` first uses document-grain GIN candidates, then filters at **individual page** FTS, so terms spread over separate pages do not falsely match. Results cite page/PDF hashes for review, not verified prices. `prices` validates original CSV fields and their consistency with recorded source-document metadata; it does **not** reopen private PDFs to rehash them. `export` validates the **complete** reconstructed CSV and its original digest, including multiline records. Export before estimator/eval runs and pass that path as `--register`. Do not assemble an incomplete CSV by querying only typed SQL columns: `verified_document_prices` stores typed prices, original `raw_csv`, and document joins, **not** `original_row` JSONB. See [document evidence operations](../../../docs/polygres-document-evidence.md).
 
-## Verification checklist
+## Schema and historical retrieval
 
-1. `select count(*) from quotes` → 40,111; `quote_qty_breaks` → 179,608.
-2. `select * from graph.cypher('MATCH (q:quotes)-[:REQUOTE_OF]->(p:quotes) RETURN count(*) LIMIT 1', null, false)` → 9,815.
-3. `pgcontext.search('parts_desc','desc_emb',<vec>,5)` returns rows after embed.
-4. `select count(*) from quotes where fts @@ plainto_tsquery('english','anodize')` > 0.
+The additive physical tables are `document_corpora` (immutable public `corpus_id`, internal numeric `corpus_key`), `evidence_documents` (PDF, independent Poppler and original AnyDoc status/hash), `evidence_page_sets` (document-grain hash-checked JSONB page arrays), and `verified_document_prices` (typed values plus raw CSV). `evidence_pages` is a read-only ordinal view, **not** a fifth physical table. All document SQL must constrain `corpus_key` through the **explicit** selected `corpus_id`. A verified price is traceable to its joined source document; never infer one from invoice/PO text.
 
-## Anti-patterns
+Legacy retrieval remains available separately: `parts.fts` and `quotes.fts` have GIN indexes; trigram supports fuzzy part/drawing/customer lookup. pgContext collections `parts_desc` and `quote_comments` use 512-dimension cosine **distance** (smaller is closer); `graph` links quotes to customers, parts, and re-quote predecessors. These layers were built for legacy rows, **not** document pages or verified prices. Query them with limits and source/cutoff checks, never claim semantic resemblance proves revision, process, material, or UOM equivalence. [Data analysis](../keller-data-analysis/SKILL.md) covers grain and outcome-safe aggregation.
 
-- Don't `create extension vector` — superuser-gated; use `pgcontext.vector`.
-- Don't upsert collection points for rows with null vectors.
-- Don't add `quote_letters` as graph nodes — Nano unit cap.
-- Don't write to `estimates`/`estimate_lines` from data repair — they're for
-  generated estimator output only.
-- Don't print secret values; use the env vars.
+## Capacity and change boundary
+
+As verified 2026-09-28, the additive import covered 39,975 PDF records and 75,096 pages across the whole corpus. Separately, 42,873 verified customer-quote quantity breaks came from **7,845 price-source PDFs**; 7,845 is not the whole-corpus PDF denominator. Poppler produced text for 39,960 records, 14 were blank, and one zero-byte PDF failed. It independently recovered searchable text for 164 original AnyDoc failures while preserving their original status and hashes. All eight original core tables remained full-row-hash identical and both vector collection counts were unchanged. The database occupied 500,291,251 bytes (~477.1 MiB), leaving only ~22.9 MiB nominal room below the documented 500 MiB limit. These are dated observations, not guaranteed present-day capacity. Recheck actual database size/allocation, physical relation/index growth, and the capacity policy before **any** future write; a second full corpus does not fit without an explicit capacity decision. Document evidence was not registered in graph or pgContext. Read/query permission is never permission to import. Any approved import uses `scripts/document-evidence-db.py` with measured growth, database guard, TLS and post-write row/hash proofs, not legacy `scripts/load.py`; never modify the frozen register to make room.

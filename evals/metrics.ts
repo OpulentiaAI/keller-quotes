@@ -2,8 +2,19 @@ import { createHash } from "node:crypto";
 import { lstatSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { normalizePartNo } from "../estimator/src/register.js";
+import type { PriceEvidence } from "../estimator/src/types.js";
 
 export const CRITERIA = ["priced_finite", "source_excluded", "cutoff_evidence", "unit_within_20pct", "extension_reconciles"] as const;
+
+export function printedTargetReconciles(unit: string, quantity: number, extension: string): boolean {
+  if (!/^\d+(?:\.\d{1,5})?$/.test(unit) || !Number.isFinite(Number(unit)) || Number(unit) <= 0 ||
+    !/^\d+\.\d{2}$/.test(extension) || !Number.isFinite(Number(extension)) || Number(extension) <= 0 ||
+    !Number.isSafeInteger(quantity) || quantity <= 0) return false;
+  const [whole, fraction = ""] = unit.split(".");
+  const scale = 10n ** BigInt(fraction.length);
+  const cents = (BigInt(whole! + fraction) * BigInt(quantity) * 100n + scale / 2n) / scale;
+  return cents === BigInt(extension.replace(".", ""));
+}
 
 export function assertSafeOutputs(inputs: string[], outputs: string[]): void {
   const paths = [...inputs, ...outputs];
@@ -34,6 +45,9 @@ export interface EvalResult {
   id: string;
   source_quote_no: string;
   quote_date: string;
+  target?: { price_basis: "customer_quote_pdf"; quote_letter: string; source_document: string;
+    source_document_sha256: string; source_transcript_sha256: string; source_price_field: "PRICE" | "QUOTEPRICE";
+    printed_extension: string; unit_price: string };
   quantity: number;
   actual: number | null;
   predicted: number | null;
@@ -43,7 +57,8 @@ export interface EvalResult {
   basis: string;
   analogs: number;
   status: "priced" | "no_analog" | "unreplayable";
-  analog_refs: { quote_no: string; quote_date: string }[];
+  analog_refs: { quote_no: string; quote_date: string; letter_date?: string; date_stamp?: string;
+    rev?: string; quote_letter?: string; price_evidence?: PriceEvidence }[];
   actual_extended: number | null;
   predicted_extended: number | null;
   signed_unit_error: number | null;
@@ -74,22 +89,27 @@ export function classifySlices(input: {
     part && input.analog_part_nos.some((p) => normalizePartNo(p) === part) ? "exact part" : "other analog";
   const confidence_band = !Number.isFinite(input.confidence) ? "invalid" :
     input.confidence < 0.4 ? "low (<0.4)" : input.confidence < 0.7 ? "medium (0.4-0.69)" : "high (>=0.7)";
-  return { quote_era, quantity_band, source_status: input.source_status === "won" ? "won" : "open",
+  return { quote_era, quantity_band, source_status: ["won", "open"].includes(input.source_status) ? input.source_status : "unknown",
     analog_match, confidence_band, split: diagnosticSplit(input.part_no, input.source_quote_no) };
 }
 
 export function grade(input: {
   actual: number; predicted: number | null; quantity: number; predicted_extended: number | null;
   source_quote_no: string; quote_date: string; retrospective: boolean;
-  analog_refs: { quote_no: string; quote_date: string }[];
+  analog_refs: EvalResult["analog_refs"];
 }): Record<Criterion, Verdict> {
   const priced = input.predicted !== null && Number.isFinite(input.predicted) && input.predicted > 0;
   const validActual = Number.isFinite(input.actual) && input.actual > 0;
   const validQuantity = Number.isFinite(input.quantity) && input.quantity > 0;
+  const sourceKnown = Boolean(input.source_quote_no.trim());
   const sourceLeak = input.analog_refs.find((r) => r.quote_no === input.source_quote_no);
   const validDate = (date: string) => /^\d{4}-\d{2}-\d{2}$/.test(date) &&
     !Number.isNaN(Date.parse(`${date}T00:00:00Z`)) && new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) === date;
-  const invalidDate = input.analog_refs.find((r) => !validDate(r.quote_date) || r.quote_date >= input.quote_date);
+  const invalidDate = input.analog_refs.flatMap((r) => [
+    { quote_no: r.quote_no, field: "quote date", date: r.quote_date },
+    ...(r.letter_date ? [{ quote_no: r.quote_no, field: "letter date", date: r.letter_date }] : []),
+    ...(r.date_stamp ? [{ quote_no: r.quote_no, field: "last-touch date", date: r.date_stamp }] : []),
+  ]).find((r) => !validDate(r.date) || r.date >= input.quote_date);
   const cutoffValid = validDate(input.quote_date);
   const expected = priced && validQuantity ? Math.round(input.predicted! * input.quantity * 100) / 100 : null;
   const extensionPass = expected !== null && input.predicted_extended !== null &&
@@ -97,11 +117,13 @@ export function grade(input: {
     Math.abs(input.predicted_extended - expected) <= 0.01 + input.quantity * 0.00005 + 1e-8;
   return {
     priced_finite: { pass: priced, reason: priced ? "finite positive unit price" : "missing or nonfinite/nonpositive unit price" },
-    source_excluded: { pass: !sourceLeak, reason: sourceLeak ? `source quote ${sourceLeak.quote_no} appears in exposed analogs` : "source absent from exposed analogs; estimator exclusion requested" },
+    source_excluded: { pass: sourceKnown && !sourceLeak,
+      reason: !sourceKnown ? "missing source quote identity; exclusion unverifiable" : sourceLeak ?
+        `source quote ${sourceLeak.quote_no} appears in exposed analogs` : "source absent from exposed analogs; estimator exclusion requested" },
     cutoff_evidence: { pass: !input.retrospective && cutoffValid && !invalidDate,
       reason: input.retrospective ? "retrospective mode does not enforce quote-date cutoff" : !cutoffValid ? "invalid case cutoff date" :
-        invalidDate ? `exposed analog ${invalidDate.quote_no} dated ${invalidDate.quote_date} is not before cutoff` :
-          "exposed analog quote dates precede cutoff; revision/letter dates are not exposed (estimator enforces those filters)" },
+        invalidDate ? `exposed analog ${invalidDate.quote_no} ${invalidDate.field} ${invalidDate.date} is invalid or not before cutoff` :
+          "exposed analog quote dates and any provided letter/last-touch dates precede cutoff; missing metadata is not verified" },
     unit_within_20pct: { pass: priced && validActual && Math.abs(input.predicted! - input.actual) / input.actual <= 0.2,
       reason: !priced || !validActual ? "unit price or actual unavailable/invalid" :
         `absolute unit error ${(100 * Math.abs(input.predicted! - input.actual) / input.actual).toFixed(2)}%` },

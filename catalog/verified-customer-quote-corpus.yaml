@@ -1,0 +1,5 @@
+type: keller.source
+role: reconciled issued customer-quote price evidence
+locator: POLYGRES_DIRECT_URL, explicit corpus_id 5089cd30b1b51f3903c6f16459dcf883a36137156086fc105220f594faf64a90, expected database app_peb68ccd10bc4e4ea3b43852
+provenance: Additive document_corpora/evidence_documents/evidence_page_sets/verified_document_prices import, independently reconciled to source PDF line prices; see docs/polygres-document-evidence.md.
+limitations: Historical printed prices with unknown outcomes, not current cost or automatic approval. Explicit corpus selection, database identity, TLS, and read-only transaction required; never infer current state from dated import counts.

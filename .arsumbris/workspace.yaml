@@ -1,0 +1,6 @@
+type: au.engine.workspace::au-engine
+edit:
+  - keller-quotes
+discover:
+  - mcp-bundle
+  - host-bundle

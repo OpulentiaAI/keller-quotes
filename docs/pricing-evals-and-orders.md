@@ -1,104 +1,67 @@
-# Pricing evaluations and complete order proposals
+# Historical pricing evidence, evaluations, and internal order proposals
 
-Two different questions need different evaluations: **is the historical price accurate?** and **did the system produce a complete, internally consistent order proposal?** A perfectly formatted order can still contain a bad estimate. Do not combine those scores or call a synthetic workflow pass proof of market-price accuracy.
+The workflow has three distinct results: a source-verified issued customer price, an estimator prediction against historical targets, and a complete **internal** order proposal. None verifies current manufacturing cost or customer acceptance. For operational intake and the human review gate, use the [quote-estimator skill](../.agents/skills/keller-quote-estimator/SKILL.md); for register provenance use the [register skill](../.agents/skills/keller-quote-register/SKILL.md). Keep real customer PDFs/transcripts, registers, requests, and reports in approved private storage outside the checkout. The example under `estimator/examples/` is synthetic.
 
-This design adapts Harvey Labs' [task-local rubrics and deliverable-aware all-pass grading](https://github.com/OpulentiaAI/harvey-labs/blob/845a08840869b21a5c11958aae58bf5f00a7b775/docs/eval-strategies.md). Harvey uses an LLM judge for legal work; Keller uses deterministic checks for prices, arithmetic, completeness, source evidence, and readiness. No legal task data or model-judge dependency is imported. Keller's grouped diagnostic split and paired baseline comparison are additions, not features copied from Harvey.
+## Source choice and read-only evidence
 
-## Request → priced order
+`quotes.csv` is a frozen 179,608-break/40,111-part-quote register of **internal calculations** with 2,210 placeholders, not issued customer prices. Its posted-history `won`/`open` labels do not establish wins, losses, payment or revenue. The separately validated document register contains `customer_quote_pdf` prices with **unknown** outcome. Select an immutable Polygres corpus ID explicitly, then export its complete CSV using the read-only `scripts/document-evidence-db.py export --expected-database "$DB_NAME" --corpus "$CORPUS_ID" --out "$NEW_PRIVATE_CSV"` command, following [the connection/TLS and corpus guide](../.agents/skills/polygres/SKILL.md). No global latest pointer exists. Ingestion time is not quote time. The command validates complete original CSV fields and digest; raw CSV and typed price columns, not an `original_row` JSONB, hold the source rows. Passing `--register` is mandatory in the procedures below; CLI defaults otherwise select internal calculations. Retrieval and exports are read-only, not approval to import another corpus.
 
-Install with `cd estimator && npm ci && cd ..`, then run from the repository root:
+Customer-PDF text search locates source pages but is not a price oracle. Only reconciled verified quote-letter rows supply issued customer-price evidence: verify quantity, full source unit price (up to five decimals), printed extension, letter/date, source field, PDF and AnyDoc transcript hashes. Printed two-decimal unit text can truncate the unrounded price. Keep an entire quantity curve on one compatible provenanced source. A supplier PO, invoice or packing slip is not a customer-price break; an invoice does not prove payment and a packing slip does not prove invoicing. The PDF-derived `quote_date` equals the **verified letter date**, not the original `QUOTEN` date; `date_stamp` includes the latest known revision/letter. These source semantics determine every cutoff and citation.
 
-```sh
-node -e "require('node:fs').mkdirSync('out', {recursive: true})"
-node estimator/node_modules/tsx/dist/cli.mjs estimator/src/order-cli.ts \
-  estimator/examples/order-request.json --register quotes.csv --out out/demo-order
-```
+As of the independently verified 2026-09-28 import, the **whole corpus** covered 39,975 PDF records/75,096 pages; 42,873 verified customer-quote breaks came from a **subset of 7,845 price-source PDFs**. Poppler independently restored searchable text for 164 original AnyDoc failures, while original status and hashes remained intact. The eight original core tables were full-row-hash identical and vector counts unchanged. Database size was 500,291,251 bytes (~477.1 MiB), leaving ~22.9 MiB nominal under the documented 500 MiB cap. These are dated observations: actual size/allocation must be measured before any write, and a repeated full corpus needs a separate capacity decision. No document graph or embedding registration occurred. See [additive evidence design and import guards](polygres-document-evidence.md); `scripts/load.py` is **not** the document importer.
 
-The CLI writes **`order.json` and `order.md`** into a new directory. The JSON is the machine-readable internal artifact; the Markdown shows every line, price source, totals, blockers, warnings, and provenance for review. Existing output directories are refused, even for a previous failed or blocked run. Choose a new directory for a revised request. The example uses explicitly synthetic operator prices and costs, not a customer price recommendation.
+## Matched historical replay
 
-After `cd estimator && npm run build`, the compiled entry point is `estimator/dist/src/order-cli.js` from the repository root. `npm run order -- <request> --register <CSV> --out <NEW_DIRECTORY>` also works from `estimator/` with paths relative to that directory.
-
-### Input contract
-
-```json
-{
-  "order_id": "EXAMPLE-001",
-  "quote_date": "2026-09-26",
-  "customer": "EXAMPLE CUSTOMER (SYNTHETIC)",
-  "parts": [
-    {
-      "line_id": "L1",
-      "part_no": "DEMO-BRACKET",
-      "quantity": 10,
-      "pricing": {
-        "method": "unit_price",
-        "unit_price": 12.3456,
-        "reason": "Synthetic operator proposal, not an approved customer quote"
-      }
-    }
-  ],
-  "charges": { "shipping": 0, "tax": 0 }
-}
-```
-
-Order/date/customer and unique, stable `line_id` values are required. Each part needs a part number or description and a positive integer piece quantity. The remaining part fields match the estimator request (`material`, `finish`, `drawing_ref`, `notes`). Repeated part numbers with different line IDs remain separate order lines.
-
-Every line follows exactly one pricing path:
-
-| Input | Price source | What the operator must supply |
-|---|---|---|
-| No `pricing` field | Offline historical analog | Part attributes. Retrieval excludes quotes/revisions/letters on or after `quote_date`; no usable price leaves the line unresolved. Historical dollars are not current-cost verification. |
-| `pricing.method: "unit_price"` | Explicit sell-price proposal | Positive `unit_price` with up to four decimal places, and a nonblank `reason`. Supplying it is not approval. |
-| `pricing.method: "cost_plus"` | Cost build-up | `material_per_unit`, `labor_per_unit`, `outside_per_unit`, `setup_total`, `margin_pct`, and a nonblank `reason`. These are operator-supplied costs, not values invented from an old quote. |
-
-Cost build-up uses `(material + labor + outside + setup / quantity) / (1 - margin_pct / 100)`. `margin_pct` is **gross margin**, not markup, and must be at least zero and below 100. Costs cannot be negative; a zero resulting sell price is invalid. The sell price is rounded half-up to four decimals and the displayed sell price × quantity is rounded half-up to cents. Totals sum those cent-rounded lines and explicit charges; arithmetic that cannot be represented safely is rejected.
-
-Shipping and tax are **amounts**, not inferred rates. An explicit `0` means the operator proposes no charge; missing or `null` means unknown and blocks completion. Optional `additional_charges` is an array of `{ "label": "Tooling", "amount": 25 }`; all charge amounts are nonnegative dollars with at most two decimals. There is no tax engine, shipping-rate lookup, discount policy, or current material/labor feed.
-
-### Output and exit status
-
-| Exit | State | Meaning |
-|---|---|---|
-| `0` | `PRICED_REQUIRES_REVIEW` | Every requested line, shipping, and tax has an explicit amount and the total reconciles. This is a complete internal proposal, not an accepted or released order. |
-| `3` | `BLOCKED` | Artifacts exist, with actionable blockers and `total: null`. Missing prices never become zero to manufacture completeness. |
-| `2` | Validation/runtime error | The command could not produce the order; read stderr and correct the input or environment. |
-
-`priced_subtotal` is explicitly a diagnostic sum of priced lines; it is not an order total. `subtotal` is null if any line is unpriced. `requires_human_review` is always true. The internal artifact preserves operator cost inputs, reasons, historical analogs, and request data, so **do not forward it directly to a customer**. Request provenance is SHA-256 of `JSON.stringify(request)`, not the original file's whitespace; the CLI hashes the actual register bytes. The quote date and offline mode are pinned alongside those digests.
-
-This CLI is separate from the older inbox worker, which still emits `QuoteEstimate` drafts and `DRAFT_REQUIRES_MANUAL_REVIEW` receipts. Do not feed the new order schema into that worker and assume it enforces these completeness rules. The new CLI does not install a producer/scheduler, approve prices, book an order into FabriTRAK, send email, collect payment, or trigger fulfillment.
-
-## Historical price accuracy
+The fixed 250-case `evals/evalset.jsonl` targets internal `QUOTQTYS` prices. Do not regenerate or overwrite it to make a score better. To measure against issued customer prices, create a separate private v2 target file from the validated document CSV; the generator selects one break per part family using deterministic salted SHA ranks independent of register row order, and writes a manifest with CSV/selection digests. It validates provenance field format and price arithmetic, but **does not reopen PDF/transcript files or independently recompute their hashes**; upstream verification and private source review remain necessary. The evaluation itself can SHA-sample the same case IDs independent of JSONL order. From repository root after `(cd estimator && npm ci)`:
 
 ```sh
+python scripts/generate-document-eval.py "$VERIFIED_CSV" \
+  "$NEW_PRIVATE_CASES.jsonl" --count 250
 node estimator/node_modules/tsx/dist/cli.mjs evals/run-eval.ts \
-  --register quotes.csv --report out/pricing-baseline.md
+  "$NEW_PRIVATE_CASES.jsonl" --register "$VERIFIED_CSV" \
+  --sample 50 --seed keller-eval-50-v1 --report "$NEW_PRIVATE_VERIFIED_REPORT.md"
+node estimator/node_modules/tsx/dist/cli.mjs evals/run-eval.ts \
+  "$NEW_PRIVATE_CASES.jsonl" --register quotes.csv \
+  --sample 50 --seed keller-eval-50-v1 --report "$NEW_PRIVATE_INTERNAL_REPORT.md"
 ```
 
-The fixed 250-case set stays unchanged. A schema-version-2 report contains source-register and evalset digests, relevant estimator/evaluator source and lockfile digest, effective configuration, per-case evidence and criteria, aggregate metrics, and slices. The source quote is excluded; default replay applies the quote-date cutoff and hides outcomes unavailable then. `--retrospective` is explicitly future-visible and is not comparable to the default. `--jev` requires credentials and is a separately authorized provider-backed experiment; all commands in this guide are offline.
+Both runs use **the same document targets**, but different registers, so the delta is a **data-source** comparison, not proof of a code gain. `--limit 50` is a prefix, not the SHA sample, and cannot be combined with `--sample`; pin case IDs, source register/evalset/source+lock digests, seed and mode. The harness excludes the source `quote_no` across all its breaks. For each case, it restricts other quote/letter/revision events and visible outcomes to before the target's verified letter date. A missing identity/date makes a case unreplayable. The snapshot cannot rule out later unversioned edits in older rows, so quote-time replay is not a true historical backtest. The fixed legacy set is won/recent-biased; the document sample is deterministic, not a representative prospective holdout. `--retrospective` admits future information; `--jev` requires a gateway key and may fall back even when configured. Neither is the default offline experiment.
 
-Each historical case has required checks for a finite positive price, source exclusion in exposed analogs, cutoff evidence, error within ±20%, and a reconcilable extension. **All-pass is measured over all cases**, including unpriced failures. Accuracy statistics also report the priced-only denominator so coverage cannot disappear from the result. Exposed analogs do not carry full revision history: the grader describes that limitation rather than claiming an independent true-backtest proof.
+The v2 private JSON report contains per-case target PDF/transcript hashes, source field/full price/extension, analog basis and available quote/letter/last-touch dates and revisions, selection/configuration hashes, cutoff/exclusion criteria and slices. Audit those before reading aggregate prices. Missing source metadata cannot be verified by the grader. Report `cases`, `priced`, `no_analog`, `unreplayable`, and coverage as priced / all. Median APE and within-±20% are **priced-only**; all-pass is **all cases**, so holding a line cannot inflate readiness. Show failed cases and signed extended-dollar error on priced pairs; this is not order-level success. Confidence and price bands are diagnostics, not calibrated customer release thresholds. No independent proof says Jev, a recency multiplier, or an exact-part heuristic helps; run a matched comparison rather than assuming it.
 
-Reports break results down by quote era, quantity band, won/open outcome cohort, exact-part evidence, confidence band, and a reproducible development/holdout partition grouped by normalized part number. That split is diagnostic, **not a blind untouched holdout**: this fixed set has already been inspected. Small slices and the won/recent-biased sample cannot establish natural production prevalence. The set also lacks description-only and material-bearing requests; synthetic workflow tasks cover those contracts, not their real-world accuracy.
+The estimator screens at most the top `min(screenTopN, rankLimit)` ranked analogs per line (defaults: 3 and 8). Only explicit `admit` verdicts can reach strategy selection or pricing; rejected, quarantined, and unscreened tail candidates cannot. `screenTopN: 0` holds pricing, and the returned analogs include every admitted candidate passed to pricing, without a five-reference display cap. Each reference also carries source quote date, letter date, revision, last-touch date and price evidence for review. The screening limit is a resource budget, not permission to trust an unscreened fallback. Historical `median_won` is a strategy name, not proof of a confirmed sale: customer-PDF price rows have unknown outcomes, while legacy posted-history labels are unverified.
 
-After a candidate change, run the same command with a new report filename, then compare:
+For a code-only change with **identical register bytes, target file, case selection, actuals and configuration**, run the two reports and compare their JSON sidecars:
 
 ```sh
 node estimator/node_modules/tsx/dist/cli.mjs evals/compare.ts \
-  out/pricing-baseline.json out/pricing-candidate.json \
-  --report out/pricing-comparison.md --fail-on-regression
+  "$BASELINE_JSON" "$CANDIDATE_JSON" \
+  --report "$NEW_PRIVATE_COMPARISON.md" --fail-on-regression
 ```
 
-Comparison requires matching source data, case selection, actual prices/quantities, cutoff mode, and effective configuration. Different source-code digests are expected. It reports coverage/error/all-pass changes and improved/regressed cases and slices. `--fail-on-regression` makes coverage loss, median-error increase, or all-pass loss fail the command; it is an engineering regression gate, not a calibrated business acceptance threshold. Do not repeatedly tune against the diagnostic holdout and then advertise it as independent validation.
+`compare.ts` rejects differing register/target/selection/configuration; source-code digests may differ. Its regression flag catches lower coverage, higher median APE or lower all-pass, but is an engineering diagnostic, not a statistically validated business approval threshold. For the two-register document experiment, compare the matched reports and exposed basis counts manually; do not bypass the incompatibility check. Never compare the original 250 internal targets to the new document targets as though accuracy improved.
 
-## End-to-end artifact benchmark
+The final matched 50-case document-price experiment (2026-09-28) priced 48/50 in both register conditions. Against the **same PDF targets**, the internal register had median APE 75.5361%, within ±20% on 18.75% of priced cases, all-pass 9/50; the verified register had median APE 63.3716%, within ±20% on 16.6667% of priced cases, all-pass 8/50. The verified run exposed 234/234 analog refs with verified basis and held two no-analog lines; neither run exposed source/cutoff leaks. The lower median came with **worse** within-20 and all-pass, so it is not a blanket accuracy gain or an autonomous pricing release. The source+lock SHA-256 was `e52bfce6b646af8ac0066a8d1552fb71a27e44eb717b186ac59cb710638c92e4` and the selected document case IDs SHA-256 was `bd1b94393891fca2328e80aaaeb1f325381231c99f3c0c2ff006203027e2c4d2`. This was an offline harness run directed by Codex GPT-6 Sol (medium), **not** model-generated pricing. A retrospective future-visible score would answer a different question. The separate fixed legacy 250-case eval has internal targets and cannot be numerically compared with this PDF-target experiment.
+
+## Complete internal order, not customer delivery
+
+The order CLI is offline, pins the chosen register hash, and creates `order.json` plus `order.md` in a **new** directory. Its request needs order ID, date, customer, unique stable `line_id` per part, part number or description, positive integer piece quantity, and explicit shipping and tax **amounts**. Intake must additionally resolve revision, UOM, material/finish, tolerances, delivery, and specification uncertainties before human approval. An omitted `pricing` field invokes historical analog retrieval before `quote_date`; no usable evidence holds the line. An operator `unit_price` is positive, at most four decimals, and needs a reason. `cost_plus` needs operator-supplied nonnegative `material_per_unit`, `labor_per_unit`, `outside_per_unit`, `setup_total`, `margin_pct` and reason; the current costs, UOM/yield/scrap/minimum-lot/routing/lead-time assumptions must be supported externally. No current-cost engine or inflation correction is inferred from historical quotes or 13 active source formulas: missing inputs/independent positive actual operation times block cost guarantees.
+
+Cost-plus sell unit = `(material + labor + outside + setup / quantity) / (1 - margin_pct / 100)`. `margin_pct` is **gross margin**, not markup, and lies from zero inclusive to 100 exclusive. Unit pricing rounds half-up to four decimals; displayed extension rounds half-up to cents. Retain the separate up-to-five-decimal source-PDF evidence rather than overwriting its precision. Shipping and tax are dollar amounts; zero is valid only when explicitly supplied, while absent/null blocks completion. Optional `additional_charges` have a label and nonnegative cent amount. There is no automatic tax/shipping engine.
+
+```sh
+node estimator/node_modules/tsx/dist/cli.mjs estimator/src/order-cli.ts \
+  estimator/examples/order-request.json --register "$VERIFIED_CSV" \
+  --out "$NEW_PRIVATE_ORDER_DIRECTORY"
+```
+
+The example is wholly synthetic; the chosen register is explicit even though both synthetic lines use operator pricing. Exit `0` / `PRICED_REQUIRES_REVIEW` means all lines and charges reconcile as an **internal proposal**, not approval. Exit `3` / `BLOCKED` still writes artifacts with `total: null`; `subtotal` is null if **any line** is missing, but can still show a complete line subtotal when only shipping or tax is missing. `priced_subtotal` is diagnostic only. Exit `2` indicates validation/runtime error. The JSON request hash covers `JSON.stringify(request)`, not file whitespace; artifacts retain register bytes hash, cutoff/offline mode, operator costs, analogs and warnings. **Do not send these internal artifacts or another customer's historical analog/cost details to a customer.** A named human must review the scope, costs, assumptions, quote price and redacted customer-safe output before an existing approved delivery process acts. No automatic booking, email, payment, fulfillment or scheduler enablement follows from the CLI. The older inbox worker emits a different draft schema and does not enforce this order completeness contract.
+
+## Separate workflow benchmark
 
 ```sh
 node estimator/node_modules/tsx/dist/cli.mjs evals/run-orders.ts \
-  --tasks evals/tasks --out out/order-benchmark
+  --tasks evals/tasks --out "$NEW_PRIVATE_BENCHMARK_DIRECTORY"
 ```
 
-Each directory in `evals/tasks/` contains a schema-version-1 synthetic `task.json`, `request.json`, and `register.csv`. The solver receives only the request/register, never the grading expectations. The runner writes artifacts first; a separate grader reloads those artifacts and checks declared criteria. Every required criterion must pass for the task to pass. Missing/corrupt artifacts and invalid rubrics cannot count as passes.
-
-`scores.json` preserves criterion verdicts/reasons, input/output hashes, and an implementation/source/lockfile digest; `report.md` gives the all-pass result and diagnostics. Completely priced orders, correctly blocked requests, and correctly rejected invalid requests are counted separately. A correct refusal is a safety success, **not a completed order**. Negative regression tests alter persisted JSON and Markdown independently to prove that omitted lines, false readiness, wrong displayed prices, and inconsistent totals fail grading.
-
-`node scripts/verify.mjs` includes the order/eval tests, both TypeScript checks, compiled CLI smoke, and the synthetic artifact benchmark. Keep generated real requests, orders, and evaluation outputs under an approved private runtime directory (`out/` is gitignored). Version the small synthetic task inputs and grader changes; do not commit customer artifacts or replace the frozen historical set to improve a score.
+Each synthetic task supplies only its request/register to the solver. A separate grader reloads persisted JSON/Markdown and scores required arithmetic, line completeness, blockers, readiness and provenance criteria; all required criteria must pass. `scores.json` and `report.md` distinguish fully priced, correctly blocked and correctly rejected invalid requests. A correct refusal is a **safety pass**, not a priced order; a formatted order does not prove its historical price is right. `node scripts/verify.mjs` covers test/typecheck/build and synthetic order/eval checks. Keep private real artifacts outside the checkout and avoid committing reports with customer identities. This all-pass pattern borrows task-local deliverable grading from [Harvey Labs](https://github.com/OpulentiaAI/harvey-labs/blob/845a08840869b21a5c11958aae58bf5f00a7b775/docs/eval-strategies.md), without importing its legal-task data or LLM judge.
