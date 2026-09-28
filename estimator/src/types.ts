@@ -1,3 +1,13 @@
+export type PriceEvidence =
+  | { price_basis: "internal_quote_calculation" }
+  | {
+    price_basis: "customer_quote_pdf";
+    source_document: string;
+    source_document_sha256: string;
+    source_transcript_sha256: string;
+    source_price_field: "PRICE" | "QUOTEPRICE";
+  };
+
 export interface QuoteRow {
   quote_no: string;
   item_no: string;
@@ -28,6 +38,7 @@ export interface QuoteRow {
   user_quote: string;
   newsellpri: number | null;
   comment: string;
+  price_evidence?: PriceEvidence;
 }
 
 export interface PartRequest {
@@ -92,6 +103,9 @@ export interface LineEstimate {
     status: string;
     score: number;
     jev_probability?: number;
+    price_evidence: PriceEvidence;
+    quote_letter: string;
+    letter_date: string;
   }[];
   warnings: string[];
 }

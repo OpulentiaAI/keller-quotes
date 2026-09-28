@@ -10,6 +10,7 @@ on:
       - 'tests/**'
       - 'db/**'
       - 'requirements-db.txt'
+      - 'requirements-documents.txt'
       - 'quotes.csv'
       - 'docs/host-automation-prompt.md'
       - '.github/workflows/estimator.yml'
@@ -21,6 +22,7 @@ on:
       - 'tests/**'
       - 'db/**'
       - 'requirements-db.txt'
+      - 'requirements-documents.txt'
       - 'quotes.csv'
       - 'docs/host-automation-prompt.md'
       - '.github/workflows/estimator.yml'
@@ -46,6 +48,11 @@ jobs:
           cache: npm
           cache-dependency-path: estimator/package-lock.json
       - run: npm ci
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-documents.txt
+        working-directory: .
       - run: node scripts/verify.mjs
         working-directory: .
 

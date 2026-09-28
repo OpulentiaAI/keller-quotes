@@ -9,6 +9,8 @@ Estimator pipeline: pricing request → historical analog retrieval → Jev rank
 
 ## What's needed from the user
 
+The default frozen CSV contains internal calculation prices, not verified printed customer prices. Prefer an explicitly supplied document-verified register built with `docs/document-evidence.md` when available, and retain its PDF/transcript provenance in the draft. Do not silently mix supplier costs, invoice prices, customer quotations, and internal calculations. The original export's `won` labels are inferred from posted history, not independently verified sales.
+
 When asked for a **fully priced order**, use `estimator/src/order-cli.ts` and the contract in `docs/pricing-evals-and-orders.md`, not the older estimate total. Require stable line IDs, order/customer/date, and explicit shipping and tax amounts; operator unit prices or cost build-ups need reasons. Missing prices/charges must produce a blocked artifact with no grand total. The resulting JSON/Markdown is an internal proposal containing cost inputs and historical evidence, never authorization for customer delivery or fulfillment.
 
 - The **pricing request**: parts list with whatever the customer supplied — part numbers, descriptions, quantities, material/finish, drawing numbers, RFQ number, customer name. Accept it in any form (text, image, spreadsheet); normalize into `request.json`.
@@ -52,7 +54,7 @@ When asked for a **fully priced order**, use `estimator/src/order-cli.ts` and th
 3. **Require human review before external delivery**. The estimator drafts; an agent may assist, but a named human must approve pricing and scope:
    - `warnings` flag "no historical analogs", "no won-quote analogs", or rejected analogs — price those lines manually.
    - `confidence` < ~0.3 means thin or old evidence — flag for estimator review, don't send as-is.
-   - Prices are **as-quoted historically** — there is no inflation normalization. A line priced off 1990s analogs will show a wide `price_low`–`price_high` band and low confidence; sanity-check against current material/labor rates.
+   - Check the analog's **price basis**: the default register uses internal calculations; document-backed rows reconcile to printed historical quotations. Neither establishes current material/labor rates, and there is no inflation normalization.
    - `analogs[]` shows exactly which historical quotes drove each price — cite them to the customer if asked "how did you get this number".
 
 4. **Hand off** the draft (JSON/CSV), preserving `analogs` and `warnings` for the human reviewer. Only the existing human-approved delivery channel may send a customer quote; the estimator and scheduled worker do not authorize delivery.

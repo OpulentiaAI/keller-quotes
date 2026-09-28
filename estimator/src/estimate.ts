@@ -109,7 +109,6 @@ async function estimatePart(
     exclude: opts.exclude,
     asOf: opts.asOf,
   });
-
   const verdict = await jev.rankAnalogs(part, candidates, opts.rankLimit);
   if (verdict.source === "jev") {
     const order = new Map(verdict.rankedIds.map((id, i) => [id, i]));
@@ -148,7 +147,14 @@ async function estimatePart(
   }
   if (!candidates.length) warnings.push("no historical analogs found");
   if (priced.points.length && priced.points.every((p) => p.status !== "won")) {
-    warnings.push("no won-quote analogs — all references are open history");
+    warnings.push(priced.points.some((p) => p.status !== "open")
+      ? "no verified won-quote analogs — outcomes include unknown/unverified history"
+      : "no won-quote analogs — all references are open history");
+  }
+  if (priced.unit_price !== null && priced.points.some((point) =>
+    candidates.slice(0, opts.rankLimit).some((candidate) => candidate.row.quote_no === point.quote_no &&
+      candidate.row.price_evidence?.price_basis !== "customer_quote_pdf"))) {
+    warnings.push("price uses internal quote calculations, not verified issued customer-quote prices");
   }
 
   return {
@@ -172,6 +178,9 @@ async function estimatePart(
       status: c.row.status,
       score: Math.round(c.score * 100) / 100,
       jev_probability: verdict.probabilities[c.row.quote_no],
+      price_evidence: c.row.price_evidence ?? { price_basis: "internal_quote_calculation" },
+      quote_letter: c.row.quote_letter,
+      letter_date: c.row.letter_date,
     })),
     warnings,
   };
