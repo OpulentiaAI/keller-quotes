@@ -217,7 +217,7 @@ async function estimatePart(
   const uncertainties = priced.unit_price !== null
     ? [
       ...(evidence_status === "VERIFIED_CUSTOMER_PDF"
-        ? ["Historical issued price has unknown outcome"]
+        ? ["Historical issued price has unknown outcome", "Historical price is not current-cost proof"]
         : ["Historical nominal price is not current-cost proof"]),
       ...(provisionalFallback
         ? ["Jev admitted no high-confidence analog; retained candidate is a provisional human-review fallback"]
