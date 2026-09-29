@@ -9,6 +9,10 @@ Choose the evidence and grain before calculating anything. The frozen `quotes.cs
 
 The Ars Umbris profile exposes bounded `keller_polygres` price/page reads and `keller_sources` read-only private source inspection, not general SQL, large exports, or a shell. Use them for evidence lookup and small cited checks; use the standalone approved private workflow below for aggregate SQL or full-register analysis. Neither the source reader nor `keller_quote` is an evaluation or automatic customer-release tool.
 
+## Bounded lookup and price basis
+
+For a quoting request, make one exact `keller_polygres` price lookup per line that needs evidence, run those bounded lookups in parallel when possible, and use at most one optional page/search verification phase for lines that need printed-attribute or chronology proof. Then make one batched `keller_quote` call for all lines. Do not pre-search when the corpus and request are already known, and do not promise a batch action that the tool does not expose. Keep `customer_quote_pdf` (verified issued price, unknown outcome) separate from `internal_quote_calculation` (historical nominal calculation); neither is current-cost proof. A finite line price with either admissible basis is `NUMERIC_PROVISIONAL`, evidence without a usable amount is `PRESENT_BUT_NO_USABLE_PRICE`, and no basis is `NONE`/`MISSING`; never fill a missing amount with a statistic or fallback. Ask once for operator-supported unresolved amounts/cost-plus and explicit shipping/tax.
+
 ## Query and interpret
 
 1. Define population, date field, unit of analysis, and price basis. A break count is not a quote count; use `count(distinct quote_no)` for unique quote numbers, or `(quote_no,item_no)` for part-quotes. Exclude `is_placeholder` from price arithmetic. A verified PDF price's `quote_date` is recorded inquiry/header metadata, not a recovered original `QUOTEN` date or independently proved version availability; `date_stamp` may be a later revision. Reconcile printed footer dates before making a historical-eligibility claim. Ingestion time is not quote time.

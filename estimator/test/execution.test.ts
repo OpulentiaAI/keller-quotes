@@ -29,12 +29,15 @@ describe("estimate execution limits", () => {
     expect(estimateOne.lines[0]!.warnings).toContain("rejected analog Q1");
     expect(estimateOne.lines[0]!.unit_price).toBeNull();
     expect(estimateOne.lines[0]!.analogs).toEqual([]);
+    expect(estimateOne.lines[0]!.proposal_status).toBe("MISSING");
+    expect(estimateOne.lines[0]!.evidence_status).toBe("PRESENT_BUT_NO_USABLE_PRICE");
 
     screenCandidate.mockClear();
     const estimateZero = await estimate(reg, req, { jev, screenTopN: 0 });
     expect(screenCandidate).not.toHaveBeenCalled();
     expect(estimateZero.lines[0]!.unit_price).toBeNull();
     expect(estimateZero.lines[0]!.analogs).toEqual([]);
+    expect(estimateZero.lines[0]!.evidence_status).toBe("PRESENT_BUT_NO_USABLE_PRICE");
     expect(estimateZero.lines[0]!.warnings).toContain("screening budget skipped 4 analogs");
   });
 
@@ -66,6 +69,7 @@ describe("estimate execution limits", () => {
     expect(screenCandidate.mock.calls.map(([, c]) => c.row.quote_no)).toEqual(["Q1", "Q2"]);
     expect(bounded.unit_price).toBeNull();
     expect(bounded.analogs).toEqual([]);
+    expect(bounded.evidence_status).toBe("PRESENT_BUT_NO_USABLE_PRICE");
   });
 
   it("exposes every admitted price candidate beyond five with source and date evidence", async () => {

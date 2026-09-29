@@ -85,6 +85,15 @@ export interface PricePoint {
   weight: number;
 }
 
+export type ProposalStatus = "NUMERIC_PROVISIONAL" | "MISSING";
+
+export type EvidenceStatus =
+  | "VERIFIED_CUSTOMER_PDF"
+  | "HISTORICAL_INTERNAL_CALCULATION"
+  | "OPERATOR_INPUT"
+  | "PRESENT_BUT_NO_USABLE_PRICE"
+  | "NONE";
+
 export interface LineEstimate {
   part: PartRequest;
   unit_price: number | null;
@@ -94,6 +103,10 @@ export interface LineEstimate {
   confidence: number;
   method: string;
   status_basis: string;
+  proposal_status: ProposalStatus;
+  evidence_status: EvidenceStatus;
+  next_action: string;
+  uncertainties: string[];
   analogs: {
     quote_no: string;
     quote_date: string;

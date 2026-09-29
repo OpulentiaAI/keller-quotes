@@ -140,6 +140,8 @@ describe("estimate (offline fallback)", () => {
     expect(res.lines.length).toBe(1);
     const l = res.lines[0]!;
     expect(l.unit_price).not.toBeNull();
+    expect(l.proposal_status).toBe("NUMERIC_PROVISIONAL");
+    expect(l.evidence_status).toBe("HISTORICAL_INTERNAL_CALCULATION");
     expect(l.extended_price).toBeCloseTo(l.unit_price! * 250, 0);
     expect(l.analogs.length).toBeGreaterThan(0);
     expect(l.analogs[0]!.status).toBe("won");
@@ -150,6 +152,8 @@ describe("estimate (offline fallback)", () => {
       parts: [{ part_no: "NOPE-000", quantity: 5 }],
     });
     expect(res.lines[0]!.unit_price).toBeNull();
+    expect(res.lines[0]!.proposal_status).toBe("MISSING");
+    expect(res.lines[0]!.evidence_status).toBe("NONE");
     expect(res.lines[0]!.warnings.join(" ")).toMatch(/no historical analogs|no usable/);
   });
   it("never boosts an unrelated customer's price when request identity is absent", async () => {
