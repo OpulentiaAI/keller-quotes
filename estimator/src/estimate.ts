@@ -8,6 +8,13 @@ import { QuoteRegister, normalizePartNo } from "./register.js";
 import { retrieve } from "./retrieve.js";
 import { JevClient } from "./jev.js";
 import { price } from "./price.js";
+import type { Candidate } from "./types.js";
+
+function hasUsableBreak(candidate: Candidate): boolean {
+  return candidate.breaks.some((b) =>
+    b.quantity !== null && Number.isFinite(b.quantity) && b.quantity > 0 &&
+    b.unit_price !== null && Number.isFinite(b.unit_price) && b.unit_price > 0);
+}
 
 export interface EstimateOptions {
   jev?: JevClient;
@@ -126,10 +133,19 @@ async function estimatePart(
   const verdict = await jev.rankAnalogs(part, candidates, opts.rankLimit);
   if (verdict.source === "jev") {
     const order = new Map(verdict.rankedIds.map((id, i) => [id, i]));
+    const partNo = normalizePartNo(part.part_no ?? "");
+    const partPriority = (candidate: Candidate) => {
+      const candidatePartNo = normalizePartNo(candidate.row.part_no);
+      if (!partNo || !candidatePartNo) return 0;
+      if (candidatePartNo === partNo) return 2;
+      return candidatePartNo.startsWith(partNo) || partNo.startsWith(candidatePartNo) ? 1 : 0;
+    };
     candidates = [...candidates].sort(
-      (a, b) => (order.get(a.row.quote_no) ?? 999) - (order.get(b.row.quote_no) ?? 999),
+      (a, b) => partPriority(b) - partPriority(a) ||
+        (order.get(a.row.quote_no) ?? 999) - (order.get(b.row.quote_no) ?? 999),
     );
   }
+  const preScreenCandidates = candidates;
 
   const screeningBudget = Math.min(opts.screenTopN, opts.rankLimit);
   if (candidates.length > screeningBudget) {
@@ -145,7 +161,16 @@ async function estimatePart(
     }
     screened.push(c);
   }
-  candidates = screened;
+  const noAdmittedCandidates = screened.length === 0;
+  const provisionalFallback = jev.enabled && noAdmittedCandidates
+    ? preScreenCandidates.find(hasUsableBreak)
+    : undefined;
+  candidates = provisionalFallback ? [provisionalFallback] : screened;
+  if (provisionalFallback) {
+    warnings.push(
+      `Jev admitted no high-confidence analog; retained highest-ranked usable candidate ${provisionalFallback.row.quote_no} as a provisional human-review fallback`,
+    );
+  }
 
   const strategy = await jev.chooseStrategy(part, candidates);
   const priced = price(part.quantity, candidates, {
@@ -168,7 +193,7 @@ async function estimatePart(
   if (priced.unit_price === null) {
     warnings.push("no usable price breaks in analogs — manual pricing needed");
   }
-  if (!candidates.length) warnings.push("no admitted historical analogs found");
+  if (noAdmittedCandidates) warnings.push("no admitted historical analogs found");
   if (priced.points.length && priced.points.every((p) => p.status !== "won")) {
     warnings.push(priced.points.some((p) => p.status !== "open")
       ? "no verified won-quote analogs — outcomes include unknown/unverified history"
@@ -190,9 +215,14 @@ async function estimatePart(
       : "NONE" as const;
   const proposal_status = priced.unit_price !== null ? "NUMERIC_PROVISIONAL" as const : "MISSING" as const;
   const uncertainties = priced.unit_price !== null
-    ? evidence_status === "VERIFIED_CUSTOMER_PDF"
-      ? ["Historical issued price has unknown outcome", "Historical price is not current-cost proof"]
-      : ["Historical nominal price is not current-cost proof"]
+    ? [
+      ...(evidence_status === "VERIFIED_CUSTOMER_PDF"
+        ? ["Historical issued price has unknown outcome"]
+        : ["Historical nominal price is not current-cost proof"]),
+      ...(provisionalFallback
+        ? ["Jev admitted no high-confidence analog; retained candidate is a provisional human-review fallback"]
+        : []),
+    ]
     : evidence_status === "PRESENT_BUT_NO_USABLE_PRICE"
       ? ["Evidence is present but no usable unit price was found"]
       : ["No admissible evidence or operator-supported amount exists"];

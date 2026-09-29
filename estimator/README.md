@@ -17,7 +17,8 @@ request.json (customer + parts[part_no, description, qty, material, drawing_ref]
   → jev.rank   one bounded `choice` question over the top-8 candidate
                descriptions → calibrated ordering + probabilities
   → jev.screen boolean "is this a genuine analog" on the top candidates;
-               rejects are dropped
+               rejects are dropped; if Jev admits none, the highest-ranked
+               usable break may be retained as a provisional human-review fallback
   → jev.choose bounded choice of pricing strategy per line:
                latest | median_won | curve_fit | conservative
   → price      per-analog log-log interpolation of that quote's own qty/price

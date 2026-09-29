@@ -65,6 +65,34 @@ describe("exact-part pricing policy", () => {
     expect(result.lines[0]!.analogs.map((a) => a.quote_no)).toContain("fuzzy");
   });
 
+  it("keeps exact and part-number prefix evidence ahead of weaker Jev-ranked analogs", async () => {
+    const register = new QuoteRegister([
+      row({ quote_no: "unrelated", part_no: "521-008000", description: "BRACKET", quantity: 50, unit_price: 100 }),
+      row({ quote_no: "prefix", part_no: "521-00????", description: "FACEPLATE", quantity: 50, unit_price: 6 }),
+    ]);
+    const seen: string[][] = [];
+    const jev = {
+      enabled: true,
+      rankAnalogs: async (_part: unknown, candidates: Candidate[]) => ({
+        rankedIds: candidates.map((c) => c.row.quote_no).reverse(), probabilities: {}, source: "jev" as const,
+      }),
+      screenCandidate: async (_part: unknown, c: Candidate) => {
+        seen.push([c.row.quote_no]);
+        return "reject" as const;
+      },
+      chooseStrategy: async (_part: unknown, candidates: Candidate[]) => {
+        expect(candidates.map((c) => c.row.quote_no)).toEqual(["prefix"]);
+        return "median_won" as const;
+      },
+    } as unknown as JevClient;
+
+    const result = await estimate(register,
+      { parts: [{ part_no: "521-007182", description: "BRACKET", quantity: 50 }] }, { jev });
+    expect(seen[0]).toEqual(["prefix"]);
+    expect(result.lines[0]!.analogs.map((a) => a.quote_no)).toEqual(["prefix"]);
+    expect(result.lines[0]!.unit_price).toBe(6);
+  });
+
   it.each([undefined, "", "---"])("keeps generic retrieval for absent or empty normalized part number %s", async (part_no) => {
     const register = new QuoteRegister([
       row({ quote_no: "first", part_no: "A-1", description: "RETAINER PLATE", quantity: 10, unit_price: 10 }),
@@ -188,5 +216,83 @@ describe("quantity relevance and range warnings", () => {
     expect(result.lines[0]!.analogs).toEqual([]);
     expect(result.lines[0]!.warnings).toContain("quarantined analog exact");
     expect(result.lines[0]!.warnings).not.toContain("requested quantity outside all usable analog price-break ranges — manual review needed");
+  });
+
+  it("retains the highest-ranked usable candidate as a Jev provisional fallback", async () => {
+    const register = new QuoteRegister([
+      row({ quote_no: "weak", part_no: "AB-123", quantity: 10, unit_price: 20 }),
+      row({ quote_no: "stronger", part_no: "AB-123", quantity: 10, unit_price: 30 }),
+    ]);
+    const jev = {
+      enabled: true,
+      rankAnalogs: async () => ({
+        rankedIds: ["weak", "stronger"], probabilities: {}, source: "jev" as const,
+      }),
+      screenCandidate: async () => "reject" as const,
+      chooseStrategy: async (_part: unknown, candidates: Candidate[]) => {
+        expect(candidates.map((c) => c.row.quote_no)).toEqual(["weak"]);
+        return "median_won" as const;
+      },
+    } as unknown as JevClient;
+
+    const result = await estimate(register, { parts: [{ part_no: "AB-123", quantity: 10 }] }, { jev });
+    const line = result.lines[0]!;
+    expect(line.unit_price).toBe(20);
+    expect(line.proposal_status).toBe("NUMERIC_PROVISIONAL");
+    expect(line.evidence_status).toBe("HISTORICAL_INTERNAL_CALCULATION");
+    expect(line.analogs.map((a) => a.quote_no)).toEqual(["weak"]);
+    expect(line.warnings).toContain(
+      "Jev admitted no high-confidence analog; retained highest-ranked usable candidate weak as a provisional human-review fallback",
+    );
+    expect(line.uncertainties).toContain(
+      "Jev admitted no high-confidence analog; retained candidate is a provisional human-review fallback",
+    );
+  });
+
+  it("keeps the estimate missing when Jev admits nothing and no usable break exists", async () => {
+    const register = new QuoteRegister([
+      row({ quote_no: "unpriced", part_no: "AB-123", quantity: 0, unit_price: 0 }),
+    ]);
+    const jev = {
+      enabled: true,
+      rankAnalogs: async () => ({
+        rankedIds: ["unpriced"], probabilities: {}, source: "jev" as const,
+      }),
+      screenCandidate: async () => "quarantine" as const,
+      chooseStrategy: async () => "median_won" as const,
+    } as unknown as JevClient;
+
+    const result = await estimate(register, { parts: [{ part_no: "AB-123", quantity: 10 }] }, { jev });
+    const line = result.lines[0]!;
+    expect(line.unit_price).toBeNull();
+    expect(line.proposal_status).toBe("MISSING");
+    expect(line.evidence_status).toBe("PRESENT_BUT_NO_USABLE_PRICE");
+    expect(line.analogs).toEqual([]);
+    expect(line.warnings).not.toContain(expect.stringContaining("provisional human-review fallback"));
+  });
+
+  it("does not use a provisional fallback when Jev admits a candidate", async () => {
+    const register = new QuoteRegister([
+      row({ quote_no: "rejected", part_no: "AB-123", quantity: 10, unit_price: 20 }),
+      row({ quote_no: "admitted", part_no: "AB-123", quantity: 10, unit_price: 30 }),
+    ]);
+    const jev = {
+      enabled: true,
+      rankAnalogs: async () => ({
+        rankedIds: ["rejected", "admitted"], probabilities: {}, source: "jev" as const,
+      }),
+      screenCandidate: async (_part: unknown, c: Candidate) =>
+        c.row.quote_no === "admitted" ? "admit" as const : "reject" as const,
+      chooseStrategy: async (_part: unknown, candidates: Candidate[]) => {
+        expect(candidates.map((c) => c.row.quote_no)).toEqual(["admitted"]);
+        return "median_won" as const;
+      },
+    } as unknown as JevClient;
+
+    const result = await estimate(register, { parts: [{ part_no: "AB-123", quantity: 10 }] }, { jev });
+    const line = result.lines[0]!;
+    expect(line.unit_price).toBe(30);
+    expect(line.analogs.map((a) => a.quote_no)).toEqual(["admitted"]);
+    expect(line.warnings).not.toContain(expect.stringContaining("provisional human-review fallback"));
   });
 });
