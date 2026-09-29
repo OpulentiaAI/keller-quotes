@@ -18,6 +18,8 @@ For each attempt, map the observed prompt/messages and audit ordinals into searc
 
 Attach the existing [blinded per-turn price diagnostics](blinded-mcp-workflow-evaluations.md#private-per-turn-price-diagnostics) by observed quote ordinal after the run: show proposed unit, target unit, signed error, absolute percentage error, extension mismatch, and the changing direction and magnitude across revisions when valid finite prices exist. Keep the denominator of finite-priced lines separate from attempted cases. A held, malformed or missing price has no numeric error, not zero error. Tie later criterion findings to the earliest *supported* relevant turn, not an imagined reasoning step; the final V/J criterion verdict still comes from the grader/judge on the actual artifacts. Targets, errors, comparative analyses and learning packets remain private and must **never** return to a live blinded worker.
 
+Keller keller_quote historical pricing uses offline score-based screening and the median_won strategy; changing the worker model does not change that backend. Trace submitted attributes, admitted analogs and price-break interpolation before attributing a numerical change to agent reasoning.
+
 The operator may run the artifact freezer/comparator on private files after grading:
 
 ```sh
