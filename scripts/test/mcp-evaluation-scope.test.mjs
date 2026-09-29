@@ -138,6 +138,38 @@ test('discovery advertises only guarded tools and every scoped audit row binds t
   assert.equal(JSON.parse(readFileSync(audit, 'utf8')).evaluation_scope_sha256, guard.sha256)
 })
 
+test('guarded quote transport injects only the validated operator binding and hides internal schema fields', async t => {
+  const guard = fixture(t).guard()
+  const args = { corpus: sha, reviewer: 'Casey', request: JSON.stringify(request) }
+  const schema = { type: 'object', properties: { corpus: { type: 'string' }, request: { type: 'string' },
+    reviewer: { type: 'string' }, evaluation_scope_path: { type: 'string' }, evaluation_scope_sha256: { type: 'string' } },
+  required: ['corpus', 'request', 'reviewer'] }
+  const list = await exchange({ listTools: async () => ({ tools: [{ name: 'keller_quote', inputSchema: schema }] }) },
+    '--list', undefined, 1000, () => {}, guard)
+  assert.deepEqual(Object.keys(list.result.tools[0].inputSchema.properties), ['corpus', 'request', 'reviewer'])
+  assert.deepEqual(list.result.tools[0].inputSchema.required, ['corpus', 'request', 'reviewer'])
+  const type = await call(guard, 'au_type', { name: 'mcp.tool::keller_quote' }, () => {
+    throw new Error('private operator fields must not be discoverable through au_type')
+  })
+  assert.equal(type.error_code, 'EVALUATION_SCOPE_DENIED')
+  let backendCalls = 0
+  for (const attempted of [
+    { evaluation_scope_path: guard.path }, { evaluation_scope_sha256: guard.sha256 },
+    { evaluation_scope_path: '/private/other.json', evaluation_scope_sha256: 'd'.repeat(64) },
+  ]) {
+    const rejected = await call(guard, 'keller_quote', { ...args, ...attempted }, () => { backendCalls++; return envelope({}) })
+    assert.equal(rejected.error_code, 'EVALUATION_SCOPE_DENIED')
+  }
+  assert.equal(backendCalls, 0)
+  let submitted
+  await call(guard, 'keller_quote', args, input => { submitted = input; return envelope({}) })
+  assert.deepEqual(submitted.arguments, { ...args, evaluation_scope_path: guard.path, evaluation_scope_sha256: guard.sha256 })
+  let unguarded
+  await exchange({ callTool: async input => { unguarded = input; return envelope({}) } }, '--call',
+    { name: 'keller_quote', arguments: args }, 1000)
+  assert.deepEqual(unguarded.arguments, args)
+})
+
 test('scoped CLI preflight failure records only a hash-bound safe result', t => {
   const f = fixture(t), audit = join(f.privateDir, 'trace.jsonl')
   const run = spawnSync(process.execPath, [cli, '--list', '--evaluation-scope', f.path, '--audit', audit,
@@ -260,7 +292,9 @@ test('quote identity, reviewer, date, parts and charges are exact, but proposals
       source_document_sha256: pdf, source_transcript_sha256: transcript, source_price_field: 'PRICE' } }
   const requestSha = createHash('sha256').update(JSON.stringify(submitted)).digest('hex')
   const makeDraft = (state, analogs) => ({ state, corpus_id: sha, corpus_sha256: pdf, request_sha256: requestSha, reviewer: 'Casey',
+    evaluation_scope_sha256: guard.sha256, source_rows: guard.scope.eligible_prices.length,
     review: { state, corpus_id: sha, corpus_sha256: pdf, request_sha256: requestSha, reviewer: 'Casey',
+      evaluation_scope_sha256: guard.sha256, source_rows: guard.scope.eligible_prices.length,
       status: 'PENDING_NAMED_HUMAN_REVIEW', requires_human_review: true, customer_release_authorized: false },
     order: { state, order_id: 'ORDER', quote_date: request.quote_date, customer: 'Synthetic', request: submitted,
       provenance: { as_of: request.quote_date, request_sha256: requestSha, register_sha256: pdf }, requires_human_review: true,
@@ -289,6 +323,14 @@ test('quote identity, reviewer, date, parts and charges are exact, but proposals
     assert.equal(output.result, null)
   }
   for (const mutate of [
+    draft => { delete draft.evaluation_scope_sha256 },
+    draft => { delete draft.source_rows },
+    draft => { delete draft.review.evaluation_scope_sha256 },
+    draft => { delete draft.review.source_rows },
+    draft => { draft.evaluation_scope_sha256 = sha },
+    draft => { draft.review.evaluation_scope_sha256 = sha },
+    draft => { draft.source_rows++ },
+    draft => { draft.review.source_rows++ },
     draft => { draft.review.reviewer = 'Other' },
     draft => { draft.review.request_sha256 = sha },
     draft => { draft.review.customer_release_authorized = true },

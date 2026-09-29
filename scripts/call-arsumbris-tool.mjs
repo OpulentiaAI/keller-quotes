@@ -119,7 +119,9 @@ export async function exchange(client, mode, request, timeout, record = () => {}
       } while (cursor)
       result = guard ? scopedToolList({ tools }, guard) : { tools }
     } else {
-      result = await client.callTool({ name: tool, arguments: inputs }, undefined, { timeout })
+      const backendInputs = guard && tool === 'keller_quote'
+        ? { ...inputs, evaluation_scope_path: guard.path, evaluation_scope_sha256: guard.sha256 } : inputs
+      result = await client.callTool({ name: tool, arguments: backendInputs }, undefined, { timeout })
       if (!result || typeof result !== 'object' || !Array.isArray(result.content) ||
           result.content.some(item => !item || typeof item.type !== 'string') ||
           (result.isError !== undefined && typeof result.isError !== 'boolean')) {

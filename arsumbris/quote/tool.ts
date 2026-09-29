@@ -6,6 +6,8 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import type { CallableResult, PluginContext, PluginRuntime } from '@arsumbris/au-mcp-sdk'
+import { scopedRegister } from '../../estimator/src/scoped-register.mjs'
+import { beforeScopedCall, loadEvaluationScope } from '../../scripts/mcp-evaluation-scope.mjs'
 
 const run = promisify(execFile)
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
@@ -33,14 +35,18 @@ function childEnvironment(): NodeJS.ProcessEnv {
   return env
 }
 
-function valid(input: unknown): input is { corpus: string; request: string; reviewer: string } {
+function valid(input: unknown): input is { corpus: string; request: string; reviewer: string; evaluation_scope_path?: string; evaluation_scope_sha256?: string } {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return false
   const value = input as Record<string, unknown>
-  return Object.keys(value).every(key => ['corpus', 'request', 'reviewer'].includes(key)) &&
+  return Object.keys(value).every(key => ['corpus', 'request', 'reviewer', 'evaluation_scope_path', 'evaluation_scope_sha256'].includes(key)) &&
     typeof value.corpus === 'string' && /^[a-f0-9]{64}$/.test(value.corpus) &&
     typeof value.request === 'string' && value.request.length > 0 && Buffer.byteLength(value.request) <= 128 * 1024 &&
     typeof value.reviewer === 'string' && value.reviewer.trim().length > 0 && value.reviewer.length <= 120 &&
-    !/[\x00-\x1f\x7f]/.test(value.reviewer)
+    !/[\x00-\x1f\x7f]/.test(value.reviewer) &&
+    (value.evaluation_scope_path === undefined && value.evaluation_scope_sha256 === undefined ||
+      typeof value.evaluation_scope_path === 'string' && value.evaluation_scope_path.length > 0 &&
+      typeof value.evaluation_scope_sha256 === 'string' &&
+      /^[a-f0-9]{64}$/.test(value.evaluation_scope_sha256))
 }
 
 export function createPlugin(_ctx: PluginContext): PluginRuntime {
@@ -60,6 +66,11 @@ export function createPlugin(_ctx: PluginContext): PluginRuntime {
       if (!process.env.POLYGRES_DIRECT_URL) return { content: { error: 'Polygres read access is not configured' }, isError: true }
       let draft: string | undefined
       try {
+        if (input.evaluation_scope_path && input.evaluation_scope_sha256) {
+          const guard = loadEvaluationScope(input.evaluation_scope_path, root)
+          if (guard.sha256 !== input.evaluation_scope_sha256) throw new Error('evaluation scope hash mismatch')
+          beforeScopedCall('keller_quote', { corpus: input.corpus, reviewer: input.reviewer, request: input.request }, guard)
+        }
         privateDirectory()
         const id = randomUUID()
         draft = join(privateRoot, id)
@@ -81,14 +92,22 @@ export function createPlugin(_ctx: PluginContext): PluginRuntime {
         const csvStat = lstatSync(csvPath)
         if (!csvStat.isFile() || csvStat.isSymbolicLink() || csvStat.uid !== process.getuid?.() ||
             (csvStat.mode & 0o777) !== 0o600) throw new Error('invalid private corpus export')
-        const corpusSha = createHash('sha256').update(readFileSync(csvPath)).digest('hex')
-        if (exported.sha256 !== corpusSha || !Number.isSafeInteger(exported.rows)) throw new Error('invalid export proof')
+        const exportSha = createHash('sha256').update(readFileSync(csvPath)).digest('hex')
+        if (exported.sha256 !== exportSha || !Number.isSafeInteger(exported.rows)) throw new Error('invalid export proof')
+        const scoped = input.evaluation_scope_path && input.evaluation_scope_sha256
+          ? scopedRegister(input.evaluation_scope_path, input.evaluation_scope_sha256, root, input.corpus,
+            request, input.reviewer, csvPath, exportSha, join(draft, 'scoped-corpus.csv')) : undefined
+        const registerPath = scoped ? join(draft, 'scoped-corpus.csv') : csvPath
+        const corpusSha = scoped?.sha256 ?? exportSha
+        scoped?.verify()
         try {
           await run(process.execPath, [tsx, join(root, 'estimator/src/order-cli.ts'), requestPath,
-            '--register', csvPath, '--out', out], { cwd: root, env: childEnv, timeout: 180000, maxBuffer: 4096 })
+            '--register', registerPath, '--out', out], { cwd: root, env: childEnv, timeout: 180000, maxBuffer: 4096 })
         } catch (error) {
           if ((error as { code?: number }).code !== 3) throw error
         }
+        scoped?.verify()
+        if (createHash('sha256').update(readFileSync(registerPath)).digest('hex') !== corpusSha) throw new Error('register changed during pricing')
         const jsonPath = join(out, 'order.json')
         const markdownPath = join(out, 'order.md')
         const order = JSON.parse(readFileSync(jsonPath, 'utf8')) as {
@@ -106,7 +125,7 @@ export function createPlugin(_ctx: PluginContext): PluginRuntime {
           status: 'PENDING_NAMED_HUMAN_REVIEW', reviewer: input.reviewer.trim(),
           requires_human_review: true, customer_release_authorized: false, state: order.state,
           corpus_id: input.corpus, corpus_sha256: corpusSha, request_sha256: order.provenance.request_sha256,
-          warning,
+          warning, ...(scoped ? { evaluation_scope_sha256: input.evaluation_scope_sha256, source_rows: scoped.rows } : {}),
         }, null, 2) + '\n', { flag: 'wx', mode: 0o600 })
         const markdown = readFileSync(markdownPath, 'utf8')
         const review = JSON.parse(readFileSync(reviewPath, 'utf8'))
@@ -118,7 +137,8 @@ export function createPlugin(_ctx: PluginContext): PluginRuntime {
           requires_human_review: true, total: order.total, blockers: order.blockers,
           order, markdown, review,
           price_bases: [...new Set(order.lines.map(line => line.pricing_source))],
-          warning, corpus_id: input.corpus, corpus_sha256: corpusSha, source_rows: exported.rows,
+          warning, corpus_id: input.corpus, corpus_sha256: corpusSha, source_rows: scoped?.rows ?? exported.rows,
+          ...(scoped ? { evaluation_scope_sha256: input.evaluation_scope_sha256 } : {}),
           request_sha256: order.provenance.request_sha256,
           artifacts: { order_json: `quote-draft:${id}/order.json`, order_markdown: `quote-draft:${id}/order.md`,
             review_json: `quote-draft:${id}/review.json` },

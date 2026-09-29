@@ -6,6 +6,10 @@ fields:
   request: String
   #: Name of the human estimator assigned to review this internal draft; naming a reviewer does not approve or release it.
   reviewer: String
+  #: Guarded operator transport only; not a worker-supplied quoting argument.
+  evaluation_scope_path?: String
+  #: SHA-256 binding for the private evaluation scope; guarded operator transport only.
+  evaluation_scope_sha256?: String
 meta:
   - type: plugin-runtime-meta::au-mcp-sdk
     entry: ./arsumbris/quote/tool.ts

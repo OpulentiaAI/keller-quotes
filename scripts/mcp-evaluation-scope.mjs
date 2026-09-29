@@ -52,7 +52,7 @@ export function sameDecimal(a, b) {
   } catch { return false }
 }
 
-function priceKey(row) {
+export function priceKey(row) {
   let [quantity, scale] = decimal(row.quantity)
   while (scale && quantity % 10n === 0n) {
     quantity /= 10n
@@ -139,7 +139,7 @@ export function loadEvaluationScope(path, publicRoot = process.cwd()) {
     if (current.dev !== stat.dev || current.ino !== stat.ino || current.size !== stat.size || createHash('sha256').update(readFileSync(path)).digest('hex') !== sha256) throw new Error('Evaluation scope changed')
   }
   verify()
-  return { scope, sha256, fileIdentity: { dev: stat.dev, ino: stat.ino }, verify, documents, allowed, prices, analogs }
+  return { scope, path, sha256, fileIdentity: { dev: stat.dev, ino: stat.ino }, verify, documents, allowed, prices, analogs }
 }
 
 function matchesPrice(price, row) {
@@ -171,6 +171,7 @@ export function beforeScopedCall(name, input, guard) {
   if (name === 'au_type') {
     object(input, ['name'])
     if (typeof input.name !== 'string' || !/^(?:mcp\.tool(?:\.|::)|mcp\.skill::)/.test(input.name)) throw new Error('Type unavailable in evaluation scope')
+    if (/^mcp\.tool(?:\.|::)keller_quote(?:[.:]|$)/.test(input.name)) throw new Error('Use scoped tool discovery for quote inputs')
   }
   if (name === 'keller_polygres') {
     const action = input?.action
@@ -219,9 +220,13 @@ export function afterScopedCall(name, input, result, guard) {
   object(payload, Object.keys(payload))
   const { scope, documents } = guard
   if (name === 'keller_quote') {
-    object(payload, ['draft_id', 'state', 'review_status', 'reviewer', 'requires_human_review', 'total', 'blockers', 'order', 'markdown', 'review', 'price_bases', 'warning', 'corpus_id', 'corpus_sha256', 'source_rows', 'request_sha256', 'artifacts'])
+    object(payload, ['draft_id', 'state', 'review_status', 'reviewer', 'requires_human_review', 'total', 'blockers', 'order', 'markdown', 'review', 'price_bases', 'warning', 'corpus_id', 'corpus_sha256', 'source_rows', 'request_sha256', 'artifacts', 'evaluation_scope_sha256'])
     object(payload.order, ['schema_version', 'request', 'order_id', 'quote_date', 'customer', 'currency', 'state', 'requires_human_review', 'lines', 'charges', 'additional_charges', 'priced_subtotal', 'subtotal', 'total', 'blockers', 'warnings', 'provenance'])
-    object(payload.review, ['status', 'reviewer', 'requires_human_review', 'customer_release_authorized', 'state', 'corpus_id', 'corpus_sha256', 'request_sha256', 'warning'])
+    object(payload.review, ['status', 'reviewer', 'requires_human_review', 'customer_release_authorized', 'state', 'corpus_id', 'corpus_sha256', 'request_sha256', 'warning', 'evaluation_scope_sha256', 'source_rows'])
+    if (payload.evaluation_scope_sha256 !== guard.sha256 ||
+        payload.review.evaluation_scope_sha256 !== guard.sha256 ||
+        payload.source_rows !== scope.eligible_prices.length ||
+        payload.review.source_rows !== scope.eligible_prices.length) throw new Error('Scoped register proof mismatch')
     const submittedSha = createHash('sha256').update(JSON.stringify(JSON.parse(input.request))).digest('hex')
     if (payload.reviewer !== scope.request.reviewer || payload.corpus_id !== scope.corpus ||
         payload.review?.reviewer !== scope.request.reviewer || payload.review?.corpus_id !== scope.corpus ||
@@ -307,6 +312,12 @@ export function scopedToolList(result, guard) {
   guard.verify()
   if (!result || !Array.isArray(result.tools) || result.tools.some(tool => !tool || typeof tool.name !== 'string')) throw new Error('Invalid guarded tools list')
   return { tools: result.tools.filter(tool => names.has(tool.name)).map(tool => {
+    if (tool.name === 'keller_quote') {
+      return { ...tool, inputSchema: tool.inputSchema ? { ...tool.inputSchema,
+        properties: Object.fromEntries(Object.entries(tool.inputSchema.properties ?? {}).filter(([key]) => !['evaluation_scope_path', 'evaluation_scope_sha256'].includes(key))),
+        required: tool.inputSchema.required?.filter(key => !['evaluation_scope_path', 'evaluation_scope_sha256'].includes(key)),
+      } : tool.inputSchema }
+    }
     if (tool.name !== 'keller_polygres') return tool
     object(tool.inputSchema, Object.keys(tool.inputSchema))
     if (tool.inputSchema.type !== 'object' || !tool.inputSchema.properties?.limit) throw new Error('Invalid evidence discovery schema')
