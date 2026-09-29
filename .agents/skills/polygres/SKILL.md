@@ -7,6 +7,12 @@ description: Query Keller's Polygres legacy mirror and explicitly selected, addi
 
 The normalized legacy `customers`, `parts`, `quotes`, `quote_qty_breaks`, `quote_letters` and `quote_letter_lines` mirror the frozen internal-calculation register. `estimates`/`estimate_lines` are generated drafts, not historical source rows. `quotes.status='won'` is merely an unverified posted-history label; `open` is not a verified loss. The additive document corpus stores verified **issued customer quotation** prices with outcome `unknown`. Never silently join the two bases into a price curve or use text search as numeric authority. See [the register guide](../keller-quote-register/SKILL.md).
 
+## Bounded evidence calls
+
+Use one exact `keller_polygres` price lookup per line that needs lookup, with the explicitly requested `corpus_id` and exact part/quote filters; run independent lookups in parallel when the client permits. Do not pre-search when the corpus and request are already known. At most one optional page/search phase may verify cited source text; page search finds candidate pages and never supplies a numeric price by itself. Keep the call budget bounded rather than issuing one broad search per line or retrying alternate corpora.
+
+Keep price basis explicit: `customer_quote_pdf` is verified issued-price evidence with unknown outcome; the frozen `internal_quote_calculation` register is historical nominal calculation evidence; neither proves current cost. A finite price from either basis can support a `NUMERIC_PROVISIONAL` proposal, while present evidence without a usable amount is `PRESENT_BUT_NO_USABLE_PRICE`; no evidence is `NONE`. Never manufacture a fallback number. If no admissible price exists, leave it missing and request one operator-supported amount or cost-plus build, plus explicit shipping/tax where unresolved.
+
 ## Safe read access
 
 Keller Workflow uses the CC stdio transport without launching Claude. External agents can invoke its graph, evidence and quote tools using their own model connection; the host's native Codex CLI login is not required.
@@ -17,7 +23,7 @@ Use the explicitly selected `Keller Workflow` profile for an external MCP-capabl
 
 Check whether the existing configured `POLYGRES_DIRECT_URL`, `POLYGRES_DATABASE_URL`, and expected database name are available in the current runtime before requesting access. Do not print a DSN/password or put one in a report. The direct URL is for psycopg and `scripts/document-evidence-db.py`; the pooled URL may include `pgbouncer=true`, which libpq does not accept. For remote evidence CLI access, the **effective direct URL must contain** `sslmode=verify-full` and `sslrootcert=/etc/ssl/certs/ca-certificates.crt`; the CLI enforces this plus `--expected-database`. Use an approved connection string assembled without displaying its value. In standalone SQL, use read-only transactions, parameterized values and a confirmed database identity. No control-plane/MCP registration, plan change, reimport, or credentials refresh is needed to read the existing corpus.
 
-Select an actual public `corpus_id` rather than guessing the newest ingestion. A read-only discovery query is:
+Select an actual public `corpus_id` rather than guessing the newest ingestion. `keller_polygres({action:"corpora"})` now includes the immutable corpus counts and `ingested_at` snapshot timestamp; use that timestamp only to identify a snapshot, never as quote chronology. A read-only discovery query is:
 
 ```sql
 select corpus_id, document_count, page_count, price_count, ingested_at

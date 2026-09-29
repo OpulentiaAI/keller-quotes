@@ -45,6 +45,7 @@ describe("priced orders", () => {
     expect(order.state).toBe("PRICED_REQUIRES_REVIEW");
     expect(order.requires_human_review).toBe(true);
     expect(order.lines[0]!.warnings).toContain("Operator-supplied unit price is a proposal, not approval");
+    expect(order.lines[0]).toMatchObject({ proposal_status: "NUMERIC_PROVISIONAL", evidence_status: "OPERATOR_INPUT" });
     expect(order.request).toEqual(request);
     expect(order.provenance).toEqual({ request_sha256: createHash("sha256").update(JSON.stringify(request)).digest("hex"),
       register_sha256: sha, as_of: "2024-06-01", mode: "offline" });
@@ -67,7 +68,7 @@ describe("priced orders", () => {
       charges: { shipping: 1, tax: 0 } }, opts);
     expect(order.state).toBe("BLOCKED");
     expect(order.lines[0]).toMatchObject({ unit_price: null, extended_price: null,
-      pricing_source: "unpriced", analogs: [] });
+      pricing_source: "unpriced", analogs: [], proposal_status: "MISSING", evidence_status: "NONE" });
     expect(order.priced_subtotal).toBe(0);
     expect(order.subtotal).toBeNull();
     expect(order.total).toBeNull();
@@ -106,7 +107,8 @@ describe("priced orders", () => {
     try {
       const order = await buildPricedOrder(history, { ...base(), parts: [{ line_id: "history", part_no: "MATCH", quantity: 3 }] }, opts);
       expect(order.lines[0]).toMatchObject({ pricing_source: "historical_analog", unit_price: 2.0001,
-        extended_price: 6, confidence: expect.any(Number) });
+        extended_price: 6, confidence: expect.any(Number), proposal_status: "NUMERIC_PROVISIONAL",
+        evidence_status: "HISTORICAL_INTERNAL_CALCULATION" });
       expect(order.lines[0]!.analogs.map((analog) => analog.quote_no)).toEqual(["past"]);
       expect(order.lines[0]!.pricing_reason).toContain("fallback:");
       expect(order.lines[0]!.warnings.join(" ")).toContain("nominal as-quoted dollars");
@@ -163,6 +165,8 @@ describe("priced orders", () => {
     expect(markdown).not.toContain("<script>");
     expect(markdown).not.toContain("<img>");
     expect(markdown).toContain("a\\|b");
+    expect(markdown).toContain("NUMERIC\\_PROVISIONAL");
+    expect(markdown).toContain("OPERATOR\\_INPUT");
     expect(markdown).toContain("&lt;script&gt;");
   });
 });
