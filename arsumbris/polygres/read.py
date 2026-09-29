@@ -108,8 +108,8 @@ def read(conn, request):
     with conn.transaction():
         conn.execute("set transaction read only")
         if action == "corpora":
-            rows = conn.execute("select corpus_id,document_count,page_count,price_count from document_corpora order by corpus_id limit 51").fetchall()
-            return {"action": action, "corpora": [dict(zip(("corpus", "documents", "pages", "verified_prices"), r)) for r in rows[:50]],
+            rows = conn.execute("select corpus_id,document_count,page_count,price_count,ingested_at from document_corpora order by ingested_at desc,corpus_id limit 51").fetchall()
+            return {"action": action, "corpora": [dict(zip(("corpus", "documents", "pages", "verified_prices", "ingested_at"), r)) for r in rows[:50]],
                     "has_more": len(rows) > 50}
 
         corpus_id = request["corpus"]

@@ -109,6 +109,7 @@ async function estimatePart(
     exclude: opts.exclude,
     asOf: opts.asOf,
   });
+  const historicalEvidencePresent = candidates.length > 0;
   const partNo = normalizePartNo(part.part_no ?? "");
   if (partNo) {
     const priceable = (c: typeof candidates[number]) => c.breaks.some((b) =>
@@ -179,6 +180,23 @@ async function estimatePart(
     warnings.push("price uses internal quote calculations, not verified issued customer-quote prices");
   }
 
+  const evidence_status = priced.unit_price !== null
+    ? priced.points.some((point) => candidates.some((candidate) =>
+      candidate.row.quote_no === point.quote_no && candidate.row.price_evidence?.price_basis === "customer_quote_pdf"))
+      ? "VERIFIED_CUSTOMER_PDF" as const
+      : "HISTORICAL_INTERNAL_CALCULATION" as const
+    : historicalEvidencePresent
+      ? "PRESENT_BUT_NO_USABLE_PRICE" as const
+      : "NONE" as const;
+  const proposal_status = priced.unit_price !== null ? "NUMERIC_PROVISIONAL" as const : "MISSING" as const;
+  const uncertainties = priced.unit_price !== null
+    ? evidence_status === "VERIFIED_CUSTOMER_PDF"
+      ? ["Historical issued price has unknown outcome", "Historical price is not current-cost proof"]
+      : ["Historical nominal price is not current-cost proof"]
+    : evidence_status === "PRESENT_BUT_NO_USABLE_PRICE"
+      ? ["Evidence is present but no usable unit price was found"]
+      : ["No admissible evidence or operator-supported amount exists"];
+
   return {
     part,
     unit_price: priced.unit_price !== null ? Math.round(priced.unit_price * 10000) / 10000 : null,
@@ -191,6 +209,14 @@ async function estimatePart(
     confidence: priced.confidence,
     method: priced.method,
     status_basis: verdict.source === "jev" ? `jev+${strategy}` : `fallback:${strategy}`,
+    proposal_status,
+    evidence_status,
+    next_action: priced.unit_price !== null
+      ? "Human review required before approval; verify current costs and assumptions"
+      : evidence_status === "PRESENT_BUT_NO_USABLE_PRICE"
+        ? "Operator follow-up: provide an explicit unit price or supported cost-plus inputs"
+        : "No defensible basis; obtain operator-supported pricing or hold",
+    uncertainties,
     analogs: candidates.map((c) => ({
       quote_no: c.row.quote_no,
       quote_date: c.row.quote_date,

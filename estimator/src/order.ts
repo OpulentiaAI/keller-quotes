@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { estimate } from "./estimate.js";
 import { JevClient } from "./jev.js";
 import type { QuoteRegister } from "./register.js";
-import type { LineEstimate, PartRequest } from "./types.js";
+import type { EvidenceStatus, LineEstimate, PartRequest, ProposalStatus } from "./types.js";
 
 export type OrderPricing =
   | { method: "unit_price"; unit_price: number; reason: string }
@@ -35,6 +35,10 @@ export interface PricedOrderLine {
   confidence: number | null;
   analogs: LineEstimate["analogs"];
   warnings: string[];
+  proposal_status: ProposalStatus;
+  evidence_status: EvidenceStatus;
+  next_action: string;
+  uncertainties: string[];
 }
 
 export interface PricedOrder {
@@ -184,11 +188,19 @@ export async function buildPricedOrder(reg: QuoteRegister, request: unknown, opt
     let confidence: number | null = null;
     let analogs: LineEstimate["analogs"] = [];
     let lineWarnings: string[] = [];
+    let proposal_status: ProposalStatus = "MISSING";
+    let evidence_status: EvidenceStatus = "NONE";
+    let next_action = "No defensible basis; obtain operator-supported pricing or hold";
+    let uncertainties = ["No admissible evidence or operator-supported amount exists"];
     if (pricing?.method === "unit_price") {
       unit4 = scaled(pricing.unit_price, `line ${line_id}.unit_price`, 4, true);
       pricing_source = "explicit_unit_price";
       pricing_reason = pricing.reason;
       lineWarnings = ["Operator-supplied unit price is a proposal, not approval"];
+      proposal_status = "NUMERIC_PROVISIONAL";
+      evidence_status = "OPERATOR_INPUT";
+      next_action = "Human review required before approval; verify operator price basis and assumptions";
+      uncertainties = ["Operator amount is not verified current cost or approval"];
     } else if (pricing?.method === "cost_plus") {
       const costs = scaled(pricing.material_per_unit, "material_per_unit", 4) + scaled(pricing.labor_per_unit, "labor_per_unit", 4) + scaled(pricing.outside_per_unit, "outside_per_unit", 4);
       const setup = scaled(pricing.setup_total, "setup_total", 2);
@@ -200,6 +212,10 @@ export async function buildPricedOrder(reg: QuoteRegister, request: unknown, opt
       pricing_source = "cost_build_up";
       pricing_reason = pricing.reason;
       lineWarnings = ["Operator-supplied cost inputs and margin are a proposal, not approval"];
+      proposal_status = "NUMERIC_PROVISIONAL";
+      evidence_status = "OPERATOR_INPUT";
+      next_action = "Human review required before approval; verify operator costs, margin, and assumptions";
+      uncertainties = ["Operator cost inputs and margin are not verified current costs or approval"];
     } else {
       const result = await estimate(reg, { customer: request.customer, customer_id: request.customer_id, rfq_no: request.rfq_no, parts: [part] }, {
         jev: new JevClient(""), asOf: request.quote_date,
@@ -207,12 +223,16 @@ export async function buildPricedOrder(reg: QuoteRegister, request: unknown, opt
       const line = result.lines[0]!;
       analogs = line.analogs;
       lineWarnings = line.warnings;
+      evidence_status = line.evidence_status;
+      next_action = line.next_action;
+      uncertainties = line.uncertainties;
       if (line.unit_price !== null && Number.isFinite(line.unit_price) && line.unit_price > 0) {
         unit4 = scaled(line.unit_price, `line ${line_id}.historical_unit_price`, 4, true);
         pricing_source = "historical_analog";
         pricing_reason = `Offline historical analog (${line.method}; ${line.status_basis})`;
         confidence = line.confidence;
         lineWarnings = [...lineWarnings, "Historical analog prices are nominal as-quoted dollars, not current-cost estimates"];
+        proposal_status = "NUMERIC_PROVISIONAL";
       }
     }
     const cents = unit4 === null ? null : extend(unit4, part.quantity, `line ${line_id}`);
@@ -221,7 +241,7 @@ export async function buildPricedOrder(reg: QuoteRegister, request: unknown, opt
     warnings.push(...lineWarnings.map((warning) => `line ${line_id}: ${warning}`));
     lines.push({ line_id, part, unit_price: unit4 === null ? null : amount(unit4, 4, `line ${line_id}.unit_price`),
       extended_price: cents === null ? null : amount(cents, 2, `line ${line_id}.extended_price`), pricing_source, pricing_reason,
-      confidence, analogs, warnings: lineWarnings });
+      confidence, analogs, warnings: lineWarnings, proposal_status, evidence_status, next_action, uncertainties });
   }
   const shipping = request.charges?.shipping ?? null;
   const tax = request.charges?.tax ?? null;
@@ -255,9 +275,9 @@ export function renderOrderMarkdown(order: PricedOrder): string {
     `RFQ: ${md(order.request.rfq_no)}  `,
     `Order notes: ${md(order.request.notes)}  `,
     `State: ${md(order.state)} — human review required`, "",
-    "| Line | Part / description | Qty | Unit price | Extended | Source | Confidence |",
-    "| --- | --- | ---: | ---: | ---: | --- | ---: |",
-    ...order.lines.map((line) => `| ${md(line.line_id)} | ${md(line.part.part_no ?? line.part.description)} | ${line.part.quantity} | ${line.unit_price === null ? "—" : `$${line.unit_price.toFixed(4)}`} | ${money(line.extended_price)} | ${md(line.pricing_source)} | ${line.confidence ?? "—"} |`),
+    "| Line | Part / description | Qty | Unit price | Extended | Source | Proposal | Evidence | Next action |",
+    "| --- | --- | ---: | ---: | ---: | --- | --- | --- | --- |",
+    ...order.lines.map((line) => `| ${md(line.line_id)} | ${md(line.part.part_no ?? line.part.description)} | ${line.part.quantity} | ${line.unit_price === null ? "—" : `$${line.unit_price.toFixed(4)}`} | ${money(line.extended_price)} | ${md(line.pricing_source)} | ${md(line.proposal_status)} | ${md(line.evidence_status)} | ${md(line.next_action)} |`),
     "", `Priced subtotal (partial diagnostic): ${money(order.priced_subtotal)}  `,
     `Subtotal (lines): ${money(order.subtotal)}  `, `Shipping: ${money(order.charges.shipping)}  `,
     `Tax: ${money(order.charges.tax)}  `,
@@ -268,6 +288,9 @@ export function renderOrderMarkdown(order: PricedOrder): string {
       `### ${md(line.line_id)}`, "",
       `Request line: ${md(JSON.stringify(order.request.parts.find((part) => part.line_id === line.line_id)))}  `,
       `Pricing reason: ${md(line.pricing_reason)}  `,
+      `Proposal status: ${md(line.proposal_status)}; evidence status: ${md(line.evidence_status)}  `,
+      `Next action: ${md(line.next_action)}  `,
+      ...line.uncertainties.map((uncertainty) => `- Uncertainty: ${md(uncertainty)}`),
       ...line.warnings.map((warning) => `- Warning: ${md(warning)}`),
       ...line.analogs.map((analog) => `- Analog ${md(analog.quote_no)} (${md(analog.quote_date)}): ${md(analog.part_no)}; ${md(analog.description)}; ${md(analog.customer)}; ${md(analog.status)}; score ${analog.score}; price basis ${md(analog.price_evidence.price_basis)}${analog.price_evidence.price_basis === "customer_quote_pdf"
         ? `; source ${md(analog.price_evidence.source_document)}; PDF SHA-256 ${md(analog.price_evidence.source_document_sha256)}; transcript SHA-256 ${md(analog.price_evidence.source_transcript_sha256)}; source field ${md(analog.price_evidence.source_price_field)}; quote letter ${md(analog.quote_letter)}; letter date ${md(analog.letter_date)}` : ""}`),

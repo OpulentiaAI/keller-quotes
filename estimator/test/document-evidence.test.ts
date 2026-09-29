@@ -79,6 +79,8 @@ describe("document-backed price evidence", () => {
     const request = { parts: [{ part_no: "P-1", quantity: 10 }] };
     const line = (await estimate(register, request, { jev: new JevClient("") })).lines[0]!;
     expect(line.unit_price).toBe(12.5);
+    expect(line.proposal_status).toBe("NUMERIC_PROVISIONAL");
+    expect(line.evidence_status).toBe("VERIFIED_CUSTOMER_PDF");
     expect(line.analogs[0]).toMatchObject({ price_evidence: document, quote_letter: "00012345", letter_date: "2020-01-02", status: "unknown" });
     expect(JSON.stringify(line)).toContain(digest);
     expect(line.warnings.join(" ")).toContain("unknown/unverified");
@@ -90,6 +92,8 @@ describe("document-backed price evidence", () => {
     }, { registerSha256: "c".repeat(64) });
     expect(order.requires_human_review).toBe(true);
     expect(order.state).toBe("PRICED_REQUIRES_REVIEW");
+    expect(order.lines[0]!.proposal_status).toBe("NUMERIC_PROVISIONAL");
+    expect(order.lines[0]!.evidence_status).toBe("VERIFIED_CUSTOMER_PDF");
     expect(order.lines[0]!.analogs[0]).toMatchObject({ price_evidence: document, status: "unknown" });
     const markdown = renderOrderMarkdown(order).replaceAll("\\", "");
     for (const value of [document.source_document, digest, transcript, "PRICE", "00012345", "2020-01-02", "customer_quote_pdf"]) {
