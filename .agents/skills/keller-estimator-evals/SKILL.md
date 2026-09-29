@@ -13,6 +13,8 @@ Ars Umbris `keller_quote` builds reviewed internal order drafts and `keller_sour
 
 Before starting a scored MCP batch, use the documented service launcher and verify a real evidence read and draft generation. Successful tool discovery alone does not validate backend dependencies.
 
+For Keller scoped-quote preflight, include a case whose full-corpus top analog is excluded and verify the persisted register contains only eligible rows. A successful quote whose chosen sources happen to be allowed does not establish pre-estimation isolation.
+
 Before launching blinded Keller workers, inspect the actual content delivered by every allowlisted skill and contract, not just its path. Keep historical scores and experiment outcomes in operator-only files, and verify that the scoped client denies those files.
 
 For short **model-driven workflow** evaluations, use fresh Luna-max worker contexts for three frozen RFQs through `Keller Workflow` standard MCP, then a separate Luna-max judge. Freeze request/oracle/criteria/model/skill hashes, retain every tool response and persisted draft, and preselect a fresh three-question batch before editing skills. Mechanical validation and judging receive equal weight, but their failures cannot cancel each other. See [the workflow evaluation contract](../../../docs/mcp-workflow-evaluations.md) for V1–V5/J1–J5, grader invocation, adversarial calibration and the separate learning-review loop. These tests do not replace the historical replay below.
