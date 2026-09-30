@@ -26,6 +26,24 @@ const reg = new QuoteRegister([
 ]);
 
 describe("retrieval search metadata", () => {
+  it("keeps placeholder IDs available by description without treating them as part matches", () => {
+    const register = new QuoteRegister([
+      row({ quote_no: "placeholder", part_no: "SYN-12????", description: "BRACKET", quantity: 10, unit_price: 25 }),
+      row({ quote_no: "wildcard", part_no: "SYN-12*", description: "BRACKET", quantity: 10, unit_price: 30 }),
+      row({ quote_no: "exact", part_no: "SYN-12", description: "BRACKET", quantity: 10, unit_price: 40 }),
+    ]);
+    const found = retrieve(register, { part_no: "SYN-12", description: "BRACKET", quantity: 10 });
+    expect(found.find((c) => c.row.quote_no === "exact")?.reasons).toContain("exact part_no");
+    for (const quote_no of ["placeholder", "wildcard"]) {
+      const candidate = found.find((c) => c.row.quote_no === quote_no)!;
+      expect(candidate).toBeDefined();
+      expect(candidate.reasons).toContain("desc tokens 1/1");
+      expect(candidate.reasons.some((reason) => reason.startsWith("part_no") || reason === "exact part_no")).toBe(false);
+    }
+    const placeholderRequest = retrieve(register, { part_no: "SYN-12?", description: "BRACKET", quantity: 10 });
+    expect(placeholderRequest.every((c) => c.reasons.every((reason) => reason !== "exact part_no" && !reason.startsWith("part_no")))).toBe(true);
+  });
+
   it("preserves exact, prefix, fuzzy and drawing match reasons", () => {
     const found = retrieve(reg, { part_no: "abc-123", drawing_ref: "dwg 7", quantity: 10 }, { limit: 20 });
     expect(found.find((c) => c.row.quote_no === "A")?.reasons).toEqual(["exact part_no", "drawing_no match", "won quote"]);

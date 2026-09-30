@@ -81,14 +81,16 @@ export function retrieve(
   };
 
   // 1. Part-number matching
-  if (wantPn) {
+  if (wantPn && !/[?*]/.test(part.part_no ?? "")) {
     const wantBigrams = partBigrams(wantPn);
     for (const g of reg.exactPart(part.part_no!)) {
+      if (/[?*]/.test(g.head.part_no)) continue;
       bump(g, 1.0, "exact part_no");
     }
     if (scored.size < 200) {
       for (const g of reg.groups) {
         if (scored.has(g)) continue;
+        if (/[?*]/.test(g.head.part_no)) continue;
         const { partNo: pn, partBigrams: pnBigrams } = g.search;
         if (!pn) continue;
         if (pn.startsWith(wantPn) || wantPn.startsWith(pn)) {

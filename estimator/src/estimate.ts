@@ -1,4 +1,5 @@
 import type {
+  Candidate,
   EstimateRequest,
   LineEstimate,
   PartRequest,
@@ -8,7 +9,6 @@ import { QuoteRegister, normalizePartNo } from "./register.js";
 import { retrieve } from "./retrieve.js";
 import { JevClient } from "./jev.js";
 import { price } from "./price.js";
-import type { Candidate } from "./types.js";
 
 function hasUsableBreak(candidate: Candidate): boolean {
   return candidate.breaks.some((b) =>
@@ -118,23 +118,21 @@ async function estimatePart(
   });
   const historicalEvidencePresent = candidates.length > 0;
   const partNo = normalizePartNo(part.part_no ?? "");
-  if (partNo) {
-    const priceable = (c: typeof candidates[number]) => c.breaks.some((b) =>
-      b.quantity !== null && Number.isFinite(b.quantity) && b.quantity > 0 &&
-      b.unit_price !== null && Number.isFinite(b.unit_price) && b.unit_price > 0);
-    const exact = candidates.filter((c) => normalizePartNo(c.row.part_no) === partNo && priceable(c));
+  if (partNo && !/[?*]/.test(part.part_no ?? "")) {
+    const exact = candidates.filter((c) => !/[?*]/.test(c.row.part_no) &&
+      normalizePartNo(c.row.part_no) === partNo && hasUsableBreak(c));
     if (exact.length) {
       candidates = exact;
     } else {
-      candidates = candidates.filter((c) => normalizePartNo(c.row.part_no) !== partNo || priceable(c));
+      candidates = candidates.filter((c) => normalizePartNo(c.row.part_no) !== partNo || hasUsableBreak(c));
     }
   }
 
   const verdict = await jev.rankAnalogs(part, candidates, opts.rankLimit);
   if (verdict.source === "jev") {
     const order = new Map(verdict.rankedIds.map((id, i) => [id, i]));
-    const partNo = normalizePartNo(part.part_no ?? "");
     const partPriority = (candidate: Candidate) => {
+      if (/[?*]/.test(part.part_no ?? "") || /[?*]/.test(candidate.row.part_no)) return 0;
       const candidatePartNo = normalizePartNo(candidate.row.part_no);
       if (!partNo || !candidatePartNo) return 0;
       if (candidatePartNo === partNo) return 2;
@@ -145,15 +143,14 @@ async function estimatePart(
         (order.get(a.row.quote_no) ?? 999) - (order.get(b.row.quote_no) ?? 999),
     );
   }
-  const preScreenCandidates = candidates;
-
   const screeningBudget = Math.min(opts.screenTopN, opts.rankLimit);
   if (candidates.length > screeningBudget) {
     const skipped = candidates.length - screeningBudget;
     warnings.push(`screening budget skipped ${skipped} analog${skipped === 1 ? "" : "s"}`);
   }
+  const screenCandidates = candidates.slice(0, screeningBudget);
   const screened: typeof candidates = [];
-  for (const c of candidates.slice(0, screeningBudget)) {
+  for (const c of screenCandidates) {
     const v = await jev.screenCandidate(part, c);
     if (v !== "admit") {
       warnings.push(`${v === "reject" ? "rejected" : "quarantined"} analog ${c.row.quote_no}`);
@@ -163,7 +160,7 @@ async function estimatePart(
   }
   const noAdmittedCandidates = screened.length === 0;
   const provisionalFallback = jev.enabled && noAdmittedCandidates
-    ? preScreenCandidates.find(hasUsableBreak)
+    ? screenCandidates.find(hasUsableBreak)
     : undefined;
   candidates = provisionalFallback ? [provisionalFallback] : screened;
   if (provisionalFallback) {
