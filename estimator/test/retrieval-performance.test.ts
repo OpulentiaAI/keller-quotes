@@ -44,6 +44,31 @@ describe("retrieval search metadata", () => {
     expect(placeholderRequest.every((c) => c.reasons.every((reason) => reason !== "exact part_no" && !reason.startsWith("part_no")))).toBe(true);
   });
 
+  it("refuses part-number credit for bare assembly fragments and wildcards", () => {
+    const register = new QuoteRegister([
+      row({ quote_no: "junk-digit", part_no: "-1", description: "ITEM 1", quantity: 10, unit_price: 5 }),
+      row({ quote_no: "junk-short", part_no: "65", description: "BRACKET", quantity: 10, unit_price: 6 }),
+      row({ quote_no: "junk-wild", part_no: "620-32726-00?", description: "BRACKET", quantity: 10, unit_price: 7 }),
+    ]);
+    const found = retrieve(register, { part_no: "620-32726-00", description: "BRACKET", quantity: 10 }, { limit: 10 });
+    for (const quote_no of ["junk-digit", "junk-short", "junk-wild"]) {
+      const candidate = found.find((c) => c.row.quote_no === quote_no);
+      expect(candidate?.reasons ?? []).not.toContain("part_no prefix");
+      expect(candidate?.reasons ?? []).not.toContain("exact part_no");
+      expect((candidate?.reasons ?? []).some((r) => r.startsWith("part_no fuzzy"))).toBe(false);
+    }
+  });
+
+  it("scores a candidate whose description tokens only match through its spec notes", () => {
+    const register = new QuoteRegister([
+      row({ quote_no: "via-comment", part_no: "A-1", description: "PLATE ITEM", comment: "BRACKET SUPPORT", quantity: 10, unit_price: 5 }),
+    ]);
+    const found = retrieve(register, { description: "BRACKET SUPPORT", quantity: 10 }, { limit: 10 });
+    const candidate = found.find((c) => c.row.quote_no === "via-comment");
+    expect(candidate).toBeDefined();
+    expect(candidate!.reasons).toContain("desc tokens 2/2");
+  });
+
   it("preserves exact, prefix, fuzzy and drawing match reasons", () => {
     const found = retrieve(reg, { part_no: "abc-123", drawing_ref: "dwg 7", quantity: 10 }, { limit: 20 });
     expect(found.find((c) => c.row.quote_no === "A")?.reasons).toEqual(["exact part_no", "drawing_no match", "won quote"]);
