@@ -32,18 +32,6 @@ function materialMatch(want: string | undefined, rowMaterial: string, comment: s
   return descTokens(w).some((t) => hay.includes(t));
 }
 
-/** A part number carries prefix evidence only when it is substantial, not a lone digit or junk fragment. */
-function meaningfulPartNo(pn: string): boolean {
-  return pn.length >= 6 && /[A-Z0-9]{4}/.test(pn);
-}
-
-function sharedPrefixLength(a: string, b: string): number {
-  const max = Math.min(a.length, b.length);
-  let i = 0;
-  while (i < max && a[i] === b[i]) i++;
-  return i;
-}
-
 export function retrieve(
   reg: QuoteRegister,
   part: PartRequest,
@@ -105,18 +93,11 @@ export function retrieve(
         if (/[?*]/.test(g.head.part_no)) continue;
         const { partNo: pn, partBigrams: pnBigrams } = g.search;
         if (!pn) continue;
-        const prefix = sharedPrefixLength(wantPn, pn);
-        if (prefix >= 4 && meaningfulPartNo(wantPn) && meaningfulPartNo(pn)) {
-          if (pn.startsWith(wantPn) || wantPn.startsWith(pn)) {
-            bump(g, 0.75, "part_no prefix");
-          } else {
-            const d = dice(wantPn, wantBigrams, pn, pnBigrams);
-            if (d >= 0.8) {
-              bump(g, d * 0.8, `part_no fuzzy ${d.toFixed(2)}`);
-            } else if (prefix >= 6) {
-              bump(g, 0.5 + 0.2 * Math.min(1, (prefix - 6) / 6), `part_no family prefix ${prefix}`);
-            }
-          }
+        if (pn.startsWith(wantPn) || wantPn.startsWith(pn)) {
+          bump(g, 0.75, "part_no prefix");
+        } else {
+          const d = dice(wantPn, wantBigrams, pn, pnBigrams);
+          if (d >= 0.8) bump(g, d * 0.8, `part_no fuzzy ${d.toFixed(2)}`);
         }
       }
     }

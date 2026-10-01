@@ -44,32 +44,6 @@ describe("retrieval search metadata", () => {
     expect(placeholderRequest.every((c) => c.reasons.every((reason) => reason !== "exact part_no" && !reason.startsWith("part_no")))).toBe(true);
   });
 
-  it("ignores junk part fragments in prefix matching while keeping meaningful IDs", () => {
-    const register = new QuoteRegister([
-      row({ quote_no: "junk-digit", part_no: "-6", description: "PLATE", quantity: 10, unit_price: 5 }),
-      row({ quote_no: "junk-short", part_no: "65", description: "PLATE", quantity: 10, unit_price: 6 }),
-      row({ quote_no: "meaningful", part_no: "620-32700-00", description: "SHELF", quantity: 10, unit_price: 7 }),
-    ]);
-    const found = retrieve(register, { part_no: "620-32726-00", description: "SHELF MIDDLE", quantity: 10 });
-    for (const quote_no of ["junk-digit", "junk-short"]) {
-      const candidate = found.find((c) => c.row.quote_no === quote_no);
-      expect(candidate?.reasons ?? []).not.toContain("part_no prefix");
-    }
-    const meaningful = found.find((c) => c.row.quote_no === "meaningful")!;
-    expect(meaningful.reasons).toContain("part_no family prefix 6");
-  });
-
-  it("ranks a family-prefix analog above generic token matches", () => {
-    const register = new QuoteRegister([
-      row({ quote_no: "generic-a", part_no: "535-8380-00", description: "BRKT", quantity: 500, unit_price: 30 }),
-      row({ quote_no: "generic-b", part_no: "P-09319-0398", description: "BRKT", quantity: 500, unit_price: 31 }),
-      row({ quote_no: "family", part_no: "M-PC-0270-00", description: "PRIVACY PANEL BRKT", quantity: 500, unit_price: 12 }),
-    ]);
-    const found = retrieve(register, { part_no: "M-PC-0273-HS", description: "PRIVACY PANEL BRKT.", quantity: 500 }, { limit: 12 });
-    const ranks = Object.fromEntries(found.map((c, i) => [c.row.quote_no, i + 1]));
-    expect(ranks["family"]).toBe(1);
-  });
-
   it("preserves exact, prefix, fuzzy and drawing match reasons", () => {
     const found = retrieve(reg, { part_no: "abc-123", drawing_ref: "dwg 7", quantity: 10 }, { limit: 20 });
     expect(found.find((c) => c.row.quote_no === "A")?.reasons).toEqual(["exact part_no", "drawing_no match", "won quote"]);
