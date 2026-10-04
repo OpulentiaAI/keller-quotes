@@ -152,6 +152,113 @@ describe("exact-part pricing policy", () => {
   });
 });
 
+describe("usable fallback pricing evidence before screening budgets", () => {
+  it.each([undefined, "REQ-77"])("does not spend fallback screening slots on unusable fuzzy history for part %s", async (part_no) => {
+    const history = { description: "RETAINER PLATE", quantity: 10, quote_date: "2024-01-01" };
+    const register = new QuoteRegister([
+      row({ ...history, quote_no: "missing-price", unit_price: null }),
+      row({ ...history, quote_no: "zero-price", unit_price: 0 }),
+      row({ ...history, quote_no: "negative-price", unit_price: -10 }),
+      row({ ...history, quote_no: "missing-quantity", quantity: null, unit_price: 10 }),
+      row({ ...history, quote_no: "zero-quantity", quantity: 0, unit_price: 10 }),
+      row({ ...history, quote_no: "nonfinite-quantity", quantity: Infinity, unit_price: 10 }),
+      row({ ...history, quote_no: "nonfinite-price", unit_price: NaN }),
+      row({ ...history, quote_no: "usable", unit_price: 22, quote_date: "2020-01-01" }),
+      row({ ...history, quote_no: "second-usable", unit_price: 30, quote_date: "2019-01-01" }),
+    ]);
+    const seen: string[] = [];
+    const jev = {
+      enabled: false,
+      rankAnalogs: async (_part: unknown, candidates: Candidate[], limit: number) => {
+        expect(limit).toBe(2);
+        expect(candidates.map((c) => c.row.quote_no)).toContain("missing-price");
+        expect(candidates.map((c) => c.row.quote_no)).toContain("usable");
+        return { rankedIds: candidates.map((c) => c.row.quote_no), probabilities: {}, source: "fallback" as const };
+      },
+      screenCandidate: async (_part: unknown, c: Candidate) => {
+        seen.push(c.row.quote_no);
+        return "admit" as const;
+      },
+      chooseStrategy: async (_part: unknown, candidates: Candidate[]) => {
+        expect(candidates.map((c) => c.row.quote_no)).toEqual(["usable"]);
+        return "median_won" as const;
+      },
+    } as unknown as JevClient;
+    const result = await estimate(register, { parts: [{ part_no, description: "RETAINER PLATE", quantity: 10 }] },
+      { jev, rankLimit: 2, screenTopN: 1 });
+    expect(seen).toEqual(["usable"]);
+    expect(result.lines[0]!.unit_price).toBe(22);
+    expect(result.lines[0]!.proposal_status).toBe("NUMERIC_PROVISIONAL");
+    expect(result.lines[0]!.warnings).toContain("screening budget skipped 1 analog");
+  });
+
+  it("applies the same usable-break gate when an enabled ranker falls back", async () => {
+    const register = new QuoteRegister([
+      row({ quote_no: "unpriced", description: "RETAINER PLATE", quantity: 10, quote_date: "2024-01-01" }),
+      row({ quote_no: "usable", description: "RETAINER PLATE", quantity: 10, unit_price: 22, quote_date: "2020-01-01" }),
+    ]);
+    const jev = {
+      enabled: true,
+      rankAnalogs: async () => ({ rankedIds: ["unpriced", "usable"], probabilities: {}, source: "fallback" as const }),
+      screenCandidate: async (_part: unknown, c: Candidate) => {
+        expect(c.row.quote_no).toBe("usable");
+        return "admit" as const;
+      },
+      chooseStrategy: async () => "median_won" as const,
+    } as unknown as JevClient;
+    const result = await estimate(register, { parts: [{ description: "RETAINER PLATE", quantity: 10 }] },
+      { jev, screenTopN: 1 });
+    expect(result.lines[0]!.unit_price).toBe(22);
+    expect(result.lines[0]!.proposal_status).toBe("NUMERIC_PROVISIONAL");
+  });
+
+  it("retains the evidence-present hold when all retrieved breaks are unusable", async () => {
+    const register = new QuoteRegister([
+      row({ quote_no: "unpriced", description: "RETAINER PLATE", quantity: 10, unit_price: null }),
+    ]);
+    const result = await estimate(register, { parts: [{ description: "RETAINER PLATE", quantity: 10 }] },
+      { jev: new JevClient("") });
+    expect(result.lines[0]!.unit_price).toBeNull();
+    expect(result.lines[0]!.evidence_status).toBe("PRESENT_BUT_NO_USABLE_PRICE");
+    expect(result.lines[0]!.proposal_status).toBe("MISSING");
+    expect(result.lines[0]!.analogs).toEqual([]);
+  });
+
+  it("does not bypass admission for a usable fuzzy candidate", async () => {
+    const register = new QuoteRegister([
+      row({ quote_no: "usable", description: "RETAINER PLATE", quantity: 10, unit_price: 22 }),
+    ]);
+    const jev = {
+      enabled: false,
+      rankAnalogs: async () => ({ rankedIds: ["usable"], probabilities: {}, source: "fallback" as const }),
+      screenCandidate: async () => "reject" as const,
+      chooseStrategy: async (_part: unknown, candidates: Candidate[]) => {
+        expect(candidates).toEqual([]);
+        return "median_won" as const;
+      },
+    } as unknown as JevClient;
+    const result = await estimate(register, { parts: [{ description: "RETAINER PLATE", quantity: 10 }] }, { jev });
+    expect(result.lines[0]!.unit_price).toBeNull();
+    expect(result.lines[0]!.analogs).toEqual([]);
+    expect(result.lines[0]!.warnings).toContain("rejected analog usable");
+  });
+
+  it("does not restore excluded, future or revised fuzzy sources while removing unusable history", async () => {
+    const history = { description: "RETAINER PLATE", quantity: 10, unit_price: 22 };
+    const register = new QuoteRegister([
+      row({ ...history, quote_no: "excluded", quote_date: "2020-01-01" }),
+      row({ ...history, quote_no: "future", quote_date: "2025-01-01" }),
+      row({ ...history, quote_no: "revised", quote_date: "2020-01-01", date_stamp: "2025-01-01" }),
+      row({ ...history, quote_no: "unpriced", quote_date: "2023-01-01", unit_price: null }),
+      row({ ...history, quote_no: "safe", quote_date: "2020-01-01" }),
+    ]);
+    const result = await estimate(register, { parts: [{ description: "RETAINER PLATE", quantity: 10 }] },
+      { jev: new JevClient(""), exclude: new Set(["excluded"]), asOf: "2024-01-01", screenTopN: 1 });
+    expect(result.lines[0]!.unit_price).toBe(22);
+    expect(result.lines[0]!.analogs.map((a) => a.quote_no)).toEqual(["safe"]);
+  });
+});
+
 describe("quantity relevance and range warnings", () => {
   it("favors nearer historical break quantities with zero penalty at an exact quantity", () => {
     const near = candidate("near", 10, 10);

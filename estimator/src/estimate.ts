@@ -142,6 +142,8 @@ async function estimatePart(
       (a, b) => partPriority(b) - partPriority(a) ||
         (order.get(a.row.quote_no) ?? 999) - (order.get(b.row.quote_no) ?? 999),
     );
+  } else {
+    candidates = candidates.filter(hasUsableBreak);
   }
   const screeningBudget = Math.min(opts.screenTopN, opts.rankLimit);
   if (candidates.length > screeningBudget) {
