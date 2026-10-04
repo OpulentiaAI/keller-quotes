@@ -1,0 +1,26 @@
+extends: mcp.tool::au-mcp-sdk
+fields:
+  #: Exact client workflow; operator evaluation reports are never knowledge inputs.
+  workflow?: [quoting, evidence-review]
+  #: Knowledge eligibility date, YYYY-MM-DD. Use the source cutoff for business specifications.
+  as_of?: String
+  #: Exact customer identity, never a fuzzy cross-customer match.
+  customer_id?: String
+  #: Exact part identity. Specifications also require the matching customer and revision.
+  part_no?: String
+  #: Independently supplied revision; never infer it from a similar part or a drawing filename.
+  revision?: String
+  #: Exact material scope when present on a record.
+  material?: String
+  #: Maximum approved records, 1 to 10; default 10.
+  limit?: Number{>=1 & <=10 & integer}
+  #: Alternative to the individual query fields: JSON array of 1 to 50 query objects with workflow, as_of and optional exact scopes. Supply queries alone for one batched lookup.
+  queries?: String
+meta:
+  - type: plugin-runtime-meta::au-mcp-sdk
+    entry: ./arsumbris/knowledge/tool.ts
+    contractVersion: 0
+  - type: tool-access-meta::au-mcp-sdk
+    broker: none
+  - type: tool-presentation-meta::au-mcp-sdk
+    description: "Read approved, evidence-hashed Keller procedure/specification knowledge by exact workflow, date, customer, part, revision and material. Returns bounded supporting records and citations from an owner-bound private library. No write, arbitrary path, model call, inferred price, or quote release. Unreviewed, retired, expired and mismatched records are excluded. Unavailable in existing blinded evaluation scopes."
