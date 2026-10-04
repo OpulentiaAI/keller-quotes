@@ -109,6 +109,11 @@ function hash(value) {
   if (typeof value !== 'string' || !hex.test(value)) fail('INVALID_HASH')
 }
 
+function sameVersion(left, right) {
+  return encode([left.statement, left.valid_from, left.valid_until ?? null, left.evidence]) ===
+    encode([right.statement, right.valid_from, right.valid_until ?? null, right.evidence])
+}
+
 function inside(parent, path) {
   const rel = relative(parent, path)
   return rel === '' || (!rel.startsWith(`..${sep}`) && rel !== '..' && !isAbsolute(rel))
@@ -391,7 +396,7 @@ export class KnowledgeStore {
           if (!candidate || data.packet_sha256 !== staged.packet_sha256 || data.review_sha256 !== review?.review_sha256 ||
               review.verdicts.find(item => item.index === candidate.index)?.verdict !== 'ACCEPT' || state.dispositions.has(key)) fail('INTEGRITY_ERROR')
           const scoped = [...state.records.values()].filter(record => record.status === 'ACTIVE' && encode(record.candidate.scope) === encode(candidate.scope))
-          const existing = scoped.find(record => record.candidate.statement === candidate.statement)
+          const existing = scoped.find(record => sameVersion(record.candidate, candidate))
           if (event.type === 'activate') {
             if (existing || scoped.some(record => record.candidate.kind === candidate.kind && record.candidate.topic === candidate.topic)) fail('INTEGRITY_ERROR')
             state.records.set(eventSha, { record_id: eventSha, record_sha256: eventSha, ...data, candidate, status: 'ACTIVE' })
@@ -479,7 +484,7 @@ export class KnowledgeStore {
       const data = { packet_id: packetId, packet_sha256: staged.packet_sha256, review_sha256: review.review_sha256,
         candidate_index: candidateIndex, operator_attestation: operator }
       const scoped = [...state.records.values()].filter(record => record.status === 'ACTIVE' && encode(record.candidate.scope) === encode(candidate.scope))
-      const existing = scoped.find(record => record.candidate.statement === candidate.statement)
+      const existing = scoped.find(record => sameVersion(record.candidate, candidate))
       if (existing) {
         const disposition = 'KEEP_EXISTING_REJECT_REDUNDANT'
         const dispositionSha = this.#append(state, 'duplicate', { ...data, existing_record_id: existing.record_id, disposition })

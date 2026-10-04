@@ -562,6 +562,32 @@ test('exact specifications outrank broad procedures before limiting, without inf
   assert.deepEqual(f.store.search(query).records.map(record => record.record_id), expected)
 })
 
+test('renewed validity and grounding require explicit retirement rather than discarding the accepted update', t => {
+  for (const change of ['validity', 'grounding']) {
+    const f = fixture(t)
+    f.accept()
+    const old = f.store.activate(f.packet.packet_id, 0, operator)
+    const next = clone(f.packet)
+    next.packet_id = `renewed-${change}`
+    if (change === 'validity') {
+      next.candidates[0].valid_from = '2027-01-01'
+      next.candidates[0].valid_until = '2027-12-31'
+    } else {
+      const source = join(f.sourceDir, 'renewed-observation.txt')
+      writeFileSync(source, f.bytes, { mode: 0o600 })
+      next.candidates[0].evidence[0].path = source
+    }
+    const staged = f.store.stage(next)
+    f.store.review(next.packet_id, f.review(staged))
+    throwsCode(() => f.store.activate(next.packet_id, 0, operator), 'ACTIVE_SCOPE_CONFLICT')
+    f.store.retire(old.record_id, 'Explicitly replace the prior version after checking the renewed source/window.')
+    const current = f.store.activate(next.packet_id, 0, operator)
+    assert.equal(current.status, 'ACTIVE')
+    const as_of = change === 'validity' ? '2027-01-01' : query.as_of
+    assert.equal(f.store.search({ ...query, as_of }).records[0].record_id, current.record_id)
+  }
+})
+
 test('operator attestation schema is strict, named, and requires both well-formed report hashes', t => {
   const f = fixture(t)
   f.accept()
