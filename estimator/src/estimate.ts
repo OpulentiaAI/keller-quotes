@@ -5,7 +5,8 @@ import type {
   PartRequest,
   QuoteEstimate,
 } from "./types.js";
-import { QuoteRegister, normalizePartNo } from "./register.js";
+import { QuoteRegister } from "./register.js";
+import { searchableIdentifier } from "./compatibility.js";
 import { retrieve } from "./retrieve.js";
 import { JevClient } from "./jev.js";
 import { price } from "./price.js";
@@ -48,7 +49,7 @@ export function assertEstimateRequest(req: unknown): asserts req is EstimateRequ
     if (typeof part.quantity !== "number" || !Number.isFinite(part.quantity) || part.quantity <= 0) {
       throw new Error(`request.parts[${i}].quantity must be a finite positive number`);
     }
-    for (const field of ["part_no", "description", "material", "finish", "drawing_ref", "notes"]) {
+    for (const field of ["part_no", "description", "material", "finish", "revision", "drawing_ref", "notes"]) {
       if (part[field] !== undefined && typeof part[field] !== "string") {
         throw new Error(`request.parts[${i}].${field} must be a string`);
       }
@@ -109,6 +110,9 @@ async function estimatePart(
   opts: { rankLimit: number; screenTopN: number; exclude?: Set<string>; asOf?: string },
 ): Promise<LineEstimate> {
   const warnings: string[] = [];
+  if (!searchableIdentifier(req.customer_id)) {
+    warnings.push("unresolved customer namespace — no usable request customer_id; historical matches are provisional and do not establish customer-qualified manufacturing identity");
+  }
   let candidates = retrieve(reg, part, {
     customer: req.customer,
     customerId: req.customer_id,
@@ -116,27 +120,25 @@ async function estimatePart(
     exclude: opts.exclude,
     asOf: opts.asOf,
   });
+  candidates = candidates.filter((candidate) => {
+    if (!candidate.incompatibilities?.length) return true;
+    warnings.push(`incompatible analog ${candidate.row.quote_no}: ${candidate.incompatibilities.join(", ")}`);
+    return false;
+  });
   const historicalEvidencePresent = candidates.length > 0;
-  const partNo = normalizePartNo(part.part_no ?? "");
-  if (partNo && !/[?*]/.test(part.part_no ?? "")) {
-    const exact = candidates.filter((c) => !/[?*]/.test(c.row.part_no) &&
-      normalizePartNo(c.row.part_no) === partNo && hasUsableBreak(c));
-    if (exact.length) {
-      candidates = exact;
-    } else {
-      candidates = candidates.filter((c) => normalizePartNo(c.row.part_no) !== partNo || hasUsableBreak(c));
-    }
+  const exact = candidates.filter((c) => c.reasons.includes("exact part_no") && hasUsableBreak(c));
+  if (exact.length) {
+    candidates = exact;
+  } else {
+    candidates = candidates.filter((c) => !c.reasons.includes("exact part_no") || hasUsableBreak(c));
   }
 
   const verdict = await jev.rankAnalogs(part, candidates, opts.rankLimit);
   if (verdict.source === "jev") {
     const order = new Map(verdict.rankedIds.map((id, i) => [id, i]));
     const partPriority = (candidate: Candidate) => {
-      if (/[?*]/.test(part.part_no ?? "") || /[?*]/.test(candidate.row.part_no)) return 0;
-      const candidatePartNo = normalizePartNo(candidate.row.part_no);
-      if (!partNo || !candidatePartNo) return 0;
-      if (candidatePartNo === partNo) return 2;
-      return candidatePartNo.startsWith(partNo) || partNo.startsWith(candidatePartNo) ? 1 : 0;
+      if (candidate.reasons.includes("exact part_no")) return 2;
+      return candidate.reasons.includes("part_no prefix") ? 1 : 0;
     };
     candidates = [...candidates].sort(
       (a, b) => partPriority(b) - partPriority(a) ||

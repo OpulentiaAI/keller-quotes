@@ -73,6 +73,8 @@ Supplier POs, invoices, certificates, manuals, and other transcripts remain avai
 
 Printed quantity, unit-price, and extension matches verify the numeric amounts, not the price-bearing PDF's historical availability. This validation applies only when building a **new** bundle: existing built corpora retain their prior contents and dates, so a code fix does not repair or regrade them. Review their chronology separately before relying on historical cutoff claims.
 
+For executable case-level adjudication without rebuilding or overwriting an existing corpus, use [the private source-bound assessment](ground-truth-assessment.md). It reopens pinned originals through explicitly approved paths, validates physical DBF references and complete PDF curves, and retains different letters/revisions, unsupported quantities and unresolved chronology as separate states. Only repeated layout whitespace is collapsed for the printed/source part comparison; punctuation and customer namespaces remain exact. Empty or `-` is permitted only as the printed presentation of an actually absent source revision and never establishes a known manufacturing revision. No PDF numeric agreement, posted-history win, archival mtime or narrative proves acceptance, actual manufacturing cost, current support or an optimal price. Independently inspected additional evidence and operator assertions remain distinct domains.
+
 ## Use the evidence in the existing workflow
 
 Pass the derivative explicitly; the default register is not replaced:

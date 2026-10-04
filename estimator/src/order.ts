@@ -132,11 +132,11 @@ export function assertOrderRequest(request: unknown): asserts request is OrderRe
   const ids = new Set<string>();
   for (const [i, item] of req.parts.entries()) {
     const path = `request.parts[${i}]`;
-    const part = object(item, path, ["line_id", "part_no", "description", "quantity", "material", "finish", "drawing_ref", "notes", "pricing"]);
+    const part = object(item, path, ["line_id", "part_no", "description", "quantity", "material", "finish", "revision", "drawing_ref", "notes", "pricing"]);
     text(part.line_id, `${path}.line_id`, true);
     if (ids.has(part.line_id as string)) throw new Error(`duplicate line_id: ${part.line_id}`);
     ids.add(part.line_id as string);
-    for (const key of ["part_no", "description", "material", "finish", "drawing_ref", "notes"]) text(part[key], `${path}.${key}`);
+    for (const key of ["part_no", "description", "material", "finish", "revision", "drawing_ref", "notes"]) text(part[key], `${path}.${key}`);
     if (!(typeof part.part_no === "string" && part.part_no.trim()) &&
       !(typeof part.description === "string" && part.description.trim())) throw new Error(`${path} needs part_no or description`);
     if (!Number.isSafeInteger(part.quantity) || (part.quantity as number) <= 0) throw new Error(`${path}.quantity must be a positive safe integer`);

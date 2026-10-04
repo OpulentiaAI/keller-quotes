@@ -9,6 +9,14 @@ An accurate historical target, an accurate estimate, and a complete order are di
 
 Ars Umbris `keller_quote` builds reviewed internal order drafts and `keller_sources` exposes bounded private evidence reads; neither runs this evaluation suite or establishes the ≥90% completed-quoting goal. Run the offline evaluation commands below in an approved private operator environment, retaining separate target, coverage, and blocker accounting.
 
+## Adjudicate evidence and completed decisions before interpreting scores
+
+Run `python -B scripts/keller-ground-truth.py assess --config "$PRIVATE_ASSESSMENT_CONFIG"` when auditing target meaning or source fitness. Follow [the executable assessment contract](../../../docs/ground-truth-assessment.md): supply the frozen full evalset, all-case bindings, original physical references/document proofs, source manifest, unchanged candidate report and explicit original-byte paths. It verifies actual hashes/identities/quantities/full-price arithmetic and produces a versioned private all-case assessment plus at most ten case-linked remediation tasks. Missing selected PDF coverage is not a false internal target; later/different letters and revisions stay separate. `UNIT_SELL`, posted won history, source mtime and agent narrative cannot establish acceptance, actual cost, current quote support or optimum.
+
+For completed quotes, use the **separate** `python -B scripts/keller-ground-truth.py decisions --config "$PRIVATE_DECISION_CONFIG"`, not replay all-pass or the synthetic order score. Freeze full RFQ eligibility, every line/specification/UOM/quantity/revision and terms, independent source-bound assessment and worker-visible source hashes before actual attempts. Retain all actual attempts and raw trace/draft/price-decision hashes, plus named independent source review, its execution receipt and human handoff. Every required criterion must pass; a finite numeric provisional amount without current manufacturing/cost support is not completed success. Held/errors/timeouts/invalid/missing/dropped attempts remain failures in the eligible denominator. Correct predeclared blocked cases have a separate safety score and never lift completion.
+
+Keep these assessments, sources, targets and review packets operator-only outside Git and blinded scopes. The executable reports an observed rate but cannot certify the ≥90% live goal from this exposed diagnostic, synthetic tasks, owner assertions or self-declared live traces. Do not change legacy targets, grades, controller baselines, denominators or ±20% tolerance to resolve a domain mismatch.
+
 ## Run reproducible, offline experiments
 
 Before starting a scored MCP batch, use the documented service launcher and verify a real evidence read and draft generation. Successful tool discovery alone does not validate backend dependencies.

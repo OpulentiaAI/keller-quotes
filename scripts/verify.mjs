@@ -90,6 +90,8 @@ const main = () => {
   run('python', ['-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_pdf_transcription.py', '-v'], repo, 'PDF transcription tests');
   run('python', ['-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_document_register.py', '-v'], repo, 'document register tests');
   run('python', ['-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_generate_document_eval.py', '-v'], repo, 'document evaluation generator tests');
+  run('python', ['-m', 'unittest', 'discover', '-s', 'scripts/test', '-p', 'test_keller_ground_truth.py', '-v'], repo, 'source-bound ground-truth tests');
+  run('python', ['-m', 'unittest', 'discover', '-s', 'evals/test', '-p', 'test_decision_eval.py', '-v'], repo, 'independent completed-quote decision tests');
   run('python', ['-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_arsumbris*.py', '-v'], repo, 'Ars Umbris workspace and tool tests');
   run('python', ['-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_blinded*.py', '-v'], repo, 'blinded MCP workflow grader tests');
   run('python', ['-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_mcp_trajectory.py', '-v'], repo, 'sealed MCP trajectory tests');

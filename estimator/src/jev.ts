@@ -12,6 +12,8 @@ function describePart(p: PartRequest): Record<string, string | number | null> {
     quantity: p.quantity,
     material: p.material ?? null,
     finish: p.finish ?? null,
+    revision: p.revision ?? null,
+    drawing_ref: p.drawing_ref ?? null,
     notes: p.notes ?? null,
   };
 }
@@ -22,6 +24,8 @@ function describeCandidate(id: string, c: Candidate): string {
     `quote ${r.quote_no} (${r.quote_date})`,
     `part ${r.part_no}`,
     r.description,
+    r.rev ? `revision ${r.rev}` : "",
+    r.drawing_no ? `drawing ${r.drawing_no}` : "",
     r.customer ? `for ${r.customer.trim()}` : "",
     r.material ? `material ${r.material}` : "",
     `status ${r.status}`,

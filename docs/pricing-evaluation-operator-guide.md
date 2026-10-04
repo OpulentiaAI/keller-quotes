@@ -39,6 +39,12 @@ The final matched 50-case document-price experiment (2026-09-28) priced 48/50 in
 
 The [exact-part and quantity-weighting experiment](pricing-optimization.md) reports aggregate gains alongside a diagnostic holdout within-20% regression and supplemental signed-dollar underquoting. Those observed historical results predate the combined admission pipeline and are not evidence that the combined policy improves pricing accuracy; do not tune against them as fresh blind targets.
 
+## Source adjudication and completed-quote decisions
+
+Use [the private executable assessment contract](ground-truth-assessment.md) to audit all frozen target cases against actual original bytes and work a bounded remediation queue. `python -B scripts/keller-ground-truth.py assess --config "$PRIVATE_ASSESSMENT_CONFIG"` keeps internal calculations, recorded customer prices, confirmed acceptance, actual cost, supported current quotes and unsupported optimum/outcomes separate. It never rewrites the target set or existing report. Missing source bytes for an isolated execution are not evidence that the client lacks them.
+
+For usable quote completion, `python -B scripts/keller-ground-truth.py decisions --config "$PRIVATE_DECISION_CONFIG"` consumes independently frozen full-RFQ requirements and eligibility, source-bound assessment, actual sealed attempt/artifact traces and independent review/handoff receipts. Every eligible attempt is retained, including holds, timeouts, errors, malformed and dropped outputs. A finite provisional price is not completed quoting. Predeclared safe holds have a separate result, and synthetic/exposed all-pass cannot certify the live ≥90% goal. Preserve the unchanged historical ±20% runner/comparator gate alongside this decision score.
+
 ## Separate synthetic order-workflow benchmark
 
 ```sh

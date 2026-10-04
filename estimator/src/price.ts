@@ -90,6 +90,7 @@ export function price(
   const points: PricePoint[] = [];
   const regression: { quantity: number; unit_price: number; weight: number }[] = [];
   for (const c of candidates) {
+    if (c.incompatibilities?.length) continue;
     const p = interpolateAtQty(c.breaks, targetQty);
     if (p === null) continue;
     let w = c.score * recencyWeight(c.row.quote_date, now);

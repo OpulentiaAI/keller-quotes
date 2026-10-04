@@ -47,6 +47,7 @@ export interface PartRequest {
   quantity: number;
   material?: string;
   finish?: string;
+  revision?: string;
   /** Optional reference to a customer drawing/visualization (path or id). */
   drawing_ref?: string;
   notes?: string;
@@ -68,6 +69,7 @@ export interface Candidate {
   /** Deterministic similarity score in [0,1]. */
   score: number;
   reasons: string[];
+  incompatibilities?: string[];
 }
 
 export interface JevVerdict {
