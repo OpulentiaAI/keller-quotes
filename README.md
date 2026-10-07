@@ -1,17 +1,19 @@
 ---
 type: au.engine.readme::au-engine
-tldr: C. Keller Mfg. historical FabriTRAK quote evidence, estimator workflows, and an Ars Umbris workspace for reviewed internal drafts.
+tldr: C. Keller Mfg. source collection, document indexes, experiment knowledge and reviewed internal quoting workflows.
 ---
 
 # Repo Overview
 
 ## What this is
 
-A historical quote evidence register and an Ars Umbris workspace for C. Keller Mfg. It distinguishes internal calculations, issued customer-price documents, and private manufacturing sources.
+A historical quote evidence register and an Ars Umbris workspace for C. Keller Mfg. The native opening page, [[start here]], brings together data collection and indexing, quoting goals, the experiment ledger and the quote-to-payment evidence gaps. It distinguishes internal calculations, printed customer prices and private manufacturing sources without treating them as verified business outcomes.
 
 ## How to use this
 
-Start with [the Ars Umbris workspace guide](docs/arsumbris-workspace.md) or the five canonical workflows in `.agents/skills/`. All quoted prices and internal proposals require a named human reviewer before any customer release.
+Start with [[start here]], [the Ars Umbris workspace guide](docs/arsumbris-workspace.md) or the five canonical workflows in `.agents/skills/`. Use the [document index guide](docs/document-index.md), [[map - Keller experiment ledger]] and [[map - Keller experimental discoveries]] for the retained source and research records. All quoted prices and internal proposals require a named human reviewer before any customer release.
+
+For pinned code checkpoints, typed findings and authenticated recovery of retained private sources and evaluation evidence, use [Git-linked work and evidence access](docs/git-evidence-access.md). Git tracks the recovery/checksum registry; private archive contents stay outside the checkout and blinded worker context.
 
 The `Keller Codex` profile has bounded read-only Polygres and private-source tools plus `keller_quote` for an offline internal order draft. Its structured order, Markdown, and review output remains private; the tool does not approve or send a quote, and it does not establish the ≥90% completed-quoting goal.
 

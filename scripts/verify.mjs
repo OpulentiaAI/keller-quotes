@@ -93,6 +93,8 @@ const main = () => {
   run('python', ['-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_arsumbris*.py', '-v'], repo, 'Ars Umbris workspace and tool tests');
   run('python', ['-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_blinded*.py', '-v'], repo, 'blinded MCP workflow grader tests');
   run('python', ['-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_mcp_trajectory.py', '-v'], repo, 'sealed MCP trajectory tests');
+  run('python', ['-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_restore_keller_evidence.py', '-v'], repo, 'private evidence restore tests');
+  run('python', ['-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_index_keller_documents.py', '-v'], repo, 'typed document index tests');
   required(cli, 'compiled estimator CLI missing after build; check the TypeScript build output');
   const output = run(process.execPath, [cli, fixture, '--offline', '--register', join(repo, 'quotes.csv')],
     estimator, 'compiled CLI offline smoke', 'pipe');

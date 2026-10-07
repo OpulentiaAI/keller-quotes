@@ -14,7 +14,7 @@ const repo = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 
 test('lock records every pinned sibling at a full SHA', () => {
   assert.equal(Object.keys(lock.repositories).length, 22)
-  assert.equal(lock.repositories['au-host'], '0e85fb1731fdef2d6196618aff5a2a567e621866')
+  assert.equal(lock.repositories['au-host'], 'eb736c500a1474b1f77711720d774488e386d616')
   for (const sha of Object.values(lock.repositories)) assert.match(sha, /^[0-9a-f]{40}$/)
   assert.equal(options(['--runtime-root', '/some/other/runtime']).runtimeRoot, '/some/other/runtime')
 })

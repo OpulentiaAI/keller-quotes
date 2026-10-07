@@ -1,0 +1,144 @@
+{
+  "schema_version": 1,
+  "repository": "OpulentiaAI/keller-quotes",
+  "anchor_commit": "68c82010174b66e7a5abe2ed255d86130a59dc5e",
+  "scope": "OPERATOR_ONLY",
+  "release_tag": "keller-operator-evidence-2026-10-07-v1",
+  "release_url": "https://github.com/OpulentiaAI/keller-quotes/releases/tag/keller-operator-evidence-2026-10-07-v1",
+  "access": "Authenticated read access to the private GitHub repository; restore outside Git and worker context.",
+  "catalog": {
+    "name": "keller-operator-evidence-catalog.private.json",
+    "sha256": "3752d8823c5fb017fa86b61aec0d70e8a2b85472e857d2af114530bcd7fff2e7",
+    "bytes": 39815523
+  },
+  "parts": [
+    {
+      "name": "keller-operator-evidence-part-001.private.zip",
+      "sha256": "3cbc128a7ab61e310ba4db496cc1450179b79282cdcb42fb6155e8f26561b85c",
+      "bytes": 25384969
+    },
+    {
+      "name": "keller-operator-evidence-part-002.private.zip",
+      "sha256": "416692f5824f8920cee24ae59f5900c802d714c8fcbd630f9f854bbe1fef33d0",
+      "bytes": 20518267
+    },
+    {
+      "name": "keller-operator-evidence-part-003.private.zip",
+      "sha256": "3cadf83ca9a6c23ecf8deebb6ec26c3c7ad8e1009dedcfc956c691b170dfa2fa",
+      "bytes": 34756910
+    },
+    {
+      "name": "keller-operator-evidence-part-004.private.zip",
+      "sha256": "4fe0603832117344d73244d18f9c6ebfdf1ed1cda38c2abe8b80d06f31fe13a3",
+      "bytes": 129890705
+    },
+    {
+      "name": "keller-operator-evidence-part-005.private.zip",
+      "sha256": "50ec2b26830cafcc063464347ca0cefab2cff6309d51866b0e1e9bc906ef9a16",
+      "bytes": 30369347
+    },
+    {
+      "name": "keller-operator-evidence-part-006.private.zip",
+      "sha256": "61afa3744d0170f0d5363ab98824eca6856b82cd2639c49d225e67bbfbec8a3f",
+      "bytes": 51211686
+    },
+    {
+      "name": "keller-operator-evidence-part-007.private.zip",
+      "sha256": "77af656c0722fc288c334b32cc0e7c2d93ac19fcf57bf049a77a521292467464",
+      "bytes": 293076290
+    },
+    {
+      "name": "keller-operator-evidence-part-008.private.zip",
+      "sha256": "2b40dcb2030236eb35bef32ee5a96a9ce82d025efa995e014e1e0e8f44b18df7",
+      "bytes": 319767645
+    },
+    {
+      "name": "keller-operator-evidence-part-009.private.zip",
+      "sha256": "5767d9556f671b010554fd42eab0bcb0eb48fe9763d9033507ec401916931f7c",
+      "bytes": 319856032
+    },
+    {
+      "name": "keller-operator-evidence-part-010.private.zip",
+      "sha256": "ee31f0e79beee6eddb458e7f3a7b11813cb510a0d7b349804d53404bd286fae2",
+      "bytes": 319828238
+    },
+    {
+      "name": "keller-operator-evidence-part-011.private.zip",
+      "sha256": "fe453e13edd931fd1d7b365faf8db11bb0425b1074a66bc7842076562b0d9069",
+      "bytes": 319844557
+    },
+    {
+      "name": "keller-operator-evidence-part-012.private.zip",
+      "sha256": "d47a295bded3874be8728bbf76ed3e0fb7b80890a3dd5bc47da4b18a16303aa5",
+      "bytes": 319766355
+    },
+    {
+      "name": "keller-operator-evidence-part-013.private.zip",
+      "sha256": "5a29460cf815a2a17f58f13d0f31ccfea1d9cc78916cf5dbd4a4873c5fc5970e",
+      "bytes": 315393133
+    },
+    {
+      "name": "keller-operator-evidence-part-014.private.zip",
+      "sha256": "3b7336f35a70c1ffd8f470dbf3f9f432a2ae2c20d214a3e5387abb43ef520816",
+      "bytes": 42639455
+    },
+    {
+      "name": "keller-operator-evidence-part-015.private.zip",
+      "sha256": "4ac41dfa43bd6517f85d6336e16aab0b7c8bd9652a73e66a71a66df8e7d57e14",
+      "bytes": 240135
+    }
+  ],
+  "historical_case_bundle": {
+    "name": "keller-historical-full-evidence-v1.private.zip",
+    "sha256": "6c57956b129d33f38eca268a114ed874d3976665209e1ccb77b108197f77ab1f",
+    "bytes": 1766039,
+    "cases": 250,
+    "eligible": 0,
+    "excluded": 250
+  },
+  "archive_builder": {
+    "name": "build-private-archive.py",
+    "sha256": "cfc4ef8facc7bdc3293e0804aa800ad947a93c29ab62b418eb05e4aa241fcd08",
+    "bytes": 9148
+  },
+  "coverage": {
+    "file_paths": 123081,
+    "unique_blobs": 122210,
+    "unique_input_bytes": 5439990954,
+    "compressed_part_bytes": 2542543724,
+    "sealed_full_data_inputs_preserved": 441,
+    "original_pdf_files": 39975,
+    "transcription_json_files": 39976,
+    "transcription_markdown_files": 39796,
+    "excluded_paths": 30
+  },
+  "family_counts": {
+    "keller-anydoc-spike": 85,
+    "keller-decision-quality-v1": 12,
+    "keller-document-baseline": 55,
+    "keller-eval-benchmark": 14,
+    "keller-eval-workflow-v2": 42,
+    "keller-evaluation-scope-smoke": 4,
+    "keller-execution": 4,
+    "keller-expanded-evals": 1310,
+    "keller-full-data-set-20261004": 24,
+    "keller-guide-validation": 4,
+    "keller-learning-environment-20261004": 171,
+    "keller-live-source-20261004": 26,
+    "keller-local-verify-20260930": 5,
+    "keller-optimization": 31,
+    "keller-pdf-corpus": 119819,
+    "keller-polygres-validation": 35,
+    "keller-pricing": 76,
+    "keller-remediation-assessment-20261004": 63,
+    "keller-score-source-audit-20261004": 781,
+    "keller-scoring-audit-20261004": 18,
+    "keller-screening-budget-20261004": 40,
+    "keller-source-audit": 96,
+    "keller-trajectory-reference": 3,
+    "keller-transcribe-check": 53,
+    "keller-typed-findings-20261007": 3,
+    "keller-workflow-evals": 307
+  },
+  "exclusion_policy": "Credentials, browser/authentication state, caches, disposable runtimes/databases, nonregular files and existing Git checkouts are not operator business-evidence payloads. The private catalog preserves the exact exclusions."
+}
