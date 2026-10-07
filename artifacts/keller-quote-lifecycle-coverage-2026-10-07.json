@@ -1,0 +1,588 @@
+{
+  "schema_version": 1,
+  "kind": "RETAINED_QUOTE_LIFECYCLE_SOURCE_COVERAGE",
+  "publication_state": "PUBLIC_SAFE_DRAFT_FOR_PARENT_REVIEW",
+  "audit_date": "2026-10-07",
+  "about": "[[c-keller-mfg]]",
+  "source_note": "[[Keller retained quote lifecycle source coverage 2026-10-07]]",
+  "source_anchors": [
+    "[[Keller retained quote lifecycle source coverage 2026-10-07]]",
+    "[[Keller Git delivery and private artifact access 2026-10-07]]",
+    "[[Keller original-source audit 2026-10-04]]",
+    "[[Keller historical evidence contract cf1ee17]]"
+  ],
+  "selection": {
+    "document_corpus_id": "5089cd30b1b51f3903c6f16459dcf883a36137156086fc105220f594faf64a90",
+    "corpus_snapshot_ingested_at": "2026-09-28 02:50:50.257317+00:00",
+    "warehouse_observed_at": "2026-10-07T15:27:44.809370+00:00",
+    "native_directory_observed_at": "2026-10-04T08:22:19.642Z",
+    "native_business_observation_date": "2026-10-04",
+    "chronology_limit": "Snapshot ingestion and observation timestamps are not quote, first-issuance, acceptance, settlement or closure chronology."
+  },
+  "denominators": {
+    "retained_corpus_pdf_records": 39975,
+    "extracted_corpus_pages": 75096,
+    "verified_customer_quotation_quantity_breaks": 42873,
+    "verified_quotation_price_source_pdfs": 7845,
+    "bounded_original_first_page_role_checks": 8,
+    "bounded_historical_cases": 250,
+    "native_directory_rows": 978,
+    "native_directory_file_entries": 977,
+    "native_directory_folder_entries": 1,
+    "native_directory_dbf_names": 265,
+    "targeted_directory_only_financial_table_names": 5,
+    "files_in_two_native_original_source_sets": 16,
+    "business_dbfs_in_two_native_original_source_sets": 10,
+    "dictionary_dbcs_in_two_native_original_source_sets": 3,
+    "dictionary_memo_companions_in_two_native_original_source_sets": 3,
+    "original_dbf_dbc_definitions_physically_rechecked_across_native_and_quote_families": 31
+  },
+  "physical_original_pdf_capture": {
+    "catalog_pdf_aliases": 39975,
+    "distinct_original_pdf_contents": 39975,
+    "size_and_whole_file_digest_verified_originals": 39975,
+    "original_pdf_bytes": 2634657836,
+    "zero_byte_originals": 1,
+    "role_and_completeness_limit": "Original-byte equality is not authenticated authorship, document-role validation, complete invoice history or payment evidence."
+  },
+  "document_annotations": {
+    "counts_by_content_kind": [
+      {
+        "content_kind": "certificate",
+        "documents": 288,
+        "extracted_pages": 301,
+        "pdf_record_denominator": 39975,
+        "page_denominator": 75096
+      },
+      {
+        "content_kind": "invoice",
+        "documents": 12511,
+        "extracted_pages": 36775,
+        "pdf_record_denominator": 39975,
+        "page_denominator": 75096
+      },
+      {
+        "content_kind": "packing_slip",
+        "documents": 987,
+        "extracted_pages": 1611,
+        "pdf_record_denominator": 39975,
+        "page_denominator": 75096
+      },
+      {
+        "content_kind": "quote",
+        "documents": 14724,
+        "extracted_pages": 14743,
+        "pdf_record_denominator": 39975,
+        "page_denominator": 75096
+      },
+      {
+        "content_kind": "supplier_po",
+        "documents": 11316,
+        "extracted_pages": 18462,
+        "pdf_record_denominator": 39975,
+        "page_denominator": 75096
+      },
+      {
+        "content_kind": "unknown",
+        "documents": 149,
+        "extracted_pages": 3204,
+        "pdf_record_denominator": 39975,
+        "page_denominator": 75096
+      }
+    ],
+    "extraction_status_counts": {
+      "text": 39960,
+      "blank": 14,
+      "failed": 1
+    },
+    "filename_hint_counts": {
+      "Certificate": 287,
+      "other": 76,
+      "Invoice": 11406,
+      "Optional": 2035,
+      "Packing": 126,
+      "QuoteLetter": 14718,
+      "PO": 11327
+    },
+    "invoice_filename_hint_population": {
+      "pdf_records": 11406,
+      "content_annotations": [
+        {
+          "content_kind": "invoice",
+          "pdf_records": 10474,
+          "extraction_status": "text"
+        },
+        {
+          "content_kind": "packing_slip",
+          "pdf_records": 860,
+          "extraction_status": "text"
+        },
+        {
+          "content_kind": "unknown",
+          "pdf_records": 1,
+          "extraction_status": "blank"
+        },
+        {
+          "content_kind": "unknown",
+          "pdf_records": 1,
+          "extraction_status": "failed"
+        },
+        {
+          "content_kind": "unknown",
+          "pdf_records": 70,
+          "extraction_status": "text"
+        }
+      ],
+      "limitation": "An invoice filename can describe packing-slip or unknown content and proves no sending or payment."
+    },
+    "older_archived_annotation_observation": {
+      "pdf_record_denominator": 39975,
+      "invoice_annotation_records": 1496,
+      "current_invoice_annotation_records": 12511,
+      "difference": 11015,
+      "interpretation": "Different classification observations at the same PDF denominator; not a count of new invoice issuance or new financial capture."
+    },
+    "business_invoice_event_denominator": null,
+    "invoice_line_denominator": null,
+    "limitation": "Annotations recognize document text signatures, not complete issuer/recipient/event roles. Some PDFs contain multiple invoices, reports, manuals or duplicates at business-event grain."
+  },
+  "verified_numeric_price_table": {
+    "quantity_break_rows": 42873,
+    "source_pdfs": 7845,
+    "source_content_kinds": [
+      "quote"
+    ],
+    "source_price_fields": [
+      "PRICE"
+    ],
+    "verified_invoice_unit_price_rows": 0,
+    "row_denominator": 42873,
+    "limitation": "These are verified customer-quotation prices with unknown business outcomes, not invoice lines, accepted prices, current costs or cash applications."
+  },
+  "bounded_original_content_role_checks": {
+    "reviewed_original_first_pages": 8,
+    "customer_invoice_form_first_pages": 7,
+    "invoice_journal_first_pages": 1,
+    "image_reviewed_invoice_pages": 1,
+    "image_recreated_from_original_and_pixel_equal": true,
+    "issuer_role": "Manufacturer identified at issuer footer in the image-reviewed original.",
+    "recipient_role": "A different organization is addressed as customer recipient.",
+    "observed_invoice_fields": [
+      "invoice_number",
+      "invoice_date",
+      "shipped_date",
+      "payment_terms",
+      "purchase_order_reference",
+      "quantity",
+      "job_number",
+      "part",
+      "revision",
+      "unit_price",
+      "extension",
+      "total"
+    ],
+    "sampled_multi_invoice_pdf": {
+      "original_pdfs": 1,
+      "pages": 2,
+      "different_printed_invoice_numbers": 2
+    },
+    "sampled_journal_report": {
+      "original_pdfs": 1,
+      "pages": 6
+    },
+    "illustrative_printed_job_native_key_observation": {
+      "reviewed_invoice_examples": 1,
+      "matching_sales_order_records": 1,
+      "matching_sales_lot_job_records": 1,
+      "matching_work_order_job_records": 1,
+      "printed_part_and_revision_equal_native_order": true,
+      "population_invoice_join_validated": false,
+      "recipient_id_or_line_lot_allocation_validated": false
+    },
+    "confirmed_paid_invoice_count": null,
+    "payment_state": "UNKNOWN",
+    "authenticated_sending_state": "NOT_ESTABLISHED",
+    "limitation": "Deliberately selected examples establish their content roles only. They do not estimate whole-corpus invoice-role prevalence or establish acceptance, sending, payment or final complete-job settlement."
+  },
+  "native_original_tables": {
+    "two_source_set_tables": [
+      {
+        "table": "VENDQUOT.DBF",
+        "header_physical_records": 12786,
+        "active_nondeleted_records": 12779,
+        "deleted_physical_records": 7,
+        "memo_field_count": 1,
+        "memo_companion_in_same_original_source_set": false
+      },
+      {
+        "table": "WOHEAD.DBF",
+        "header_physical_records": 103739,
+        "active_nondeleted_records": 103707,
+        "deleted_physical_records": 32,
+        "memo_field_count": 4,
+        "memo_companion_in_same_original_source_set": false
+      },
+      {
+        "table": "WOJOBS.DBF",
+        "header_physical_records": 142895,
+        "active_nondeleted_records": 142737,
+        "deleted_physical_records": 158,
+        "memo_field_count": 0,
+        "memo_companion_in_same_original_source_set": false
+      },
+      {
+        "table": "WORKORDR.DBC",
+        "header_physical_records": 632,
+        "active_nondeleted_records": 632,
+        "deleted_physical_records": 0,
+        "memo_field_count": 3,
+        "memo_companion_in_same_original_source_set": true
+      },
+      {
+        "table": "WOSEQ.DBF",
+        "header_physical_records": 185067,
+        "active_nondeleted_records": 4040,
+        "deleted_physical_records": 181027,
+        "memo_field_count": 3,
+        "memo_companion_in_same_original_source_set": false
+      },
+      {
+        "table": "WOSHIP.DBF",
+        "header_physical_records": 134957,
+        "active_nondeleted_records": 134957,
+        "deleted_physical_records": 0,
+        "memo_field_count": 0,
+        "memo_companion_in_same_original_source_set": false
+      },
+      {
+        "table": "WOCOLL.DBF",
+        "header_physical_records": 97278,
+        "active_nondeleted_records": 97277,
+        "deleted_physical_records": 1,
+        "memo_field_count": 1,
+        "memo_companion_in_same_original_source_set": false
+      },
+      {
+        "table": "ORDERS.DBC",
+        "header_physical_records": 337,
+        "active_nondeleted_records": 337,
+        "deleted_physical_records": 0,
+        "memo_field_count": 3,
+        "memo_companion_in_same_original_source_set": true
+      },
+      {
+        "table": "PURCHASE.DBC",
+        "header_physical_records": 395,
+        "active_nondeleted_records": 395,
+        "deleted_physical_records": 0,
+        "memo_field_count": 3,
+        "memo_companion_in_same_original_source_set": true
+      },
+      {
+        "table": "SOLOTS.DBF",
+        "header_physical_records": 156437,
+        "active_nondeleted_records": 156321,
+        "deleted_physical_records": 116,
+        "memo_field_count": 2,
+        "memo_companion_in_same_original_source_set": false
+      },
+      {
+        "table": "SOMAST.DBF",
+        "header_physical_records": 99941,
+        "active_nondeleted_records": 99920,
+        "deleted_physical_records": 21,
+        "memo_field_count": 6,
+        "memo_companion_in_same_original_source_set": false
+      },
+      {
+        "table": "WOBILL.DBF",
+        "header_physical_records": 272539,
+        "active_nondeleted_records": 269508,
+        "deleted_physical_records": 3031,
+        "memo_field_count": 0,
+        "memo_companion_in_same_original_source_set": false
+      },
+      {
+        "table": "WOBOM.DBF",
+        "header_physical_records": 52249,
+        "active_nondeleted_records": 1149,
+        "deleted_physical_records": 51100,
+        "memo_field_count": 1,
+        "memo_companion_in_same_original_source_set": false
+      }
+    ],
+    "memo_limit": "Several business DBF memo companions are missing from these two native source sets. An older vendor-quote memo is separately retained; that does not supply missing sales/work-order memos.",
+    "record_limit": "Header records include retained deleted bytes. Active counts are physical nondeleted records, not proven posting/closure populations; deleted records require explicit source dispositions."
+  },
+  "native_link_support": {
+    "field_populations": [
+      {
+        "field": "SOMAST.QUOTE_NO",
+        "nonblank_active_records": 94153,
+        "active_record_denominator": 99920,
+        "meaning": "Stored nonblank field only, not an independently verified business event."
+      },
+      {
+        "field": "SOMAST.JOBNO",
+        "nonblank_active_records": 99920,
+        "active_record_denominator": 99920,
+        "meaning": "Stored nonblank field only, not an independently verified business event."
+      },
+      {
+        "field": "SOMAST.COMP_ID",
+        "nonblank_active_records": 99920,
+        "active_record_denominator": 99920,
+        "meaning": "Stored nonblank field only, not an independently verified business event."
+      },
+      {
+        "field": "SOMAST.PART_NO",
+        "nonblank_active_records": 99911,
+        "active_record_denominator": 99920,
+        "meaning": "Stored nonblank field only, not an independently verified business event."
+      },
+      {
+        "field": "SOMAST.REV_NO",
+        "nonblank_active_records": 92039,
+        "active_record_denominator": 99920,
+        "meaning": "Stored nonblank field only, not an independently verified business event."
+      },
+      {
+        "field": "SOMAST.QUOTLETT",
+        "nonblank_active_records": 0,
+        "active_record_denominator": 99920,
+        "meaning": "Stored nonblank field only, not an independently verified business event."
+      },
+      {
+        "field": "SOMAST.UOM",
+        "nonblank_active_records": 1,
+        "active_record_denominator": 99920,
+        "meaning": "Stored nonblank field only, not an independently verified business event."
+      },
+      {
+        "field": "SOMAST.CFACTOR",
+        "nonblank_active_records": 0,
+        "active_record_denominator": 99920,
+        "meaning": "Stored nonblank field only, not an independently verified business event."
+      },
+      {
+        "field": "SOMAST.CURRENCY_P",
+        "nonblank_active_records": 0,
+        "active_record_denominator": 99920,
+        "meaning": "Stored nonblank field only, not an independently verified business event."
+      },
+      {
+        "field": "SOLOTS.JOBNO",
+        "nonblank_active_records": 156319,
+        "active_record_denominator": 156321,
+        "meaning": "Stored nonblank field only, not an independently verified business event."
+      },
+      {
+        "field": "SOLOTS.COMP_ID",
+        "nonblank_active_records": 156319,
+        "active_record_denominator": 156321,
+        "meaning": "Stored nonblank field only, not an independently verified business event."
+      },
+      {
+        "field": "SOLOTS.WO_NO",
+        "nonblank_active_records": 144642,
+        "active_record_denominator": 156321,
+        "meaning": "Stored nonblank field only, not an independently verified business event."
+      },
+      {
+        "field": "SOLOTS.LOT",
+        "nonblank_active_records": 156315,
+        "active_record_denominator": 156321,
+        "meaning": "Stored nonblank field only, not an independently verified business event."
+      },
+      {
+        "field": "SOLOTS.ITEM_NO",
+        "nonblank_active_records": 3,
+        "active_record_denominator": 156321,
+        "meaning": "Stored nonblank field only, not an independently verified business event."
+      },
+      {
+        "field": "SOLOTS.INVOICE_D",
+        "nonblank_active_records": 155446,
+        "active_record_denominator": 156321,
+        "meaning": "Stored nonblank field only, not an independently verified business event."
+      }
+    ],
+    "within_quote_letter_join": [
+      "QUOTLETT.QUOTLETTER = QUOTLINE.QUOTLETTER",
+      "QUOTLINE.(QUOTLETTER, ITEM) = QUOTLEIT.(QUOTLETTER, ITEM)",
+      "QUOTLINE.QUOTE_NO = QUOTEN.QUOTE_NO with identity checks"
+    ],
+    "quote_to_native_order": "SOMAST.QUOTE_NO plus exact COMP_ID and PART_NO; revision, drawing, quantity, UOM, currency and accepted version are additional checks.",
+    "native_chain": [
+      "nonblank SOMAST.JOBNO = SOLOTS.JOBNO = WOJOBS.JOBNO",
+      "SOMAST.COMP_ID = SOLOTS.COMP_ID = WOHEAD.COMP_ID",
+      "nonblank SOLOTS.WO_NO = WOHEAD.WO_NO = WOJOBS.WO_NO",
+      "SOMAST.PART_NO = WOHEAD.PART_NO",
+      "nonblank SOLOTS.LOT = WOJOBS.LOT"
+    ],
+    "letter_version_gap": "SOMAST.QUOTLETT is schema-present but blank in 99,920 / 99,920 active records.",
+    "item_gap": "QUOTLINE.ITEM, QUOTEN.ITEM_NO and SOLOTS.ITEM_NO have different source roles; no general accepted-item mapping is supplied.",
+    "job_to_invoice_candidate": "Role-verified printed Job # can be compared to exact native JOBNO, followed by recipient, part, revision, PO, shipment, quantity, UOM/currency and lot allocation review.",
+    "invoice_pointer_gap": "SOLOTS.INVOICE_D is a stored date-looking field, not an invoice ID, invoice line or receipt application.",
+    "bounded_case_audit": {
+      "case_denominator": 250,
+      "quote_customer_part_sales_order_records": 724,
+      "cases_with_matching_sales_order_records": 101,
+      "native_pointer_chains": 954,
+      "cases_with_native_pointer_chains": 99,
+      "chain_physical_record_checks": 3816,
+      "limited_blank_item_known_revision_exact_order_quantity_cases": 31,
+      "independently_confirmed_customer_acceptances": 0,
+      "scope": "Retained 250-case audit, not all captured orders or all live RFQs."
+    },
+    "authority_limit": "Exact stored keys and populated dates/statuses do not establish independent customer acceptance or complete manufacturing identity."
+  },
+  "financial_capture_gaps": {
+    "targeted_tables": [
+      {
+        "table_name": "INVHDR",
+        "present_in_native_directory_inventory": true,
+        "captured_original_table_files": 0,
+        "captured_field_schemas": 0,
+        "actual_native_record_count": null,
+        "source_state": "DIRECTORY_NAME_ONLY",
+        "usable_as_captured_transaction_data": false
+      },
+      {
+        "table_name": "INVITEM",
+        "present_in_native_directory_inventory": true,
+        "captured_original_table_files": 0,
+        "captured_field_schemas": 0,
+        "actual_native_record_count": null,
+        "source_state": "DIRECTORY_NAME_ONLY",
+        "usable_as_captured_transaction_data": false
+      },
+      {
+        "table_name": "reccash",
+        "present_in_native_directory_inventory": true,
+        "captured_original_table_files": 0,
+        "captured_field_schemas": 0,
+        "actual_native_record_count": null,
+        "source_state": "DIRECTORY_NAME_ONLY",
+        "usable_as_captured_transaction_data": false
+      },
+      {
+        "table_name": "reccashd",
+        "present_in_native_directory_inventory": true,
+        "captured_original_table_files": 0,
+        "captured_field_schemas": 0,
+        "actual_native_record_count": null,
+        "source_state": "DIRECTORY_NAME_ONLY",
+        "usable_as_captured_transaction_data": false
+      },
+      {
+        "table_name": "account",
+        "present_in_native_directory_inventory": true,
+        "captured_original_table_files": 0,
+        "captured_field_schemas": 0,
+        "actual_native_record_count": null,
+        "source_state": "DIRECTORY_NAME_ONLY",
+        "usable_as_captured_transaction_data": false
+      }
+    ],
+    "captured_target_table_files": 0,
+    "target_table_denominator": 5,
+    "additional_directory_candidates": [
+      "HISTHEAD",
+      "HISTLINE",
+      "HISTSHIP",
+      "RECOPEN",
+      "RECHIST",
+      "RECAPPLY",
+      "archived_work_order_families"
+    ],
+    "candidate_limit": "Candidates are directory names without recovered table bytes, not an approved authoritative accounting map.",
+    "curated_invoice_line_relations_in_audited_warehouse_public_schema": 0,
+    "curated_cash_application_relations_in_audited_warehouse_public_schema": 0,
+    "curated_credit_allocation_relations_in_audited_warehouse_public_schema": 0,
+    "audited_warehouse_public_relation_count": 15,
+    "physical_table_count": 14,
+    "view_count": 1,
+    "business_receipt_or_credit_event_denominator": null,
+    "settlement_state": "NOT_ESTABLISHED",
+    "credit_allocation_state": "NOT_ESTABLISHED",
+    "global_absence_claim": false,
+    "limitation": "Captured invoice and journal PDFs and software manuals are not curated receipt/credit allocations. Incidental financial content has not been exhaustively role-audited; unknown is not a verified negative."
+  },
+  "bounded_heading_probes": [
+    {
+      "probe": "credit_memo_heading",
+      "candidate_pages": 0,
+      "candidate_documents": 0,
+      "page_denominator": 75096,
+      "document_denominator": 39975,
+      "role_limit": "Narrow heading probe only; not evidence that all credit/adjustment content is absent."
+    },
+    {
+      "probe": "cash_receipts_heading",
+      "candidate_pages": 0,
+      "candidate_documents": 0,
+      "page_denominator": 75096,
+      "document_denominator": 39975,
+      "role_limit": "Narrow heading probe only; not evidence that all receipt content is absent."
+    },
+    {
+      "probe": "receivable_heading",
+      "candidate_pages": 11,
+      "candidate_documents": 6,
+      "page_denominator": 75096,
+      "document_denominator": 39975,
+      "reviewed_content_role": "software_documentation",
+      "role_limit": "All six matching original documents are manuals, not customer receivable ledgers."
+    }
+  ],
+  "closed_job_actual_cost": {
+    "captured_business_tables": [
+      "WOHEAD",
+      "WOJOBS",
+      "WOSEQ",
+      "WOSHIP",
+      "WOCOLL",
+      "WOBILL",
+      "WOBOM"
+    ],
+    "bounded_case_denominator": 250,
+    "linked_bill_rows": 1981,
+    "linked_bom_rows": 13,
+    "physical_component_record_checks": 1994,
+    "complete_actual_cost_ledgers_established": 0,
+    "state": "PARTIAL_CAPTURED_COST_RELATED_RECORDS_WITHOUT_COMPLETE_ACTUAL_COST_AUTHORITY",
+    "global_closed_job_denominator": null,
+    "prohibited_inference": "WOBILL.COST alone is not realized cost and cannot establish realized margin.",
+    "missing_gates": [
+      "primary accepted-order and closed-job events",
+      "complete posting and historical/deleted-record enumeration",
+      "approved unit/lot/rate/reversal semantics",
+      "material/labor/outside/setup/scrap/overhead reconciliation",
+      "source-supported zero-component dispositions",
+      "compatible revision/drawing/quantity/UOM/currency and lot allocations",
+      "independent source review"
+    ]
+  },
+  "measurement_contract": {
+    "companion_public_note": "lifecycle-join-and-measurement-contract.md",
+    "separate_measures": [
+      "same-scope prediction error by declared target price basis",
+      "accepted scope and commercial changes",
+      "verified quotation and invoice unit-price evidence",
+      "recorded cash applications and independently confirmed settlement",
+      "complete closed-job realized cost and separately defined accrued/cash contribution results"
+    ],
+    "smallest_additional_request": "One operator-selected bounded lifecycle cohort with original request and accepted versions/changes, authoritative posted invoice and credit lines with lot allocation, receipt/application/clearing controls, and primary closure plus complete approved cost posting enumeration. Ask for the actual source map and independent review, not assumed table contents.",
+    "current_population_invoice_join_validated": false,
+    "current_population_payment_or_margin_measure_ready": false
+  },
+  "unchanged_boundaries": [
+    "Posted-history wins are not confirmed wins.",
+    "Invoice presence is not payment confirmation.",
+    "Class hints and software documentation do not prove business events.",
+    "Original-byte integrity does not establish completeness or authority.",
+    "No unknown outcome or amount is imputed as zero.",
+    "No production data, checkout, remote desktop, ingestion or source mutation occurred in this audit."
+  ]
+}

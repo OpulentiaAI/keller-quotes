@@ -1,0 +1,10 @@
+extends: source::au-base-types
+fields:
+  document_id: String
+  pdf_sha256: String
+  record_sha256?: String
+  transcript_sha256?: String
+  classification_hint: String
+  classification_basis: String
+  extraction_status: String
+  archive: source::au-base-types*

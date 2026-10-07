@@ -43,7 +43,6 @@ try {
     command('pnpm', ['--filter', 'app', 'exec', 'install-electron'], host)
     command('pnpm', ['--filter', 'app', 'rebuild:native'], host)
     command('pnpm', ['-r', '--workspace-concurrency=2', 'build'], host)
-    command('pnpm', ['--filter', 'app', 'build:shared-deps'], host)
     const venv = join(workspace, '.keller-local/arsumbris/python')
     if (!existsSync(join(venv, 'bin/python'))) command('python3', ['-m', 'venv', venv], workspace)
     command(join(venv, 'bin/python'), ['-m', 'pip', 'install', '-r', join(workspace, 'requirements-db.txt'), 'psycopg[binary]==3.3.6', 'dbfread==2.0.7'], workspace)

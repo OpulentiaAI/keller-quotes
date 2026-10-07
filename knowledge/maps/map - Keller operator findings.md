@@ -8,6 +8,11 @@ about:
 This is retrospective operator knowledge, not a quoting policy or worker instruction packet.
 Use the [[premise - Keller operator findings]] to check the publication and activation boundaries.
 
+## Git-linked access
+
+[[Keller Git delivery and private artifact access 2026-10-07]] connects this graph to pinned code checkpoints and authenticated private evidence recovery.
+The [[git-evidence-access]] guide explains downloads, checksum validation and the unchanged operator/worker boundary.
+
 ## Source distribution and price basis
 
 [[Keller source coverage is uneven across the assessed historical cases]] separates the full calculation register from the bounded case audit and explains the overlapping source populations.
