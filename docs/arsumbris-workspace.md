@@ -2,6 +2,8 @@
 
 This repository is the `keller-quotes` entry repo for the pinned Ars Umbris `0.0.2-alpha` runtime. `.arsumbris/repo.yaml` declares the type peers used by the layout, skill/profile instances, and MCP tools; `.arsumbris/workspace.yaml` edits this repository and discovers the `host-bundle` and `mcp-bundle` closures. The host opens `workspace-layout.yaml` into a branded evidence reader, source tree, and `Keller Codex` session launcher, with [[start here]] as the opening overview. The public [[source-catalog]] and [[organization-catalog]] are typed indexes, not replicated private records.
 
+Follow native wikilinks with **Ctrl-click** on Linux or **Cmd-click** on macOS. If Ars asks where to open the file, choose the document **Tabs** destination. An ordinary click selects the editor text; it does not follow the reference.
+
 ## Install, build, and open
 
 Use an authorized Linux desktop account with Git access to the locked Ars Umbris repositories, Node 24, npm, pnpm honoring the host's `packageManager: pnpm@11.1.1`, Rust/Cargo, native compiler tools, and Python with `venv` and pip available. The GUI also needs a working desktop display and Electron's system libraries. Setup does not install these system prerequisites or change their versions. It refuses a mismatched existing checkout instead of resetting it; move or repair that checkout explicitly before retrying.
@@ -73,6 +75,12 @@ The committed `quotes.csv` and `quotes.json.gz` are frozen internal-calculation 
 The ≥90% completed-quoting goal is **not established** by this workspace. The existing replay measures historical price prediction on a frozen basis, not end-to-end completed, correctly reviewed orders. No claim of accuracy improvement follows from mounting Ars Umbris, connecting Polygres, or making skills discoverable. Measure and review the separate completion gate before any production release.
 
 The `keller_quote` tool is the controlled internal draft path, not a release mechanism. It requires an explicit public corpus ID, an order request satisfying the estimator's `OrderRequest` contract, and a named human reviewer; it reuses the local order CLI with explicit operator price/cost inputs or the selected read-only customer-PDF register. It preserves blocked lines and returns structured `order`, `markdown`, `review`, state/blockers, and opaque references to persisted private artifacts. **The response itself contains private customer/cost evidence** and must stay in approved internal channels; don't paste it into a public graph node or customer message. It performs no database write or hosted model call. Treat a `PRICED_REQUIRES_REVIEW` result as an internal calculation awaiting approval, not as a quote sent to a customer.
+
+## Current runtime and workspace verification
+
+The [2026-10-07 verification receipt](../artifacts/keller-workspace-verification-2026-10-07.json) records the coherent `0.0.2-alpha` build and completed native check. A cold engine became fully ready in 34.131 seconds before Electron opened the overview. The native graph resolved all 39,975 unique document instances and all 39,975 archive edges, plus 513 outgoing references across 65 other checked records. The overview and experiment-ledger navigation through the native document-tabs chooser rendered with zero own diagnostics, renderer errors or host conditions.
+
+Both CI verification commands pass locally: the repository check covers 98 estimator tests, 182 Python tests, 54 script tests, the TypeScript build/typechecks, compiled offline smoke and 11 synthetic order tasks; the database check covers 28 tests against an isolated PostgreSQL 16 cluster. The scoped plugin typecheck also passes. GitHub did not start either hosted job because of account billing or spending limits, so these are local results, not green hosted CI. The synthetic tasks remain seven completed fixtures, two correct holds and two validation rejections, not live quoting-accuracy evidence.
 
 ## Earlier verified scope and remaining gate
 

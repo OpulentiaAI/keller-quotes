@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "kind": "KELLER_WORKSPACE_VERIFICATION",
+  "observed_on": "2026-10-07",
+  "code_checkpoint": "3f20ad29a568ae70a0d4f9d4d76d489cfdcb81d7",
+  "runtime_lock_sha256": "5561603c7199c05ace33db8c70753af49b89e3ccc2f085b2aec398c0ed8d4139",
+  "repository_verification": {
+    "command": "node scripts/verify.mjs",
+    "result": "passed",
+    "estimator_tests": 98,
+    "python_tests": 182,
+    "script_tests": 54,
+    "typescript_build": "passed",
+    "estimator_and_evaluation_typechecks": "passed",
+    "compiled_offline_cli_smoke": "passed",
+    "synthetic_order_tasks": {
+      "tasks": 11,
+      "passed": 11,
+      "failed": 0,
+      "completed_orders": 7,
+      "correct_holds": 2,
+      "correct_validation_rejections": 2,
+      "all_pass_rate": 1,
+      "criterion_pass_rate": 1
+    }
+  },
+  "database_verification": {
+    "command": "node scripts/verify.mjs --database",
+    "result": "passed",
+    "postgresql_version": 16,
+    "isolated_local_cluster": true,
+    "tests": 28
+  },
+  "scoped_plugin_typecheck": "passed",
+  "native_workspace": {
+    "release": "0.0.2-alpha",
+    "entry": "keller-quotes",
+    "status": "passed",
+    "cold_native_graph_ready_ms": 34131,
+    "keller_host_preflight": true,
+    "initial_overview": {
+      "default_file": "start here.md",
+      "four_requested_sections": true,
+      "retained_coverage_visible": true,
+      "no_accuracy_activation_claim": true
+    },
+    "own_native_diagnostics": 0,
+    "native_document_instances": 39975,
+    "unique_native_document_ids": 39975,
+    "resolved_native_document_archive_edges": 39975,
+    "other_native_records_checked": 65,
+    "other_resolved_native_references": 513,
+    "ledger_navigation": true,
+    "native_open_chooser": "document-tabs",
+    "pane_count": 17,
+    "host_conditions": [],
+    "renderer_errors": []
+  },
+  "independent_evidence_reconciliation": {
+    "restored_private_paths": 123081,
+    "native_document_files": 39975,
+    "native_document_bytes": 25973459,
+    "native_document_aggregate_sha256": "d8e43036fd53faae4381040958bffdf7319fda064801bb166016a39ad8b5a2a9",
+    "experimental_record_hashes": 52,
+    "archive_experiment_originals": 155,
+    "git_report_originals": 12,
+    "lifecycle_source_entries_rehashed_at_each_checked_location": 49
+  },
+  "hosted_ci": {
+    "executed": false,
+    "verification_and_database_jobs": "not_started",
+    "reason": "GitHub account billing or spending limit",
+    "green_claim": false
+  },
+  "limitations": [
+    "Synthetic tasks and correct holds are not independent live completed quoting.",
+    "No price-accuracy promotion, rule activation, worker-access expansion or customer release is established.",
+    "Invoice roles and native pointers do not establish accepted versions, cash settlement or complete realized cost."
+  ]
+}
