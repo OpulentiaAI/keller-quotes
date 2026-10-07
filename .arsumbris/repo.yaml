@@ -3,6 +3,8 @@ name: keller-quotes
 description: C. Keller Mfg. quoting workspace, evidence catalog, and reviewed internal proposal guidance.
 remote: https://github.com/opulentiaai/keller-quotes.git
 deps:
+  - name: au-base-types
+  - name: au-weave
   - name: au-mcp-sdk
   - name: au-mcp-core
   - name: au-mcp-adapter-codex

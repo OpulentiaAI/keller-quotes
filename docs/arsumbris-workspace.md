@@ -34,6 +34,12 @@ The caller refuses credential-named inputs and PostgreSQL credential strings bef
 
 ## Private evidence binding
 
+The [[map - Keller operator findings]] is the operator-only knowledge entry point for the retained source and evaluation findings.
+The repository declares the already pinned `au-base-types` and `au-weave` vocabularies and uses native `claim`, `source`, `map.overview` and `weave-premise` records, with typed `based_on` and `about` relations.
+The [[premise - Keller operator findings]] excludes hidden case targets, customer-specific solutions, credentials and unsupported business claims from this graph.
+Documenting a finding does not activate the private knowledge store, change a profile, widen the frozen worker-file allowlist, promote a pending code branch or authorize a customer release.
+These records expose dated aggregate observations to authorized operators; a type claim, citation or hash does not authenticate its issuer or reviewer.
+
 The GUI starts its MCP daemon when **New session** is selected; merely opening the layout does not start the agent layer. After that, or after starting both headless services, run `node scripts/verify-arsumbris-mcp.mjs --runtime-root <runtime-directory>` to check the two scoped standard MCP connections and perform a live read-only corpus lookup. `--skip-corpora` skips that database read; it is not database-access verification. The smoke check fails on unresolved graph errors. The generic stdio bridge uses the upstream CC transport without launching Claude or changing the Codex model selection.
 
 The pinned upstream runtime is an early alpha, not a security sandbox. Tool allowlists and bounded readers narrow the application surface but do not isolate plugin code from the operating-system account. Run it only under the authorized private account. This setup was verified on Linux; the DBF reader uses Linux file-descriptor paths and must not be claimed portable to macOS without a separate test.
