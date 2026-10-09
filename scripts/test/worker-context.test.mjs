@@ -61,6 +61,9 @@ test('actual scoped guard allows the contract and denies the operator guide befo
   const guard = loadEvaluationScope(scopePath, root)
   assert.doesNotThrow(() => beforeScopedCall('read_file_pinned', { file_path: contract }, guard))
   assert.throws(() => beforeScopedCall('read_file_pinned', { file_path: operatorGuide }, guard), /File unavailable in evaluation scope/)
+  assert.throws(() => beforeScopedCall('read_file_pinned', {
+    file_path: join(root, 'docs/steve-development-diagnostic.md'),
+  }, guard), /File unavailable in evaluation scope/)
   writeFileSync(scopePath, JSON.stringify({ ...scope, allowed_files: [contract, operatorGuide] }))
   assert.throws(() => loadEvaluationScope(scopePath, root), /Invalid allowed public file/)
 })
