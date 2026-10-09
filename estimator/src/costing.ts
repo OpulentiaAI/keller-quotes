@@ -26,6 +26,13 @@ interface SupportedCost {
 
 type Allocation = "material_per_unit" | "outside_per_unit" | "setup_total";
 type Category = "material" | "outside" | "other" | "routing";
+export interface BlankDimension { value: number; unit: "mm" | "in" }
+export interface RectangularBlank {
+  length: BlankDimension;
+  width: BlankDimension;
+  thickness: BlankDimension;
+  density_kg_m3: number;
+}
 export interface CostComponent extends SupportedCost {
   category: Exclude<Category, "routing">;
   allocation: Allocation;
@@ -34,7 +41,9 @@ export interface CostComponent extends SupportedCost {
   quantity_unit: string;
   quantity: number;
   /** Original priced units per quantity_unit, BEFORE yield. */
-  original_units_per_quantity_unit: number;
+  original_units_per_quantity_unit?: number;
+  /** Derives kg/lb per blank instead of a manually supplied conversion. */
+  rectangular_blank?: RectangularBlank;
   yield_fraction: number;
   minimum_quantity: number;
   /** Purchase a multiple of this many original priced units, after yield and minimum quantity. */
@@ -80,6 +89,7 @@ export interface CostBreakdown {
   reconciled_flat: FlatCosts;
   components: { id: string; category: CostComponent["category"]; allocation: Allocation;
     priced_quantity: number; total_cost: CostRange;
+    consumption?: { method: "rectangular_blank"; mass_per_blank: number; mass_unit: "kg" | "lb"; blank_count: number };
     purchase_rounding?: { original_unit: string; quantity_before_increment: number; increment: number } }[];
   routing: { id: string; setup_occurrences: number; setup_minutes: CostRange;
     run_minutes_per_piece: CostRange; process_quantity: number; setup_cost: CostRange; run_cost: CostRange }[];
@@ -159,6 +169,26 @@ function count(value: unknown, path: string, maximum: number, minimum = 0): numb
     throw new Error(`${path} must be an integer in ${minimum}..${maximum}`);
   }
   return value;
+}
+function materialConversion(c: Record<string, unknown>, p: string): Fraction {
+  if (!("rectangular_blank" in c)) return number(c.original_units_per_quantity_unit, `${p}.original_units_per_quantity_unit`, true);
+  if ("original_units_per_quantity_unit" in c) throw new Error(`${p} must supply rectangular_blank OR original_units_per_quantity_unit, not both`);
+  choice(c.category, `${p}.category for rectangular_blank`, ["material"]);
+  choice(c.original_unit, `${p}.original_unit for rectangular_blank`, ["kg", "lb"]);
+  choice(c.quantity_unit, `${p}.quantity_unit for rectangular_blank`, ["blank"]);
+  count(c.quantity, `${p}.quantity in blanks`, 10_000_000, 1);
+  const path = `${p}.rectangular_blank`;
+  const blank = record(c.rectangular_blank, path, ["length", "width", "thickness", "density_kg_m3"]);
+  let mass = number(blank.density_kg_m3, `${path}.density_kg_m3`, true);
+  for (const key of ["length", "width", "thickness"] as const) {
+    const dimension = record(blank[key], `${path}.${key}`, ["value", "unit"]);
+    choice(dimension.unit, `${path}.${key}.unit`, ["mm", "in"]);
+    const metres = mul(number(dimension.value, `${path}.${key}.value`, true),
+      dimension.unit === "mm" ? fraction(1n, 1000n) : fraction(127n, 5000n));
+    mass = mul(mass, metres);
+  }
+  // Exact international avoirdupois pound; never round mass before multiplying cost.
+  return c.original_unit === "kg" ? mass : div(mass, fraction(45359237n, 100000000n));
 }
 function range(value: unknown, path: string): Range {
   const r = record(value, path, keys);
@@ -273,7 +303,7 @@ function calculateCostBasis(value: unknown, quantity: number, asOf: string, flat
   const present = new Set<Category>();
   for (const [i, item] of list(root.components, "cost_basis.components", 64).entries()) {
     const p = `cost_basis.components[${i}]`;
-    const c = record(item, p, [...supportKeys, "category", "allocation", "rate_kind", "original_unit", "quantity_unit", "quantity", "original_units_per_quantity_unit", "yield_fraction", "minimum_quantity", "purchase_increment", "unit_cost", "minimum_charge"]);
+    const c = record(item, p, [...supportKeys, "category", "allocation", "rate_kind", "original_unit", "quantity_unit", "quantity", "original_units_per_quantity_unit", "rectangular_blank", "yield_fraction", "minimum_quantity", "purchase_increment", "unit_cost", "minimum_charge"]);
     support(c, p, asOf, ids, sourceWarnings);
     choice(c.category, `${p}.category`, ["material", "outside", "other"]);
     choice(c.allocation, `${p}.allocation`, ["material_per_unit", "outside_per_unit", "setup_total"]);
@@ -282,7 +312,7 @@ function calculateCostBasis(value: unknown, quantity: number, asOf: string, flat
     text(c.original_unit, `${p}.original_unit`);
     text(c.quantity_unit, `${p}.quantity_unit`);
     const q = number(c.quantity, `${p}.quantity`, true);
-    const conversion = number(c.original_units_per_quantity_unit, `${p}.original_units_per_quantity_unit`, true);
+    const conversion = materialConversion(c, p);
     const yieldFraction = number(c.yield_fraction, `${p}.yield_fraction`, true);
     if (compare(yieldFraction, whole(1)) > 0n) throw new Error(`${p}.yield_fraction must be <= 1`);
     const minimum = number(c.minimum_quantity, `${p}.minimum_quantity`);
@@ -302,6 +332,8 @@ function calculateCostBasis(value: unknown, quantity: number, asOf: string, flat
     present.add(c.category as Category);
     components.push({ id: c.id as string, category: c.category as CostComponent["category"], allocation,
       priced_quantity: display(pricedQuantity, 6, p), total_cost: displayRange(total, 4, p),
+      ...("rectangular_blank" in c ? { consumption: { method: "rectangular_blank" as const,
+        mass_per_blank: display(conversion, 8, p), mass_unit: c.original_unit as "kg" | "lb", blank_count: c.quantity as number } } : {}),
       ...(increment ? { purchase_rounding: { original_unit: c.original_unit as string,
         quantity_before_increment: display(quantityBeforeIncrement, 6, p), increment: c.purchase_increment as number } } : {}) });
   }
@@ -374,6 +406,7 @@ function calculateCostBasis(value: unknown, quantity: number, asOf: string, flat
     supplied_basis: value as CostBasis, reconciled_flat: reconciled, components, routing,
     estimated_line_cost: displayRange(lineCost, 4, "cost_basis.estimated_line_cost"), estimated_line_margin_pct: margin,
     warnings: [
+      ...(components.some(c => c.consumption) ? ["Rectangular blank mass uses supplied dimensions and density, not verified finished geometry or nesting; yield and purchase minimums are applied separately"] : []),
       "Worksheet sources, hashes, applicability and estimate approvals are supplied assertions, not authenticated evidence",
       "Historical and approved estimates support prospective review, not guaranteed actual costs or current buy prices",
       "Estimated production-line margin excludes freight, tax and separate order charges; no whole-order margin is claimed",
