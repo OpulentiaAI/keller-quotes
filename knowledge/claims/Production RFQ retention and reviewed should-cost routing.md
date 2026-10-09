@@ -19,7 +19,11 @@ The `Keller Codex` profile injects the depth-zero `keller-orientation` and `kell
 
 - **Translate a selected supplier offer without guessing:** `dbf_supplier_costs` binds explicit VEND_QUOT identity, physical record/hash and chosen QTY/PRICE pair. Named supplied review defines USD purchase-cost unit, quantity applicability, dates and setup/minimum scope. Preserve both primary inputs and non-null setup component; monetary MINIMUM is not a quantity and SU_CHARGE must not disappear or be counted twice. All outputs are approved-estimate assertions, not authenticated current costs or customer authorization. See the canonical workflow for the input contract and minimum arithmetic.
 
+- **Whole-stock purchase assumptions:** optional component `purchase_increment` rounds requirements up in original priced units after yield and minimum quantity, before unit cost and minimum money. Omission preserves fractional allocation. A kg-priced sheet needs its supported kg-per-sheet increment, not an inferred increment of one. Review pack/stock applicability and leftover allocation; no inventory credit, cross-line sharing, automatic tier selection or change to routing/shipped quantities is inferred. The costing breakdown preserves the pre-increment quantity and supplied increment for named review.
+
 ## Sources and correction rule
+
+Approved cost estimates require `source_date <= approval.date <= quote_date` across components, routing and not-applicable sources. An approval predating its source is contradictory, even when both precede the RFQ; it must fail before a numeric review draft. Expired historical evidence can still support a correctly reviewed estimate, not a current offer. Capture dates remain archive metadata and do not authenticate prior availability or approval. Synthetic regressions live in `estimator/test/costing.test.ts` and `tests/test_arsumbris_quote.py`.
 
 Source-of-truth contracts: `estimator/src/{intake,order,costing}.ts`, `arsumbris/quote/{tool,validate}.ts`, `arsumbris/sources/read.py`, and `docs/pricing-evals-and-orders.md`. Synthetic behavior checks: `estimator/test/intake.test.ts`, `tests/test_arsumbris_quote.py`, `tests/test_arsumbris_sources.py`, and `scripts/test/arsumbris-host-startup.test.mjs`. Passing synthetic regressions proves these interfaces/arithmetic, not real-job quote quality or current supplier availability.
 

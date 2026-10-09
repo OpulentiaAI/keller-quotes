@@ -22,6 +22,8 @@ In `Keller Codex`, `keller_quote` takes JSON `OrderRequest` and a named reviewer
 
 ## Evidence dispositions and retained sources
 
+Cost-source date consistency: `approved_estimate` requires `source_date <= approval.date <= quote_date` for components, routing and not-applicable evidence. Correct a mismatched source/version or obtain a new review; never backdate evidence to pass. Historical expiry does not block an explicitly reviewed estimate, but a later capture/review cannot turn an expired offer into a `current` cost. Review names/dates remain supplied assertions, not authenticated authorization.
+
 Compare supplied identities with returned `order.request`. Exact normalized part numbers across customers, revisions, materials or UOM do not prove interchangeability. Drawing assets are not drawing identifiers; human-check extracted geometry/tolerances. Preserve part and drawing revision separately using the supported contract (otherwise clearly labeled notes), never by changing literal part identity.
 
 | Evidence condition | Disposition |
@@ -67,6 +69,8 @@ For DBF memo evidence, use `keller_sources` `dbf_rows` with explicit `memo_field
 If a new RFQ has no known material/operation ID, inspect `keller_sources` `dbf_schema.catalog_lookup`, then use `dbf_catalog` for the approved MATERIAL, OPERATIO or FORMULA file. Omit `query` to browse, or supply a literal ID/name substring (case-insensitive, at most 80 characters). Each page returns at most five candidates; preserve duplicates and follow physical `next_offset` with the same query and required `expected_dbf_sha256`. A page miss is not corpus absence. Read chosen IDs with exact `dbf_rows` for further evidence/memos. Discovery does not select applicable stock, validate COST/SELL meaning or freshness, execute formulas, or authorize blinded-worker archive access. Record an explicit read bound and the price-critical question before searching; do not exhaust a catalog speculatively.
 
 After an explicit `VENDQUOT` row/tier selection, use `dbf_supplier_costs` with `vendor_quote`, physical `record_index`, both DBF/record hashes, `price_break` 1..8 and JSON `supplier_review`. Review USD COST/original-unit meaning, tier quantity applicability, dated estimating basis, setup occurrences and whether monetary `MINIMUM` includes setup; no tier/stock selection is inferred. Follow `docs/steve-pricing-workflow.md` for the review contract. Carry **both** returned primary component inputs and any non-null setup component into the worksheet, assigning unique IDs and supported primary quantities/allocation. Do not turn monetary minimum into quantity, omit/double-charge setup, or claim expired/merely unexpired evidence is authenticated current cost. Preserve raw precision, date/void evidence, hashes and supplied-review labeling.
+
+For reviewed whole-stock or pack purchases, supply `purchase_increment` on the cost component in its `original_unit`. It rounds the yield/minimum-adjusted requirement upward to a multiple before unit cost and monetary minimums; `1` means one priced unit, not automatically one sheet or one finished part. Preserve source support and the leftover/allocation assumption. Omit it for supported fractional allocation; it neither chooses supplier tiers nor credits reusable leftovers. See `docs/steve-pricing-workflow.md` for examples and scope.
 
 ## Standalone CLI and complete internal order
 
