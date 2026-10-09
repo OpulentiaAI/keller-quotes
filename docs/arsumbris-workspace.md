@@ -76,6 +76,18 @@ The ≥90% completed-quoting goal is **not established** by this workspace. The 
 
 The `keller_quote` tool is the controlled internal draft path, not a release mechanism. It requires an explicit public corpus ID, an order request satisfying the estimator's `OrderRequest` contract, and a named human reviewer; it reuses the local order CLI with explicit operator price/cost inputs or the selected read-only customer-PDF register. It preserves blocked lines and returns structured `order`, `markdown`, `review`, state/blockers, and opaque references to persisted private artifacts. **The response itself contains private customer/cost evidence** and must stay in approved internal channels; don't paste it into a public graph node or customer message. It performs no database write or hosted model call. Treat a `PRICED_REQUIRES_REVIEW` result as an internal calculation awaiting approval, not as a quote sent to a customer.
 
+### Discover manufacturing catalog candidates without prior IDs
+
+`dbf_schema.catalog_lookup` advertises `dbf_catalog` only for the approved MATERIAL, OPERATIO and FORMULA definition shapes. Use it to discover candidate IDs for a new RFQ, not to select an applicable cost automatically. Synthetic request shape:
+
+```json
+{"action":"dbf_catalog","source_set":"fabritrak","path":"OPERATIO.DBF","query":"drill","limit":5}
+```
+
+Resolve the real relative path from the owner-bound source inventory. Omit `query` for a bounded browse, or use a case-insensitive literal substring (1..80 characters) over fixed fields: MATERIAL `ID/NAME/OTHERNAME`, OPERATIO `OPER_ID/NAME`, FORMULA `FORM_ID/FORM_NAME`. It does not search monetary fields, memo text or executable expressions. Case-insensitive discovery is not case-insensitive identity: subsequent `dbf_rows.record_id` remains exact. Unknown/mismatched schemas, quote-history table names and caller-selected predicates are rejected.
+
+The existing five-row, 20,000-record, 16-MiB scan and response-size limits apply. Follow `next_offset` with the same query and `expected_dbf_sha256` (mandatory for nonzero catalog offsets); duplicate IDs remain separate physical records, deleted records are skipped, and hash changes fail closed. Finish with a bounded exact-ID/memo read where needed. Record source hashes, locators and unresolved candidates; no automatic join, unit/COST interpretation, current-cost assertion or customer release occurs. Blinded evaluation profiles still cannot call the source tool.
+
 ## Current runtime and workspace verification
 
 The [2026-10-07 verification receipt](../artifacts/keller-workspace-verification-2026-10-07.json) records the coherent `0.0.2-alpha` build and completed native check. A cold engine became fully ready in 34.131 seconds before Electron opened the overview. The native graph resolved all 39,975 unique document instances and all 39,975 archive edges, plus 513 outgoing references across 65 other checked records. The overview and experiment-ledger navigation through the native document-tabs chooser rendered with zero own diagnostics, renderer errors or host conditions.
