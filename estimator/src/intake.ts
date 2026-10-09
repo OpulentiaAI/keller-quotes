@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { chmodSync, closeSync, constants, existsSync, fstatSync, lstatSync, mkdirSync, openSync, readSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import type { CostBasis } from "./costing.js";
 
 /** These are extraction/assertion records, not an automatic geometry verifier. */
 export interface SourceEvidence {
@@ -68,11 +69,20 @@ export function assertIntake(value: unknown): asserts value is Intake {
   if (total > 64 * 1024 * 1024) throw new Error("intake attachment total exceeds 64 MiB");
 }
 
+function assertBoundSource(source: Pick<SourceEvidence, "sha256" | "locator">, intake?: Intake): void {
+  if (source.locator.startsWith("upload:")) throw new Error("unresolved upload reference; retain intake before pricing");
+  if (source.locator.startsWith("keller-intake:")) {
+    const attachment = intake?.attachments.find(a => a.locator === source.locator);
+    if (!attachment || attachment.sha256 !== source.sha256) throw new Error("source does not bind retained attachment");
+  }
+}
+
 export function assertEngineeringLine(part: Record<string, unknown>, intake?: Intake): void {
   const evidence = new Map<string, SourceEvidence>();
   for (const value of list(part.source_evidence ?? [], 64)) {
     const s = record(value, ["id", "sha256", "locator", "attachment_id", "page", "record_index", "field"]);
     text(s.id); text(s.locator); digest(s.sha256);
+    assertBoundSource(s as unknown as SourceEvidence, intake);
     if (evidence.has(s.id)) throw new Error("duplicate source_evidence id");
     if (s.page !== undefined) integer(s.page, 1, 100000);
     if (s.record_index !== undefined) integer(s.record_index, 0, 10000000);
@@ -109,8 +119,12 @@ export function assertEngineeringLine(part: Record<string, unknown>, intake?: In
     if (Math.abs((u.original_quantity as number) * (u.pieces_per_original_unit as number) - (part.quantity as number)) > 1e-9) throw new Error("UOM conversion must reconcile to piece quantity");
   }
   // Optional explicit worksheet links make engineering-to-cost support inspectable.
-  const pricing = part.pricing as { cost_basis?: { components?: unknown[]; routing?: unknown[] } } | undefined;
-  for (const component of [...(pricing?.cost_basis?.components ?? []), ...(pricing?.cost_basis?.routing ?? [])]) {
+  const pricing = part.pricing as { cost_basis?: CostBasis } | undefined;
+  const basis = pricing?.cost_basis;
+  for (const item of [...(basis?.components ?? []), ...(basis?.routing ?? []), ...(basis?.not_applicable ?? [])]) {
+    for (const source of item.sources) assertBoundSource(source, intake);
+  }
+  for (const component of [...(basis?.components ?? []), ...(basis?.routing ?? [])]) {
     const c = component as { engineering_fact_ids?: string[]; sources?: { sha256: string; locator: string }[] };
     for (const id of list(c.engineering_fact_ids ?? [], 32)) {
       const fact = facts.get(id as string);
