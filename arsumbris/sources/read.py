@@ -100,6 +100,10 @@ def validate(request):
         "dbf_rows": {"action", "source_set", "path", "quote_no", "record_id", "quotletter", "item",
                      "wo_no", "jobno", "page_no", "seq", "offset", "limit", "expected_dbf_sha256",
                      "memo_fields", "fpt_path", "expected_fpt_sha256", "memo_offset", "memo_limit"},
+        "dbf_routing_time": {"action", "source_set", "path", "quote_no", "record_index",
+                             "expected_dbf_sha256", "expected_record_sha256", "phase", "time_review",
+                             "formula_path", "formula_record_index", "expected_formula_dbf_sha256",
+                             "expected_formula_record_sha256"},
     }
     if action not in allowed or set(request) - allowed[action]:
         raise InvalidRequest("unsupported action or fields")
@@ -114,6 +118,24 @@ def validate(request):
     if action.startswith("dbf_") and (request["source_set"] != "fabritrak" or
                                      Path(components[-1]).suffix.lower() != ".dbf"):
         raise InvalidRequest("DBF action requires a fabritrak .dbf file")
+    if action == "dbf_routing_time":
+        if Path(components[-1]).stem.upper() != "QUOTOPER":
+            raise InvalidRequest("routing time requires QUOTOPER.DBF")
+        formula_parts = parts(request.get("formula_path", ""), True)
+        if formula_parts[-1].upper() != "FORMULA.DBF":
+            raise InvalidRequest("routing time requires FORMULA.DBF")
+        validate({"action": "dbf_rows", **{key: request.get(key) for key in
+                  ("source_set", "path", "quote_no", "expected_dbf_sha256")}})
+        for key in ("record_index", "formula_record_index"):
+            if request.get(key) is None:
+                raise InvalidRequest(f"{key} required")
+            integer(request[key], key, 0, 10000000)
+        for key in ("expected_dbf_sha256", "expected_record_sha256", "expected_formula_dbf_sha256", "expected_formula_record_sha256"):
+            if not isinstance(request.get(key), str) or not re.fullmatch(r"[0-9a-f]{64}", request[key]):
+                raise InvalidRequest(f"{key} must be a lowercase SHA256")
+        if request.get("phase") not in ("setup", "run"):
+            raise InvalidRequest("phase must be setup or run")
+        routing_time_review(request.get("time_review"))
     if action == "dbf_supplier_costs":
         if Path(components[-1]).stem.upper() != "VENDQUOT":
             raise InvalidRequest("supplier costs require VENDQUOT.DBF")
@@ -181,6 +203,41 @@ def validate(request):
         if request.get("encoding", "utf-8") not in ("utf-8", "latin-1", "base64"):
             raise InvalidRequest("encoding must be utf-8, latin-1 or base64")
     return request
+
+
+def routing_time_review(value):
+    if not isinstance(value, str) or len(value) > 2400:
+        raise InvalidRequest("time_review must be bounded JSON text")
+    def unique(pairs):
+        obj = {}
+        for key, item in pairs:
+            if key in obj:
+                raise InvalidRequest("duplicate time_review field")
+            obj[key] = item
+        return obj
+    try:
+        review = json.loads(value, object_pairs_hook=unique)
+    except (ValueError, TypeError):
+        raise InvalidRequest("time_review must be bounded JSON text") from None
+    required = {"input_unit", "operation_source_date", "formula_source_date", "reviewer", "date", "reason", "applicability"}
+    if not isinstance(review, dict) or not required <= set(review) or set(review) - required - {"zero_reason"}:
+        raise InvalidRequest("time_review requires units, both source dates, reviewer, date, reason and applicability")
+    for key, text in review.items():
+        if (not isinstance(text, str) or not text.strip() or text != text.strip() or len(text) > (128 if key == "reviewer" else 512)
+                or any(ord(c) < 32 or 127 <= ord(c) <= 159 for c in text)):
+            raise InvalidRequest("time_review fields must be bounded nonblank text without controls")
+    if review["applicability"] not in ("supported", "assumed"):
+        raise InvalidRequest("time_review applicability must be supported or assumed")
+    for key in ("operation_source_date", "formula_source_date", "date"):
+        try:
+            if not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", review[key]):
+                raise ValueError()
+            datetime.strptime(review[key], "%Y-%m-%d")
+        except ValueError:
+            raise InvalidRequest("time_review dates must be valid YYYY-MM-DD") from None
+    if max(review["operation_source_date"], review["formula_source_date"]) > review["date"]:
+        raise InvalidRequest("time_review cannot predate either source")
+    return review
 
 
 def supplier_cost_review(value):
@@ -572,6 +629,84 @@ def dbf_rows(fd, table, request, memo=None):
     return response
 
 
+def selected_timing_record(fd, table, index, expected_hash, schema):
+    fields = {field.name.upper(): field for field in table.fields}
+    if any(name not in fields or fields[name].type != kind for name, kind in schema.items()):
+        raise InvalidRequest("routing/formula field schema mismatch")
+    if index >= table.header.numrecords:
+        raise InvalidRequest("selected timing record outside DBF")
+    offset = table.header.headerlen + index * table.header.recordlen
+    raw = os.pread(fd, table.header.recordlen, offset)
+    if len(raw) != table.header.recordlen or hashlib.sha256(raw).hexdigest() != expected_hash:
+        raise InvalidRequest("selected timing record hash mismatch")
+    if raw[:1] != b" ":
+        raise InvalidRequest("selected timing record deleted or malformed")
+    values, _ = record_values(table, raw)
+    return ({name: values[field.name] for name, field in fields.items()},
+            {"record_index": index, "record_byte_offset": offset, "record_bytes": table.header.recordlen,
+             "record_sha256": expected_hash})
+
+
+def routing_time(fd, table, formula_fd, formula_table, request):
+    if table.sha256 != request["expected_dbf_sha256"] or formula_table.sha256 != request["expected_formula_dbf_sha256"]:
+        raise InvalidRequest("routing/formula DBF hash mismatch; reread selected evidence")
+    phase = request["phase"]
+    variable, link = ("SU_V1", "SU_FORM_ID") if phase == "setup" else ("RUN_V1", "RU_FORM_ID")
+    operation, operation_proof = selected_timing_record(fd, table, request["record_index"], request["expected_record_sha256"],
+        {"QUOTE_NO": "C", "SEQ": "C", "OPER_ID": "C", variable: "N", link: "C"})
+    formula, formula_proof = selected_timing_record(formula_fd, formula_table, request["formula_record_index"],
+        request["expected_formula_record_sha256"], {"FORM_ID": "C", "FORMULA": "C", "FORM_VARS": "N", "V1_DESC": "C"})
+    if operation["QUOTE_NO"] != request["quote_no"] or not operation["SEQ"] or not operation["OPER_ID"]:
+        raise InvalidRequest("selected timing record quote/operation identity mismatch")
+    if not operation[link] or operation[link] != formula["FORM_ID"]:
+        raise InvalidRequest("selected formula does not match routing formula reference")
+    # Preserve original units for the worksheet's exact time conversion; never execute source formulas.
+    forms = {("setup", "SU_V1"): ("minutes", "SU Time (MINUTES)"),
+             ("setup", "SU_V1*60"): ("hours", "SU Time (Hours)"),
+             ("run", "RUN_V1"): ("minutes_per_piece", "Minutes Per Part"),
+             ("run", "60/RUN_V1"): ("pieces_per_hour", "Parts Per Hour")}
+    form = forms.get((phase, formula["FORMULA"]))
+    if not form or formula["FORM_VARS"] != "1" or formula["V1_DESC"] != form[1]:
+        raise InvalidRequest("unsupported or ambiguous timing formula/units; separate evidence interpretation required")
+    review = routing_time_review(request["time_review"])
+    if review["input_unit"] != form[0]:
+        raise InvalidRequest("reviewed input_unit conflicts with formula variable units")
+    original = operation[variable]
+    if not original:
+        raise InvalidRequest("blank timing variable is unknown, not zero")
+    value = Decimal(original)
+    if value < 0 or value > 1e9 or len(original.partition(".")[2].rstrip("0")) > 6:
+        raise InvalidRequest("timing variable must be nonnegative, <= 1e9 and exact to six decimal places")
+    numeric = float(value)
+    if Decimal(str(numeric)) != value:
+        raise InvalidRequest("timing variable cannot be represented without rounding")
+    if value == 0 and form[0] == "pieces_per_hour":
+        raise InvalidRequest("pieces_per_hour must be positive; zero is not zero duration")
+    if value == 0 and "zero_reason" not in review:
+        raise InvalidRequest("zero timing requires an explicit reviewed zero_reason")
+    sources = []
+    for path, source_table, proof, field, date_key in (
+            (request["path"], table, operation_proof, variable, "operation_source_date"),
+            (request["formula_path"], formula_table, formula_proof, "FORMULA", "formula_source_date")):
+        locator = (f"fabritrak:{quote(path, safe='/')}#record_index={proof['record_index']}"
+                   f"&record_sha256={proof['record_sha256']}&field={field}")
+        sources.append({"source_class": "routing_estimate", "sha256": source_table.sha256, "locator": locator,
+                        "source_date": review[date_key], "status": "approved_estimate", "applicability": review["applicability"],
+                        "basis": "Selected historical routing variable and formula; supplied review, not actual/current time or rate authority",
+                        "approval": {key: review[key] for key in ("reviewer", "date", "reason")}})
+    unchanged(fd, table)
+    unchanged(formula_fd, formula_table)
+    return {"action": request["action"], "quote_no": operation["QUOTE_NO"], "seq": operation["SEQ"], "operation_id": operation["OPER_ID"],
+            "phase": phase, "timing_input": {f"{phase}_time": {"unit": form[0], "values": {k: numeric for k in ("low", "base", "high")}}},
+            "sources": sources, "time_review": review, **({"zero_reason": review["zero_reason"]} if "zero_reason" in review else {}),
+            "evidence": {"operation": {"citation": dbf_citation(table, request), **operation_proof,
+                                       "variable_field": variable, "original_variable_text": original, "formula_id": operation[link]},
+                         "formula": {"citation": dbf_citation(formula_table, {**request, "path": request["formula_path"]}), **formula_proof,
+                                     "formula_id": formula["FORM_ID"], "expression": formula["FORMULA"], "variable_label": formula["V1_DESC"]}},
+            "selection_note": "Explicitly selected historical timing only. No operation selection, applicability authentication, quantities, occurrences, COST/SELL rates or prices inferred. Point values are not uncertainty bounds; review ranges separately.",
+            "warning": WARNING}
+
+
 def supplier_costs(fd, table, request):
     fields = {field.name.upper(): field for field in table.fields}
     tier = request["price_break"]
@@ -732,6 +867,12 @@ def read(bindings, request):
         table = dbf_table(fd)
         if action == "dbf_schema":
             return dbf_schema(table, request)
+        if action == "dbf_routing_time":
+            formula_fd = open_source(bindings[source_set], parts(request["formula_path"], True))
+            try:
+                return routing_time(fd, table, formula_fd, dbf_table(formula_fd), request)
+            finally:
+                os.close(formula_fd)
         if action == "dbf_supplier_costs":
             return supplier_costs(fd, table, request)
         if "memo_fields" not in request:

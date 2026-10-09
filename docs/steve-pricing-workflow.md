@@ -81,6 +81,28 @@ SELL rates must not silently enter `cost_plus` as costs or acquire margin a seco
 
 For total supported cost `C` and target gross margin fraction `m`, net sell = `C / (1 - m)`, with `0 <= m < 1`. Estimated margin = `(net revenue - supported estimated cost) / net revenue`; zero revenue is undefined. At the selected sell amount, use high cost for downside margin. This is **gross margin**, not `cost × (1 + markup)`. Fix the margin/competitiveness policy before comparison, and retain full source precision separately from four-decimal order units and cent extensions.
 
+## Selected historical routing-time bridge
+
+Operator-only `keller_sources` action `dbf_routing_time` translates one deliberately selected setup or run input, not an entire inferred routing. First read the exact quote's `QUOTOPER` row and referenced `FORMULA` row through the bounded reader. Supply:
+
+- `source_set: fabritrak`, `path` to `QUOTOPER.DBF`, exact `quote_no`, zero-based `record_index`, `expected_dbf_sha256`, and `expected_record_sha256`;
+- `formula_path` to `FORMULA.DBF`, zero-based `formula_record_index`, `expected_formula_dbf_sha256`, and `expected_formula_record_sha256`;
+- `phase: setup` or `run`;
+- `time_review` JSON text containing `input_unit`, `operation_source_date`, `formula_source_date`, `reviewer`, `date`, `reason`, and `applicability: supported|assumed`. Both source dates must precede or equal the review date. Use actual supplied review metadata, never invented or backdated approval. Zero direct time also needs an explicit `zero_reason`.
+
+The physical formula's ID must match the routing row's `SU_FORM_ID` or `RU_FORM_ID`; duplicate identifiers never trigger a first-match fallback. The deliberately limited forms below also require `FORM_VARS` to be `1` and the matching retained variable label. Formula expressions are compared, never executed or repaired:
+
+| Phase | Formula | Variable label | Required input/output unit |
+|---|---|---|---|
+| Setup | `SU_V1` | `SU Time (MINUTES)` | `minutes` |
+| Setup | `SU_V1*60` | `SU Time (Hours)` | `hours` |
+| Run | `RUN_V1` | `Minutes Per Part` | `minutes_per_piece` |
+| Run | `60/RUN_V1` | `Parts Per Hour` | `pieces_per_hour` |
+
+Copy `timing_input.setup_time` or `timing_input.run_time` into the reviewed route, append **both** returned `sources`, and retain `evidence` and `time_review` in the private review packet. If present, preserve `zero_reason` on the route. The bridge preserves the original variable text and unit; the existing worksheet performs exact rational hours/throughput conversion. It does not use stored `SUTIME`/`RUNTIME`, quote SELL rates, table lookups, absent variables or formula defaults as fallbacks. Blank inputs remain unknown, zero throughput is rejected even with a reason, and overprecision is rejected rather than rounded. Other expressions, unit labels or variable counts require separate supported interpretation.
+
+Outputs are historical point estimates (`low == base == high`), not uncertainty bounds or proven actual times. Review appropriate ranges separately. Supply supported quantities, setup occurrences, COST rates, charge inclusions and drawing/revision applicability separately; nothing here establishes those facts or selects an operation. Review identity, dates and applicability are supplied assertions, not authenticated approval or current authority. This action does not broaden any blinded evaluation scope, calculate a price or authorize release.
+
 ## Purchased quantity versus allocated consumption
 
 If a supported supplier/stock policy requires whole sheets, bars or pack multiples, set the component's optional `purchase_increment` in **original priced units**, not finished pieces. The positive value supports up to six decimal places. Costing applies `ceil(max(quantity × conversion / yield, minimum_quantity) / purchase_increment) × purchase_increment` before unit cost and monetary minimums. Multiples start at zero, not at the minimum quantity: minimum 5 with increment 4 means purchasing 8, not 5 or 9. The breakdown retains the pre-increment quantity, unit and increment alongside the purchased quantity; displayed quantities use six decimal places, while the ceiling uses exact rational arithmetic.

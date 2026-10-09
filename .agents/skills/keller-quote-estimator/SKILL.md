@@ -74,6 +74,8 @@ For reviewed whole-stock or pack purchases, supply `purchase_increment` on the c
 
 ## Standalone CLI and complete internal order
 
+For a reviewed historical routing-time candidate, operator-only `keller_sources.dbf_routing_time` binds a selected `QUOTOPER` physical row and its referenced `FORMULA` row with both file/record hashes. Select `setup` or `run`, supply explicit unit/applicability review and both source dates, then copy `timing_input` plus **both** `sources` into the selected route. See [the timing bridge contract](../../../docs/steve-pricing-workflow.md#selected-historical-routing-time-bridge). It preserves minutes, setup hours or parts/hour for deterministic worksheet conversion; stored `SUTIME`/`RUNTIME` zeros/blanks are not timing evidence. Do not turn zero variables into omitted work: positive throughput is mandatory and direct zero time needs `zero_reason`. This does not choose an applicable operation, execute arbitrary formulas, supply quantities/COST rates or validate uncertainty ranges. Keep the returned original variable text, formula and record evidence in the private handoff. Named review and customer-release controls remain unchanged.
+
 Run the estimate CLI only after choosing a register. This minimal example is synthetic and intentionally forces the deterministic offline path; put real customer requests/outputs in approved private storage outside the checkout:
 
 ```json
