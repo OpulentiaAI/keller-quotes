@@ -1,7 +1,7 @@
 extends: mcp.tool::au-mcp-sdk
 fields:
   #: Discover configured source sets, list one directory, read bounded file bytes, or inspect/filter a FabriTRAK DBF.
-  action: [sets, list, read, dbf_schema, dbf_rows, dbf_catalog]
+  action: [sets, list, read, dbf_schema, dbf_rows, dbf_catalog, dbf_routing_time]
   #: Owner-bound source set; required except for sets.
   source_set?: [fabritrak, pdfs, transcripts, manufacturing-audit]
   #: Relative directory or file path within the source set; empty or omitted means root for list.
@@ -32,6 +32,18 @@ fields:
   seq?: String
   #: Lowercase SHA256 from a prior DBF citation; DBF rows/catalog fail closed on mismatch. Required for dbf_catalog when offset > 0.
   expected_dbf_sha256?: String
+  #: dbf_routing_time: deliberately selected zero-based QUOTOPER physical record, bound to quote_no and both hashes.
+  record_index?: Number{>=0 & integer}
+  expected_record_sha256?: String
+  #: dbf_routing_time: one explicitly selected phase; no operation or route selection.
+  phase?: [setup, run]
+  #: Owner-root relative FORMULA.DBF and selected physical record, linked by SU_FORM_ID or RU_FORM_ID. Both hashes required.
+  formula_path?: String
+  formula_record_index?: Number{>=0 & integer}
+  expected_formula_dbf_sha256?: String
+  expected_formula_record_sha256?: String
+  #: Bounded JSON: input_unit, operation_source_date, formula_source_date, reviewer, date, reason, applicability (supported/assumed), optional zero_reason. Review date must not predate either source. Supplied review, not authenticated applicability or current authority.
+  time_review?: String
   #: dbf_rows only: up to four explicitly selected memo field names. Default remains unresolved null, not empty text.
   memo_fields?: String[]
   #: dbf_rows only with memo_fields: same-directory, same-stem FPT relative path; owner-root and no-symlink confinement apply.
