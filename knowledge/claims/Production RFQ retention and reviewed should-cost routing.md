@@ -17,6 +17,8 @@ The `Keller Codex` profile injects the depth-zero `keller-orientation` and `kell
 
 ## Sources and correction rule
 
+Selected operation COST rates can be translated by operator-only `keller_sources dbf_operation_costs`: exact `OPERATIO` ID/physical index and DBF/record hashes, plus explicit review of USD/hour meaning, source/approval dates, applicability and inclusions. It copies only `SU_COST`/`RUN_COST` into partial routing inputs. Preserve timing sources and engineering links when combining them; blank rates never fall back to SELL fields. No operation selection, formula execution, current-price authentication or customer approval is implied.
+
 Source-of-truth contracts: `estimator/src/{intake,order,costing}.ts`, `arsumbris/quote/{tool,validate}.ts`, `arsumbris/sources/read.py`, and `docs/pricing-evals-and-orders.md`. Synthetic behavior checks: `estimator/test/intake.test.ts`, `tests/test_arsumbris_quote.py`, `tests/test_arsumbris_sources.py`, and `scripts/test/arsumbris-host-startup.test.mjs`. Passing synthetic regressions proves these interfaces/arithmetic, not real-job quote quality or current supplier availability.
 
 The provided [Cognition memory-repo reference](https://cognition.com/agent-memory-repo) informs this compact linked/source-attributed entry and per-session reuse. Keller uses its existing typed knowledge, not a new memory service or scheduler. Correct stale claims when source contracts change; retain dated historical observations as historical, and never promote evaluation diagnostics or target values into production guidance. Implementation is not production activation, provider entitlement or commercial readiness.

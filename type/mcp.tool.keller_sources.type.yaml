@@ -1,7 +1,7 @@
 extends: mcp.tool::au-mcp-sdk
 fields:
-  #: Discover configured source sets, list one directory, read bounded file bytes, or inspect/filter a FabriTRAK DBF.
-  action: [sets, list, read, dbf_schema, dbf_rows]
+  #: Discover source sets, read bounded bytes/DBF records, or translate one explicitly selected and reviewed OPERATIO record into partial COST-rate worksheet inputs.
+  action: [sets, list, read, dbf_schema, dbf_rows, dbf_operation_costs]
   #: Owner-bound source set; required except for sets.
   source_set?: [fabritrak, pdfs, transcripts, manufacturing-audit]
   #: Relative directory or file path within the source set; empty or omitted means root for list.
@@ -28,8 +28,13 @@ fields:
   page_no?: String
   #: Exact character SEQ including leading zeros, required with wo_no and page_no for WOSEQ/WOCOLL.
   seq?: String
-  #: Optional lowercase SHA256 from a prior DBF citation; dbf_rows fails closed if the file changed between continuation requests.
+  #: Lowercase SHA256 from a prior DBF citation; optional for dbf_rows, mandatory for dbf_operation_costs. Fail closed if the file changed.
   expected_dbf_sha256?: String
+  #: dbf_operation_costs only: exact zero-based physical OPERATIO record selected from dbf_rows, never a first-match or automatic choice. Both file and record hashes are required.
+  record_index?: Number{>=0 & integer}
+  expected_record_sha256?: String
+  #: dbf_operation_costs only: JSON with rate_unit (USD/hour), source_date, reviewer, date, reason, applicability (supported/assumed), charge_inclusion and optional zero_reason. Explicit review of operation applicability, installed COST-rate meaning/units and inclusions is required; these are supplied approval assertions, not authentication. Returns partial CostRouting setup_rate/run_rate/sources inputs using only SU_COST/RUN_COST; no timing, SELL fallback, formula execution or current-price claim. Merge with separately supported routing times/quantities and preserve their sources.
+  rate_review?: String
   #: dbf_rows only: up to four explicitly selected memo field names. Default remains unresolved null, not empty text.
   memo_fields?: String[]
   #: dbf_rows only with memo_fields: same-directory, same-stem FPT relative path; owner-root and no-symlink confinement apply.
