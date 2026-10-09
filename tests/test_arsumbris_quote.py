@@ -112,15 +112,34 @@ console.log(JSON.stringify(result));"""
         return order, markdown
 
     def test_uploaded_engineering_should_cost_survives_native_and_local_handoffs(self):
+        self.check_uploaded_engineering_should_cost()
+
+    def test_purchase_increment_survives_retention_native_review_and_local_inbox(self):
+        self.check_uploaded_engineering_should_cost(purchase_increment=2)
+
+    def check_uploaded_engineering_should_cost(self, purchase_increment=None):
+        original = json.loads((ROOT / 'estimator/examples/should-cost-intake.json').read_text())
+        expected_total, expected_cost = 120, 90
+        if purchase_increment is not None:
+            material = original['parts'][0]['pricing']['cost_basis']['components'][0]
+            material['purchase_increment'] = purchase_increment
+            assumption = 'SYNTHETIC: buy packs of two blanks; charge the unused blank to this line, no inventory credit'
+            material['assumptions'] = [assumption]
+            next(f for f in original['parts'][0]['geometry'] if f['id'] == 'material')['value'] = assumption
+            expected_total, expected_cost = 173.33, 130
+        original_path = self.home / 'original.json'
+        original_path.write_text(json.dumps(original))
         uploads = []
         for name in ('drawing', 'worksheet'):
             path = self.home / (name + '.txt')
-            path.write_text('SYNTHETIC evidence only: ' + name)
+            path.write_text('SYNTHETIC evidence only: ' + name +
+                            (f'; purchase_increment={purchase_increment} blanks, no inventory credit'
+                             if name == 'worksheet' and purchase_increment is not None else ''))
             uploads.append({'id': name, 'path': str(path), 'media_type': 'text/plain'})
         manifest = self.home / 'uploads.json'
         manifest.write_text(json.dumps(uploads))
         retained = subprocess.run(['node', str(ROOT / 'estimator/node_modules/tsx/dist/cli.mjs'),
-            str(ROOT / 'estimator/src/intake-cli.ts'), str(ROOT / 'estimator/examples/should-cost-intake.json'),
+            str(ROOT / 'estimator/src/intake-cli.ts'), str(original_path),
             '--attachments', str(manifest), '--operator', 'Synthetic Operator'],
             env={**os.environ, 'HOME': str(self.home)}, capture_output=True, text=True, check=True, timeout=20)
         request_path = Path(json.loads(retained.stdout)['request_path'])
@@ -130,12 +149,18 @@ console.log(JSON.stringify(result));"""
         result = self.invoke(request, corpus=None, no_database=True)
         self.assertFalse(result.get('isError'), result)
         content = result['content']
-        self.assertEqual(content['total'], 120)
+        self.assertEqual(content['total'], expected_total)
         self.assertEqual(content['order']['request'], request)
         line = content['order']['lines'][0]
         self.assertEqual(line['analogs'], [])
-        self.assertEqual(line['cost_breakdown']['estimated_line_cost']['base'], 90)
+        self.assertEqual(line['cost_breakdown']['estimated_line_cost']['base'], expected_cost)
         self.assertEqual(line['cost_breakdown']['estimated_line_margin_pct']['base'], 25)
+        if purchase_increment is not None:
+            material_cost = line['cost_breakdown']['components'][0]
+            self.assertEqual(material_cost['priced_quantity'], 2)
+            self.assertEqual(material_cost['total_cost']['base'], 80)
+            self.assertEqual(material_cost['purchase_rounding'], {
+                'original_unit': 'blank', 'quantity_before_increment': 1, 'increment': 2})
         basis = request['parts'][0]['pricing']['cost_basis']
         self.assertEqual(line['cost_breakdown']['supplied_basis'], basis)
         worksheet = next(a for a in request['intake']['attachments'] if a['id'] == 'worksheet')
@@ -155,11 +180,14 @@ console.log(JSON.stringify(result));"""
         self.assertEqual(json.loads(cycle.stdout)['drafted'], ['rfq.json'])
         local = json.loads(next((workspace / 'drafts').glob('*.json')).read_text())
         self.assertEqual(local['request'], request)
-        self.assertEqual(local['total'], 120)
+        self.assertEqual(local['total'], expected_total)
         self.assertIsNone(local['provenance']['register_sha256'])
         # Corruption or a changed original quantity cannot be authorized by replaying locators.
         changed = json.loads(json.dumps(request))
         changed['parts'][0]['quantity'] = 2
+        self.assertTrue(self.invoke(changed, corpus=None, no_database=True).get('isError'))
+        changed = json.loads(json.dumps(request))
+        changed['parts'][0]['pricing']['cost_basis']['components'][0]['purchase_increment'] = 3
         self.assertTrue(self.invoke(changed, corpus=None, no_database=True).get('isError'))
         cost_attachment = directory / 'attachment-1.bin'
         original_cost_bytes = cost_attachment.read_bytes()

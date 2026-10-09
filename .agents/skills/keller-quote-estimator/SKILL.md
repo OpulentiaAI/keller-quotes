@@ -66,6 +66,8 @@ For DBF memo evidence, use `keller_sources` `dbf_rows` with explicit `memo_field
 
 If a new RFQ has no known material/operation ID, inspect `keller_sources` `dbf_schema.catalog_lookup`, then use `dbf_catalog` for the approved MATERIAL, OPERATIO or FORMULA file. Omit `query` to browse, or supply a literal ID/name substring (case-insensitive, at most 80 characters). Each page returns at most five candidates; preserve duplicates and follow physical `next_offset` with the same query and required `expected_dbf_sha256`. A page miss is not corpus absence. Read chosen IDs with exact `dbf_rows` for further evidence/memos. Discovery does not select applicable stock, validate COST/SELL meaning or freshness, execute formulas, or authorize blinded-worker archive access. Record an explicit read bound and the price-critical question before searching; do not exhaust a catalog speculatively.
 
+For reviewed whole-stock or pack purchases, supply `purchase_increment` on the cost component in its `original_unit`. It rounds the yield/minimum-adjusted requirement upward to a multiple before unit cost and monetary minimums; `1` means one priced unit, not automatically one sheet or one finished part. Preserve source support and the leftover/allocation assumption. Omit it for supported fractional allocation; it neither chooses supplier tiers nor credits reusable leftovers. See `docs/steve-pricing-workflow.md` for examples and scope.
+
 ## Standalone CLI and complete internal order
 
 Run the estimate CLI only after choosing a register. This minimal example is synthetic and intentionally forces the deterministic offline path; put real customer requests/outputs in approved private storage outside the checkout:
