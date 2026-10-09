@@ -136,6 +136,13 @@ console.log(JSON.stringify(result));"""
         self.assertEqual(line['analogs'], [])
         self.assertEqual(line['cost_breakdown']['estimated_line_cost']['base'], 90)
         self.assertEqual(line['cost_breakdown']['estimated_line_margin_pct']['base'], 25)
+        basis = request['parts'][0]['pricing']['cost_basis']
+        self.assertEqual(line['cost_breakdown']['supplied_basis'], basis)
+        worksheet = next(a for a in request['intake']['attachments'] if a['id'] == 'worksheet')
+        for group in ('components', 'routing', 'not_applicable'):
+            for item in basis[group]:
+                self.assertEqual(item['sources'][0]['sha256'], worksheet['sha256'])
+                self.assertEqual(item['sources'][0]['locator'], worksheet['locator'])
         self.assertEqual(line['part']['geometry'], request['parts'][0]['geometry'])
         self.assertFalse(content['review']['customer_release_authorized'])
         self.assertEqual(content['review']['request_sha256'], content['order']['provenance']['request_sha256'])
@@ -154,11 +161,50 @@ console.log(JSON.stringify(result));"""
         changed = json.loads(json.dumps(request))
         changed['parts'][0]['quantity'] = 2
         self.assertTrue(self.invoke(changed, corpus=None, no_database=True).get('isError'))
+        cost_attachment = directory / 'attachment-1.bin'
+        original_cost_bytes = cost_attachment.read_bytes()
+        cost_attachment.chmod(0o600)
+        cost_attachment.write_text('changed synthetic worksheet bytes')
+        cost_attachment.chmod(0o400)
+        self.assertTrue(self.invoke(request, corpus=None, no_database=True).get('isError'))
+        cost_attachment.chmod(0o600)
+        cost_attachment.write_bytes(original_cost_bytes)
+        cost_attachment.chmod(0o400)
         attachment = directory / 'attachment-0.bin'
         attachment.chmod(0o600)
         attachment.write_text('changed synthetic bytes')
         attachment.chmod(0o400)
         self.assertTrue(self.invoke(request, corpus=None, no_database=True).get('isError'))
+
+    def test_native_cost_sources_cannot_claim_missing_retained_or_pending_upload_evidence(self):
+        request = json.loads((ROOT / 'estimator/examples/should-cost-intake.json').read_text())
+        part = request['parts'][0]
+        part.pop('source_evidence')
+        part.pop('geometry')
+        basis = part['pricing']['cost_basis']
+        for group in ('components', 'routing', 'not_applicable'):
+            for item in basis[group]:
+                item.pop('engineering_fact_ids', None)
+                for source in item['sources']:
+                    source.update(sha256=hashlib.sha256(b'SYNTHETIC external estimate').hexdigest(),
+                                  locator='synthetic-external:reviewed-estimate#row=1')
+        positive = self.invoke(request, corpus=None, no_database=True)
+        self.assertFalse(positive.get('isError'), positive)
+        self.assertEqual(positive['content']['total'], 120)
+        self.assertFalse(positive['content']['review']['customer_release_authorized'])
+        self.assertEqual(positive['content']['order']['lines'][0]['cost_breakdown']['assertion_status'],
+                         'supplied_not_authenticated')
+        receipts = set(self.home.rglob('review.json'))
+        self.assertTrue(receipts)
+        for group in ('components', 'routing', 'not_applicable'):
+            for locator in ('upload:worksheet',
+                            'keller-intake:00000000-0000-0000-0000-000000000000/attachment-0.bin'):
+                with self.subTest(group=group, locator=locator):
+                    invalid = json.loads(json.dumps(request))
+                    invalid['parts'][0]['pricing']['cost_basis'][group][0]['sources'][0]['locator'] = locator
+                    result = self.invoke(invalid, corpus=None, no_database=True)
+                    self.assertTrue(result.get('isError'), result)
+                    self.assertEqual(set(self.home.rglob('review.json')), receipts)
 
     def test_unreferenced_engineering_conflict_blocks_native_order_completion(self):
         request = self.request([{'line_id': 'cost', 'part_no': 'SYNTHETIC', 'quantity': 1,
