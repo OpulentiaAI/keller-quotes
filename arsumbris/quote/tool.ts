@@ -79,7 +79,9 @@ export function createPlugin(_ctx: PluginContext): PluginRuntime {
         const requestPath = join(draft, 'request.json')
         const csvPath = join(draft, 'corpus.csv')
         const out = join(draft, 'output')
-        writeFileSync(requestPath, JSON.stringify(request), { flag: 'wx', mode: 0o600 })
+        const requestJson = JSON.stringify(request)
+        const requestSha = createHash('sha256').update(requestJson).digest('hex')
+        writeFileSync(requestPath, requestJson, { flag: 'wx', mode: 0o600 })
         const childEnv = childEnvironment()
         await run(process.execPath, [tsx, join(root, 'arsumbris/quote/validate.ts'), requestPath], {
           cwd: root, env: childEnv, timeout: 15000, maxBuffer: 1024,
@@ -100,6 +102,7 @@ export function createPlugin(_ctx: PluginContext): PluginRuntime {
         const registerPath = scoped ? join(draft, 'scoped-corpus.csv') : csvPath
         const corpusSha = scoped?.sha256 ?? exportSha
         scoped?.verify()
+        if (readFileSync(requestPath, 'utf8') !== requestJson) throw new Error('request changed before pricing')
         try {
           await run(process.execPath, [tsx, join(root, 'estimator/src/order-cli.ts'), requestPath,
             '--register', registerPath, '--out', out], { cwd: root, env: childEnv, timeout: 180000, maxBuffer: 4096 })
@@ -107,16 +110,20 @@ export function createPlugin(_ctx: PluginContext): PluginRuntime {
           if ((error as { code?: number }).code !== 3) throw error
         }
         scoped?.verify()
+        if (readFileSync(requestPath, 'utf8') !== requestJson) throw new Error('request changed during pricing')
         if (createHash('sha256').update(readFileSync(registerPath)).digest('hex') !== corpusSha) throw new Error('register changed during pricing')
         const jsonPath = join(out, 'order.json')
         const markdownPath = join(out, 'order.md')
         let order = JSON.parse(readFileSync(jsonPath, 'utf8')) as {
+          request: unknown;
           state: string; total: number | null; blockers: string[]; requires_human_review: boolean;
           provenance: { register_sha256: string; request_sha256: string; mode: string };
           lines: { pricing_source: string }[];
         }
         if (!['BLOCKED', 'PRICED_REQUIRES_REVIEW'].includes(order.state) || order.requires_human_review !== true ||
             order.provenance.register_sha256 !== corpusSha || order.provenance.mode !== 'offline' ||
+            order.provenance.request_sha256 !== requestSha ||
+            createHash('sha256').update(JSON.stringify(order.request)).digest('hex') !== requestSha ||
             (order.state === 'BLOCKED' && order.total !== null)) throw new Error('invalid draft result')
         if (scoped) {
           order = projectScopedOrder(order)

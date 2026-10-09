@@ -42,16 +42,39 @@ print(json.dumps({'sha256': hashlib.sha256(data).hexdigest(), 'rows': 2}))
         return {"order_id": "SYNTHETIC-1", "quote_date": "2024-06-01", "customer": "Sample Shop",
                 "parts": parts, **({"charges": charges} if charges is not None else {})}
 
-    def invoke(self, request, corpus=CORPUS, reviewer="Synthetic Reviewer", internal=None):
+    def invoke(self, request, corpus=CORPUS, reviewer="Synthetic Reviewer", internal=None, artifact_change=None):
         env = {**os.environ, "HOME": str(self.home), "KELLER_PYTHON": str(self.python),
                "POLYGRES_DIRECT_URL": "secret-never-exposed", "AI_GATEWAY_API_KEY": "sentinel-key",
                "TEAMVIEWER_PASSWORD": "sentinel-remote", "TAILSCALE_AUTH_KEY": "sentinel-tailnet"}
-        script = """import {createPlugin} from './arsumbris/quote/tool.ts';
+        script = """import fs from 'node:fs';
+import {syncBuiltinESMExports} from 'node:module';
+const change = JSON.parse(process.argv[2]);
+if (change) {
+  const original = fs.readFileSync;
+  let requestReads = 0;
+  fs.readFileSync = function(path, ...args) {
+    const data = original.call(this, path, ...args);
+    if (change === 'file_after_pricing' && String(path).endsWith('/request.json') && requestReads++ > 0) {
+      const request = JSON.parse(data.toString());
+      request.parts[0].quantity += 1;
+      return JSON.stringify(request);
+    }
+    if (String(path).endsWith('/output/order.json')) {
+      const order = JSON.parse(data.toString());
+      if (change === 'hash') order.provenance.request_sha256 = '0'.repeat(64);
+      if (change === 'request') order.request.parts[0].quantity += 1;
+      return JSON.stringify(order);
+    }
+    return data;
+  };
+  syncBuiltinESMExports();
+}
+const {createPlugin} = await import('./arsumbris/quote/tool.ts');
 const result = await createPlugin({workspace: process.cwd()}).invoke(JSON.parse(process.argv[1]));
 console.log(JSON.stringify(result));"""
         payload = {"corpus": corpus, "request": json.dumps(request) if not isinstance(request, str) else request,
                    "reviewer": reviewer, **(internal or {})}
-        completed = subprocess.run(["node", "--input-type=module", "-e", script, json.dumps(payload)], cwd=ROOT,
+        completed = subprocess.run(["node", "--input-type=module", "-e", script, json.dumps(payload), json.dumps(artifact_change)], cwd=ROOT,
                                    env=env, capture_output=True, text=True, timeout=45, check=True)
         self.assertNotIn("secret-never-exposed", completed.stdout + completed.stderr)
         self.assertNotIn("sentinel-key", completed.stdout + completed.stderr)
@@ -74,10 +97,49 @@ console.log(JSON.stringify(result));"""
         self.assertFalse(review["customer_release_authorized"])
         self.assertEqual(content["artifacts"]["review_json"], f'quote-draft:{content["draft_id"]}/review.json')
         order, markdown = json.loads(files[2].read_text()), files[3].read_text()
+        request_sha = hashlib.sha256(files[0].read_bytes()).hexdigest()
+        self.assertEqual(order['request'], json.loads(files[0].read_text()))
+        self.assertEqual(order['provenance']['request_sha256'], request_sha)
+        self.assertEqual(review['request_sha256'], request_sha)
+        self.assertEqual(content['request_sha256'], request_sha)
         self.assertEqual(content["order"], order)
         self.assertEqual(content["markdown"], markdown)
         self.assertEqual(content["review"], review)
         return order, markdown
+
+    def test_changed_request_during_export_cannot_reach_review(self):
+        with self.python.open('a') as script:
+            script.write("""
+request_path = pathlib.Path(sys.argv[3]).parent / 'request.json'
+request = json.loads(request_path.read_text())
+request['parts'][0]['quantity'] = 999
+request_path.write_text(json.dumps(request))
+""")
+        request = self.request([{'line_id': 'cost', 'part_no': 'SYNTHETIC', 'quantity': 3,
+            'pricing': {'method': 'cost_plus', 'material_per_unit': 1, 'labor_per_unit': .1,
+                        'outside_per_unit': 0, 'setup_total': 1, 'margin_pct': 20, 'reason': 'synthetic worksheet'}}],
+            {'shipping': 0, 'tax': 0})
+        self.assertTrue(self.invoke(request).get('isError'))
+        self.assertEqual(list((self.home / '.local/share/keller-quotes/drafts').iterdir()), [])
+
+    def test_artifact_hash_and_embedded_request_must_match_caller(self):
+        request = self.request([{'line_id': 'explicit', 'part_no': 'SYNTHETIC', 'quantity': 3,
+            'pricing': {'method': 'unit_price', 'unit_price': 2, 'reason': 'synthetic proposal'}}],
+            {'shipping': 0, 'tax': 0})
+        for change in ('hash', 'request', 'file_after_pricing'):
+            with self.subTest(change=change):
+                self.assertTrue(self.invoke(request, artifact_change=change).get('isError'))
+                self.assertEqual(list((self.home / '.local/share/keller-quotes/drafts').iterdir()), [])
+
+    def test_request_binding_uses_canonical_json_not_wire_format(self):
+        request = self.request([{'line_id': 'line', 'part_no': 'SYNTHETIC', 'quantity': 2,
+            'pricing': {'method': 'unit_price', 'unit_price': 3, 'reason': 'synthetic proposal'}}],
+            {'shipping': 0, 'tax': 0})
+        request['customer_id'] = 'SYNTHETIC-λ'
+        result = self.invoke(json.dumps(request, indent=2, ensure_ascii=True))
+        self.assertFalse(result.get('isError'))
+        order, _ = self.artifacts(result)
+        self.assertEqual(order['request'], request)
 
     def test_explicit_operator_amount_and_costs_stay_internal(self):
         parts = [{"line_id": "explicit", "part_no": "SYNTHETIC", "quantity": 3,
