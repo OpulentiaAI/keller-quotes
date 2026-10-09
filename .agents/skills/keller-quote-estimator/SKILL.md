@@ -22,6 +22,8 @@ In `Keller Codex`, `keller_quote` takes JSON `OrderRequest` and a named reviewer
 
 ## Evidence dispositions and retained sources
 
+Cost-source date consistency: `approved_estimate` requires `source_date <= approval.date <= quote_date` for components, routing and not-applicable evidence. Correct a mismatched source/version or obtain a new review; never backdate evidence to pass. Historical expiry does not block an explicitly reviewed estimate, but a later capture/review cannot turn an expired offer into a `current` cost. Review names/dates remain supplied assertions, not authenticated authorization.
+
 Compare supplied identities with returned `order.request`. Exact normalized part numbers across customers, revisions, materials or UOM do not prove interchangeability. Drawing assets are not drawing identifiers; human-check extracted geometry/tolerances. Preserve part and drawing revision separately using the supported contract (otherwise clearly labeled notes), never by changing literal part identity.
 
 | Evidence condition | Disposition |

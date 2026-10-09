@@ -211,6 +211,43 @@ describe("prospective cost-basis worksheet", () => {
     expect(reconcile(b).supplied_basis.components[0]!.sources[0]!.status).toBe("historical");
   });
 
+  it.each(["components", "routing", "not_applicable"] as const)("rejects an estimate approval that predates its source in %s", group => {
+    const b = basis();
+    const s = b[group][0]!.sources[0]!;
+    s.source_date = "2024-05-31";
+    s.approval!.date = "2024-05-30";
+    expect(() => deriveCostBasis(b, 10, asOf)).toThrow(/approval.date is before source_date/);
+    expect(() => reconcile(b)).toThrow(/approval.date is before source_date/);
+    const req = request(b);
+    expect(() => assertOrderRequest(req)).toThrow(/approval.date is before source_date/);
+    req.parts[0]!.pricing = { method: "should_cost", cost_basis: b, margin_pct: 20, reason: "Synthetic chronology check" };
+    expect(() => assertOrderRequest(req)).toThrow(/approval.date is before source_date/);
+  });
+
+  it.each(["2024-05-31", asOf])("allows review on or after the source date, through quote date: %s", approvalDate => {
+    const b = basis();
+    for (const support of [...b.components, ...b.routing, ...b.not_applicable]) {
+      for (const s of support.sources) {
+        s.source_date = "2024-05-31";
+        s.approval!.date = approvalDate;
+      }
+    }
+    expect(reconcile(b).reconciled_flat).toEqual(flat());
+    expect(deriveCostBasis(b, 10, asOf).reconciled_flat).toEqual(flat());
+  });
+
+  it("allows a reviewed historical estimate after expiry without reclassifying it as current", () => {
+    const b = basis();
+    const s = b.components[0]!.sources[0]!;
+    Object.assign(s, { source_class: "supplier_quote", source_date: "2020-01-01", effective_date: "2020-01-01",
+      expires_date: "2020-01-31", captured_date: "2026-10-09" });
+    s.approval!.reason = "Synthetic approval of a historical estimating basis, not an executable current offer";
+    const result = reconcile(b);
+    expect(result.reconciled_flat).toEqual(flat());
+    expect(result.supplied_basis.components[0]!.sources[0]).toEqual(s);
+    expect(result.warnings.join(" ")).toContain("not guaranteed actual costs or current buy prices");
+  });
+
   it("accepts a current assertion only inside its commercial date window", () => {
     const b = basis();
     b.components[0]!.sources = [{ ...source(), source_class: "supplier_quote", status: "current", approval: undefined,
@@ -255,6 +292,7 @@ describe("prospective cost-basis worksheet", () => {
     ["absent provenance", b => { b.components[0]!.sources = []; }, /1\.\.8/],
     ["invalid hash", b => { b.components[0]!.sources[0]!.sha256 = "not-a-hash"; }, /hex digest/],
     ["missing estimate approval", b => { Reflect.deleteProperty(b.components[0]!.sources[0]!, "approval"); }, /approval/],
+    ["future estimate approval", b => { b.components[0]!.sources[0]!.approval!.date = "2024-06-02"; }, /approval.date is after quote_date/],
     ["future source", b => { b.components[0]!.sources[0]!.source_date = "2024-06-02"; }, /after quote_date/],
     ["invalid date", b => { b.components[0]!.sources[0]!.source_date = "2024-02-30"; }, /valid YYYY/],
     ["no expiry for current claim", b => { b.components[0]!.sources = [{ ...source(), status: "current", approval: undefined, effective_date: "2024-01-01" }]; }, /expires_date/],

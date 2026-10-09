@@ -204,6 +204,7 @@ function sources(value: unknown, path: string, asOf: string): void {
       text(approval.reviewer, `${p}.approval.reviewer`);
       text(approval.reason, `${p}.approval.reason`);
       date(approval.date, `${p}.approval.date`);
+      if (approval.date < s.source_date) throw new Error(`${p}.approval.date is before source_date`);
       if (approval.date > asOf) throw new Error(`${p}.approval.date is after quote_date`);
     } else if (s.approval !== undefined) throw new Error(`${p}.approval requires approved_estimate status`);
   }

@@ -221,6 +221,56 @@ console.log(JSON.stringify(result));"""
         self.assertFalse(content['review']['customer_release_authorized'])
         self.assertTrue(content['review']['requires_human_review'])
 
+    def test_cost_estimate_review_dates_must_follow_their_source_without_requiring_current_prices(self):
+        original = json.loads((ROOT / 'estimator/examples/should-cost-intake.json').read_text())
+        part = original['parts'][0]
+        del part['geometry'], part['source_evidence']
+        basis = part['pricing']['cost_basis']
+        for entry in basis['components'] + basis['routing'] + basis['not_applicable']:
+            entry.pop('engineering_fact_ids', None)
+            for source in entry['sources']:
+                source.update(sha256='a' * 64, locator='synthetic-cost:worksheet')
+        for method in ('should_cost', 'cost_plus'):
+            request = json.loads(json.dumps(original))
+            pricing = request['parts'][0]['pricing']; pricing['method'] = method
+            if method == 'cost_plus':
+                pricing.update(material_per_unit=40, labor_per_unit=20, outside_per_unit=0, setup_total=30)
+            baseline = self.invoke(request, corpus=None, no_database=True)
+            self.assertFalse(baseline.get('isError'), baseline)
+            self.assertEqual(baseline['content']['total'], 120)
+            for group in ('components', 'routing', 'not_applicable'):
+                with self.subTest(method=method, group=group):
+                    invalid = json.loads(json.dumps(request))
+                    source = invalid['parts'][0]['pricing']['cost_basis'][group][0]['sources'][0]
+                    source['source_date'] = '2024-05-31'; source['approval']['date'] = '2024-05-30'
+                    receipts = set(self.home.rglob('review.json'))
+                    held = self.invoke(invalid, corpus=None, no_database=True)
+                    self.assertTrue(held.get('isError'), held)
+                    self.assertNotIn('artifacts', held['content'])
+                    self.assertNotIn('order', held['content'])
+                    self.assertNotIn('review', held['content'])
+                    self.assertEqual(set(self.home.rglob('review.json')), receipts)
+            source = pricing['cost_basis']['components'][0]['sources'][0]
+            source.update(source_class='supplier_quote', source_date='2020-01-01', effective_date='2020-01-01',
+                          expires_date='2020-01-31', captured_date='2026-10-09')
+            source['approval']['date'] = request['quote_date']
+            source['approval']['reason'] = 'Synthetic review of a historical estimate, not current supplier validity'
+            estimate = self.invoke(request, corpus=None, no_database=True)
+            self.assertFalse(estimate.get('isError'), estimate)
+            content = estimate['content']; cost = content['order']['lines'][0]['cost_breakdown']
+            self.assertEqual(content['total'], 120)
+            self.assertEqual(cost['estimated_line_margin_pct']['base'], 25)
+            self.assertEqual(cost['supplied_basis']['components'][0]['sources'][0], source)
+            self.assertFalse(content['review']['customer_release_authorized'])
+            self.assertTrue(content['review']['requires_human_review'])
+            self.assertEqual(content['review']['request_sha256'], content['order']['provenance']['request_sha256'])
+            self.assertIn('not guaranteed actual costs or current buy prices', ' '.join(cost['warnings']))
+            source['status'] = 'current'; del source['approval']
+            receipts = set(self.home.rglob('review.json'))
+            held = self.invoke(request, corpus=None, no_database=True)
+            self.assertTrue(held.get('isError'), held)
+            self.assertEqual(set(self.home.rglob('review.json')), receipts)
+
     def test_register_free_costs_need_no_database_and_still_bind_review(self):
         request = self.request([{'line_id': 'cost', 'part_no': 'SYNTHETIC', 'quantity': 1,
             'pricing': {'method': 'cost_plus', 'material_per_unit': 40, 'labor_per_unit': 20,

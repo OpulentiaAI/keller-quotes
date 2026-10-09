@@ -19,6 +19,8 @@ The `Keller Codex` profile injects the depth-zero `keller-orientation` and `kell
 
 ## Sources and correction rule
 
+Approved cost estimates require `source_date <= approval.date <= quote_date` across components, routing and not-applicable sources. An approval predating its source is contradictory, even when both precede the RFQ; it must fail before a numeric review draft. Expired historical evidence can still support a correctly reviewed estimate, not a current offer. Capture dates remain archive metadata and do not authenticate prior availability or approval. Synthetic regressions live in `estimator/test/costing.test.ts` and `tests/test_arsumbris_quote.py`.
+
 Source-of-truth contracts: `estimator/src/{intake,order,costing}.ts`, `arsumbris/quote/{tool,validate}.ts`, `arsumbris/sources/read.py`, and `docs/pricing-evals-and-orders.md`. Synthetic behavior checks: `estimator/test/intake.test.ts`, `tests/test_arsumbris_quote.py`, `tests/test_arsumbris_sources.py`, and `scripts/test/arsumbris-host-startup.test.mjs`. Passing synthetic regressions proves these interfaces/arithmetic, not real-job quote quality or current supplier availability.
 
 The provided [Cognition memory-repo reference](https://cognition.com/agent-memory-repo) informs this compact linked/source-attributed entry and per-session reuse. Keller uses its existing typed knowledge, not a new memory service or scheduler. Correct stale claims when source contracts change; retain dated historical observations as historical, and never promote evaluation diagnostics or target values into production guidance. Implementation is not production activation, provider entitlement or commercial readiness.
