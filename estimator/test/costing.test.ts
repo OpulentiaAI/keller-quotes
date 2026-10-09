@@ -57,6 +57,40 @@ function reconcile(b = basis(), costs = flat(), quantity = 10) {
 }
 
 describe("prospective cost-basis worksheet", () => {
+  it("retains source-validity and exact margin-shortfall warnings together", async () => {
+    const b = basis();
+    b.components = [{ ...b.components[0]!, quantity: 100000, original_units_per_quantity_unit: 1,
+      yield_fraction: 1, unit_cost: range(0.800001) }];
+    b.routing = [];
+    b.not_applicable = (["outside", "other", "routing"] as const).map(category => ({
+      category, reason: "Synthetic material-only scope", sources: [source()],
+    }));
+    const req = request(b, flat(), 100000);
+    req.parts[0]!.pricing = { method: "should_cost", cost_basis: b, margin_pct: 20, reason: "Synthetic composition regression" };
+    const baseline = await buildPricedOrder(reg, req, options);
+    for (const group of ["components", "routing"] as const) {
+      for (const item of b[group]) item.sources[0]!.expires_date = "2024-05-31";
+    }
+    const unchanged = JSON.stringify(req);
+    const order = await buildPricedOrder(reg, req, options);
+    for (const group of ["components", "routing"] as const) {
+      for (const [i] of b[group].entries()) {
+        expect(order.lines[0]!.warnings).toContain(
+          `Source validity: cost_basis.${group}[${i}].sources[0] expired on 2024-05-31; quote_date ${asOf}; retained as approved_estimate, not current-cost authority`,
+        );
+      }
+    }
+    expect(order.lines[0]!.unit_price).toBe(baseline.lines[0]!.unit_price);
+    expect(order.lines[0]!.extended_price).toBe(baseline.lines[0]!.extended_price);
+    expect(order.lines[0]!.cost_breakdown!.estimated_line_cost).toEqual(baseline.lines[0]!.cost_breakdown!.estimated_line_cost);
+    expect(order.total).toBe(baseline.total);
+    expect(order.state).toBe("PRICED_REQUIRES_REVIEW");
+    expect(order.requires_human_review).toBe(true);
+    expect(JSON.stringify(req)).toBe(unchanged);
+    expect(order.lines[0]!.cost_breakdown!.base_margin_target).toEqual({ requested_pct: 20, status: "below_target" });
+    expect(order.lines[0]!.warnings.some(w => w.includes("below the requested"))).toBe(true);
+  });
+
   it("builds a should-cost proposal without analogs or manually copied flat costs", async () => {
     const req = request();
     req.parts[0]!.pricing = { method: "should_cost", cost_basis: basis(), margin_pct: 20, reason: "Synthetic reviewed engineering estimate" };
@@ -82,6 +116,91 @@ describe("prospective cost-basis worksheet", () => {
     expect(() => deriveCostBasis(b, 10, asOf)).toThrow(/source_class/);
     b.components = [];
     expect(() => deriveCostBasis(b, 10, asOf)).toThrow(/missing material/);
+  });
+
+  it.each([
+    { cost: 0.00014, margin: 30, unit: 0.0002, total: 20, status: "met" },
+    { cost: 0.00004, margin: 25, unit: 0.0001, total: 10, status: "met" },
+    { cost: 0.01004, margin: 25, unit: 0.0134, total: 1340, status: "met" },
+    { cost: 1.23454, margin: 75, unit: 4.9382, total: 493820, status: "met" },
+    { cost: 0.00015, margin: 0, unit: 0.0002, total: 20, status: "met" },
+    { cost: 0.00014, margin: 0, unit: 0.0001, total: 10, status: "below_target" },
+    { cost: 1.000001, margin: 0, unit: 1, total: 100000, status: "below_target" },
+    { cost: 0.800001, margin: 20, unit: 1, total: 100000, status: "below_target" },
+  ])("prices exact worksheet cost $cost before margin and final unit rounding", async ({ cost, margin, unit, total, status }) => {
+    const b = basis();
+    b.components = [{ ...b.components[0]!, quantity: 100000, original_units_per_quantity_unit: 1,
+      yield_fraction: 1, unit_cost: range(cost) }];
+    b.routing = [];
+    b.not_applicable = (["outside", "other", "routing"] as const).map(category => ({ category, reason: "Synthetic material-only scope", sources: [source()] }));
+    const req = request(b, flat(), 100000);
+    req.parts[0]!.pricing = { method: "should_cost", cost_basis: b, margin_pct: margin, reason: "Synthetic precision regression" };
+    req.charges = { shipping: 0, tax: 0 }; req.additional_charges = [];
+    const order = await buildPricedOrder(reg, req, { registerSha256: null });
+    expect(order.lines[0]).toMatchObject({ unit_price: unit, extended_price: total });
+    expect(order.total).toBe(total);
+    expect(order.lines[0]!.cost_breakdown!.estimated_line_cost.base).toBeCloseTo(cost * 100000, 4);
+    expect(order.lines[0]!.cost_breakdown!.estimated_line_margin_pct!.base)
+      .toBeCloseTo((1 - cost * 100000 / total) * 100, 2);
+    expect(order.lines[0]!.cost_breakdown!.base_margin_target).toEqual({ requested_pct: margin, status });
+    expect(order.warnings.some(w => w.includes("below the requested"))).toBe(status === "below_target");
+    expect(renderOrderMarkdown(order)).toContain(status.replaceAll("_", "\\_"));
+    expect(order.state).toBe("PRICED_REQUIRES_REVIEW");
+    expect(order.requires_human_review).toBe(true);
+    expect(order.request).toEqual(req);
+  });
+
+  it("compares exact BASE cost rather than rounded cost or downside scenarios", () => {
+    const b = basis();
+    b.components = [{ ...b.components[0]!, quantity: 1, original_units_per_quantity_unit: 1,
+      yield_fraction: 1, unit_cost: range(1.000001, 1, 2) }];
+    b.routing = [];
+    b.not_applicable = (["outside", "other", "routing"] as const).map(category => ({ category, reason: "Synthetic material-only scope", sources: [source()] }));
+    const result = deriveCostBasis(b, 1, asOf, 1, 0);
+    expect(result.estimated_line_cost.base).toBe(1);
+    expect(result.estimated_line_margin_pct!.base).toBe(0);
+    expect(result.base_margin_target).toEqual({ requested_pct: 0, status: "below_target" });
+    b.components[0]!.unit_cost.base = 1;
+    const exact = deriveCostBasis(b, 1, asOf, 1, 0);
+    expect(exact.base_margin_target!.status).toBe("met");
+    expect(exact.estimated_line_margin_pct!.low).toBe(-100);
+    expect(deriveCostBasis(b, 1, asOf, 1).base_margin_target).toBeNull();
+    expect(deriveCostBasis(b, 1, asOf, undefined, 0).base_margin_target!.status).toBe("not_assessable");
+    for (const invalid of [-1, 100, NaN, Infinity]) expect(() => deriveCostBasis(b, 1, asOf, 1, invalid)).toThrow(/margin_pct/);
+  });
+
+  it("marks a zero displayed extension's target as not assessable without repricing", async () => {
+    const b = basis();
+    b.components = [{ ...b.components[0]!, quantity: 1, original_units_per_quantity_unit: 1,
+      yield_fraction: 1, unit_cost: range(0.0001) }];
+    b.routing = [];
+    b.not_applicable = (["outside", "other", "routing"] as const).map(category => ({ category, reason: "Synthetic material-only scope", sources: [source()] }));
+    const req = request(b, flat(), 1);
+    req.parts[0]!.pricing = { method: "should_cost", cost_basis: b, margin_pct: 25, reason: "Synthetic sub-cent extension" };
+    const order = await buildPricedOrder(reg, req, options);
+    expect(order.lines[0]).toMatchObject({ unit_price: 0.0001, extended_price: 0,
+      cost_breakdown: { estimated_line_margin_pct: null, base_margin_target: { requested_pct: 25, status: "not_assessable" } } });
+    expect(order.warnings.join(" ")).toContain("cannot be assessed");
+  });
+
+  it("keeps exact routing fractions and sub-cent setup until should-cost sell rounding", async () => {
+    const b = basis();
+    b.components = [];
+    b.not_applicable = (["material", "outside", "other"] as const).map(category => ({ category, reason: "Synthetic route-only scope", sources: [source()] }));
+    Object.assign(b.routing[0]!, { setup_occurrences: 1, process_quantity: 3,
+      setup_time: { unit: "minutes", values: range(1.005) },
+      run_time: { unit: "pieces_per_hour", values: range(7) } });
+    const req = request(b, flat(), 3);
+    req.parts[0]!.pricing = { method: "should_cost", cost_basis: b, margin_pct: 25, reason: "Synthetic fractional timing" };
+    const order = await buildPricedOrder(reg, req, options);
+    // Exact cost = 201/200 + 180/7; dividing by 3 and 3/4 gives 12469/1050 USD/piece.
+    expect(order.lines[0]).toMatchObject({ unit_price: 11.8752, extended_price: 35.63 });
+    expect(order.lines[0]!.cost_breakdown!.reconciled_flat).toEqual({ material_per_unit: 0, outside_per_unit: 0, labor_per_unit: 8.5714, setup_total: 1.01 });
+    req.parts[0]!.pricing = { method: "cost_plus", ...order.lines[0]!.cost_breakdown!.reconciled_flat,
+      cost_basis: b, margin_pct: 25, reason: "Deliberately supplied rounded flat costs" };
+    const explicit = await buildPricedOrder(reg, req, options);
+    expect(explicit.lines[0]).toMatchObject({ unit_price: 11.8774, extended_price: 35.63 });
+    expect(explicit.lines[0]!.cost_breakdown!.base_margin_target).toEqual({ requested_pct: 25, status: "met" });
   });
 
   it("rejects should-cost invalid margin, expired current support and absent worksheets", () => {

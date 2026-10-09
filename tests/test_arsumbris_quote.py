@@ -117,9 +117,32 @@ console.log(JSON.stringify(result));"""
     def test_purchase_increment_survives_retention_native_review_and_local_inbox(self):
         self.check_uploaded_engineering_should_cost(purchase_increment=2)
 
-    def check_uploaded_engineering_should_cost(self, purchase_increment=None):
+    def test_exact_should_cost_margin_survives_retention_native_review_and_local_inbox(self):
+        self.check_uploaded_engineering_should_cost(precise_cost=True)
+
+    def test_margin_shortfall_warning_survives_retention_native_review_and_local_inbox(self):
+        self.check_uploaded_engineering_should_cost(margin_shortfall=True)
+
+    def check_uploaded_engineering_should_cost(self, purchase_increment=None, precise_cost=False, margin_shortfall=False):
         original = json.loads((ROOT / 'estimator/examples/should-cost-intake.json').read_text())
-        expected_total, expected_cost = 120, 90
+        expected_total, expected_cost, expected_margin = 120, 90, 25
+        if precise_cost or margin_shortfall:
+            part = original['parts'][0]
+            quantity = 1000 if margin_shortfall else 100000
+            unit_cost = 0.000121 if margin_shortfall else 0.00014
+            part['quantity'] = part['uom']['original_quantity'] = quantity
+            part['geometry'] = [f for f in part['geometry'] if f['id'] != 'route']
+            next(f for f in part['geometry'] if f['id'] == 'material')['value'] = f'Synthetic: {quantity} pieces at USD {unit_cost} per piece'
+            basis = part['pricing']['cost_basis']
+            material = basis['components'][0]
+            material['quantity'] = quantity
+            material['unit_cost'] = dict.fromkeys(('low', 'base', 'high'), unit_cost)
+            material['assumptions'] = ['Synthetic precision fixture: one blank per piece, material-only scope']
+            basis['not_applicable'].append({'category': 'routing', 'reason': 'Synthetic material-only scope',
+                                           'sources': basis['routing'][0]['sources']})
+            basis['routing'] = []
+            part['pricing']['margin_pct'] = 12.5 if margin_shortfall else 30
+            expected_total, expected_cost, expected_margin = (0.1, 0.121, -21) if margin_shortfall else (20, 14, 30)
         if purchase_increment is not None:
             material = original['parts'][0]['pricing']['cost_basis']['components'][0]
             material['purchase_increment'] = purchase_increment
@@ -154,7 +177,16 @@ console.log(JSON.stringify(result));"""
         line = content['order']['lines'][0]
         self.assertEqual(line['analogs'], [])
         self.assertEqual(line['cost_breakdown']['estimated_line_cost']['base'], expected_cost)
-        self.assertEqual(line['cost_breakdown']['estimated_line_margin_pct']['base'], 25)
+        self.assertEqual(line['cost_breakdown']['estimated_line_margin_pct']['base'], expected_margin)
+        self.assertEqual(line['cost_breakdown']['base_margin_target'], {
+            'requested_pct': original['parts'][0]['pricing']['margin_pct'],
+            'status': 'below_target' if margin_shortfall or purchase_increment is not None else 'met'})
+        if margin_shortfall:
+            self.assertIn(r'below the requested 12\.5% gross margin', content['markdown'])
+            self.assertTrue(any('below the requested' in w for w in content['order']['warnings']))
+        if precise_cost:
+            self.assertEqual(line['unit_price'], 0.0002)
+            self.assertEqual(line['cost_breakdown']['reconciled_flat']['material_per_unit'], 0.0001)
         if purchase_increment is not None:
             material_cost = line['cost_breakdown']['components'][0]
             self.assertEqual(material_cost['priced_quantity'], 2)
