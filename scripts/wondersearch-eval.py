@@ -35,6 +35,10 @@ BLOCKERS = [
 SOURCE_FILES = ["estimator/src/estimate.ts", "estimator/src/retrieve.ts", "estimator/src/price.ts",
                 "estimator/src/register.ts", "estimator/src/types.ts", "estimator/src/jev.ts",
                 "estimator/package-lock.json", "evals/run-eval.ts", "evals/metrics.ts", "evals/selection.ts"]
+IMPLEMENTATION_FILES = ["scripts/wondersearch_boundary.py", "scripts/wondersearch-eval.py",
+                        "scripts/wondersearch-requirements.txt", "scripts/wondersearch_sdk_contract.py",
+                        "scripts/test/test_wondersearch_boundary.py", "scripts/test/test_wondersearch_sdk_contract.py",
+                        "scripts/verify.mjs"]
 ARMS = ("unchanged-estimator", *EFFORTS)
 
 
@@ -152,10 +156,7 @@ def execute(args) -> dict:
     baseline = verify_baseline(args.baseline_repo, plan)
     prior = verify_preflight(preflight_dir)
     repo = Path(__file__).resolve().parent.parent
-    implementation = source_hash(repo, ["scripts/wondersearch_boundary.py", "scripts/wondersearch-eval.py",
-                                       "scripts/wondersearch-requirements.txt", "scripts/wondersearch_sdk_contract.py",
-                                       "scripts/test/test_wondersearch_boundary.py", "scripts/test/test_wondersearch_sdk_contract.py",
-                                       "scripts/verify.mjs"])
+    implementation = source_hash(repo, IMPLEMENTATION_FILES)
     bindings = {**PINS, **prior, "baseline": baseline, "implementation_sha256": implementation,
                 "adapter_sdk_version": SDK_VERSION, "base_url": BASE_URL, "model": MODEL,
                 "selected_case_ids_sha256": digest(json_bytes(ids))}
@@ -215,7 +216,7 @@ def main() -> int:
         for name in ("run-dir", "plan", "cases", "register", "baseline-repo"):
             parser.add_argument("--" + name, required=True, type=Path)
         parser.add_argument("--preflight-dir", type=Path)
-        parser.add_argument("--artifact-prefix", default="review-v4")
+        parser.add_argument("--artifact-prefix", default="review-v5")
         summary = execute(parser.parse_args())
         sys.stdout.buffer.write(json_bytes(summary))
         return 0

@@ -386,6 +386,15 @@ class BoundaryTests(unittest.TestCase):
         with self.assertRaises(w.BoundaryError):
             w.paired_gains(ids, base, candidate)
 
+    def test_public_report_matches_current_implementation_fingerprint(self):
+        root = Path(__file__).resolve().parents[2]
+        spec = importlib.util.spec_from_file_location("eval_cli", root / "scripts/wondersearch-eval.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        report = w.parse_json((root / "evals/wondersearch-offline-review.public.json").read_bytes())
+        self.assertEqual(report["implementation_sha256"], module.source_hash(root, module.IMPLEMENTATION_FILES),
+                         "Reissue blocked artifacts after implementation/test edits; do not relabel old evidence")
+
     def test_failed_preflight_validation_cannot_be_promoted(self):
         spec = importlib.util.spec_from_file_location("eval_cli", Path(__file__).resolve().parents[1] / "wondersearch-eval.py")
         module = importlib.util.module_from_spec(spec)

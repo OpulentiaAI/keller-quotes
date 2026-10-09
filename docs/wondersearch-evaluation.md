@@ -22,7 +22,7 @@ or pricing improvement.
 - A reproducible offline CLI that checks frozen input and baseline hashes and
   retains every case in blocked reports. Source, claim and map records use native
   Ars Umbris types.
-- 31 passing synthetic tests, including the optional pinned-SDK tests. The
+- 32 passing synthetic tests, including the optional pinned-SDK tests. The
   canonical verifier passes; its two optional SDK skips are covered separately.
 
 ## Comparison results
@@ -93,6 +93,12 @@ they explicitly skip. No live request is made by these commands.
 
 Machine-readable aggregates, exact input/code/report digests and retained
 baseline accounting: `evals/wondersearch-offline-review.public.json`.
+
+**Provenance correction:** final portability-only test edits changed the source
+fingerprint after the initial review-v4 report was sealed. Review-v5 reissues
+the blocked artifacts against the final code and a new public-source binding
+regression test. Older artifacts remain preserved, not overwritten or relabelled.
+No scored outcome, case, scope, criterion or baseline execution changed.
 
 The optional boundary/CLI currently requires POSIX file ownership/locking
 semantics. Its test modules explicitly skip on non-POSIX systems; no Windows
