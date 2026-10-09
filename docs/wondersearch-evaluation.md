@@ -100,6 +100,13 @@ the blocked artifacts against the final code and a new public-source binding
 regression test. Older artifacts remain preserved, not overwritten or relabelled.
 No scored outcome, case, scope, criterion or baseline execution changed.
 
+**Production integration refresh:** merging PR #29 also retained PR #28's
+`test_steve_*.py` verifier command, changing fingerprinted `scripts/verify.mjs`.
+Fresh immutable `production-v6` blocked artifacts supersede review-v5's code
+binding; the previous files remain unchanged. The public report distinguishes
+the retained review-v5 verification from this refresh. No comparison or pricing
+run occurred and every arm still contains all 250 cases as `not_run`.
+
 The optional boundary/CLI currently requires POSIX file ownership/locking
 semantics. Its test modules explicitly skip on non-POSIX systems; no Windows
 boundary coverage or live adapter is claimed.

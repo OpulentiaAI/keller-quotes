@@ -41,6 +41,13 @@ Review-v5 corrects a parent-stage provenance defect: the final non-POSIX test gu
 
 ## Independent offline safety review
 
+The subsequent production integration reissued only blocked artifacts with
+`--artifact-prefix production-v6`, after PR #28's retained-source test command
+changed the fingerprinted verifier during the PR #29 merge. These files
+supersede review-v5's code binding, not its outcomes or historical verification.
+Older artifacts and the live ledger remain unchanged; no provider call or
+pricing execution occurred.
+
 The aggregate-only machine-readable report is `evals/wondersearch-offline-review.public.json`. The review made **zero provider requests, paid searches, uploads or drive creations**. The inherited ledger records three GET-only probes; saved HTTP 200 responses are not proof of available credits, used/reserved storage or reconciled billing. Ledger bytes remain unchanged. Inventory assertions were validated against retained preflight receipts, not a fresh rehash of every original. The 7,845 price-referenced originals total 1,268,957,730 bytes, above the conservative cap; metadata candidate sets remain unauthorized. No live search is safe.
 
 Focused corrections now require a saved, operation-bound receipt for budget settlement; preserve known charges when citation verification rejects a response without retaining rejected passages; retain full reservations on missing/invalid accounting or failed receipt persistence; and use local high-precision decimal arithmetic. Scope declarations reject missing exclusions, malformed document/target identifiers and duplicate membership. A failed preflight validation cannot be promoted. The injected callable remains trusted synthetic test code, not a sandbox or proof of server membership.

@@ -1,6 +1,7 @@
 ---
-type: source::au-weave
+type: source::au-base-types
 tldr: "Native source access, retained intake and register-free supported costing were repaired and exercised; historical engineering evidence remains a review hold without present-job commercial support."
+origin: https://app.devin.ai/sessions/df08d2657e8244e2a114050ec459c0b9
 about:
   - "[[c-keller-mfg]]"
 ---
@@ -22,6 +23,7 @@ The production trace reproduced these concrete handoff failures and their repair
 - A separate entirely synthetic native should-cost task, with no database credential/corpus, reconciled cost 90 to sell 120 at 25% gross margin, with zero analogs and named human review pending. This proves arithmetic and handoffs, not real-job quote quality.
 - Nine negative checks covered changed input, forged attachment hash, missing cost rate/material/margin, missing historical or mixed corpus, missing shipping/tax, and explicit engineering conflict. They rejected or held as appropriate.
 - The final pre-integration canonical verifier passed: 216 estimator, 211 Python and 58 Node tests, builds/typechecks, compiled CLI smoke and 11/11 order tasks. Synthetic Git fixtures used invocation-only `GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1`; no global configuration changed.
+- After integrating merged PR #29, the canonical verifier passed again (216 estimator, 218 Python outside the optional WonderSearch suite, 58 Node, 11/11 artifact tasks). The 32-test WonderSearch suite passed with two optional SDK skips in system Python; all 32 passed separately using its pinned SDK environment. All 12 market-provider tests passed separately. Integration changed the fingerprinted verifier, so the blocked WonderSearch artifacts were reissued immutably as `production-v6`; no live or pricing run occurred.
 - No authenticated incoming RFQ or released drawing was verified for this historical package. Completing a real quote requires present scope/quantity/revisions, applicable costs or approved estimates, reviewed routing and COST rates, commercial charges/terms, target margin and confirmed named human review. No customer send, provider activation or production activation occurred. No end-to-end accuracy claim follows.
 
 ## Reproduction and source contracts
