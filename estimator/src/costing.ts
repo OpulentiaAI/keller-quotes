@@ -184,7 +184,7 @@ const displayRange = (r: Range, places: number, path: string): CostRange => ({
   low: display(r.low, places, path), base: display(r.base, places, path), high: display(r.high, places, path),
 });
 
-function sources(value: unknown, path: string, asOf: string): void {
+function sources(value: unknown, path: string, asOf: string, warnings: string[]): void {
   for (const [i, item] of list(value, path, 8, 1).entries()) {
     const p = `${path}[${i}]`;
     const s = record(item, p, ["source_class", "sha256", "locator", "source_date", "captured_date", "status", "effective_date", "expires_date", "applicability", "basis", "approval"]);
@@ -211,15 +211,21 @@ function sources(value: unknown, path: string, asOf: string): void {
       if (approval.date < s.source_date) throw new Error(`${p}.approval.date is before source_date`);
       if (approval.date > asOf) throw new Error(`${p}.approval.date is after quote_date`);
     } else if (s.approval !== undefined) throw new Error(`${p}.approval requires approved_estimate status`);
+    if (typeof s.expires_date === "string" && s.expires_date < asOf) {
+      warnings.push(`Source validity: ${p} expired on ${s.expires_date}; quote_date ${asOf}; retained as ${s.status}, not current-cost authority`);
+    }
+    if (typeof s.effective_date === "string" && s.effective_date > asOf) {
+      warnings.push(`Source validity: ${p} not effective until ${s.effective_date}; quote_date ${asOf}; retained as ${s.status}, not current-cost authority`);
+    }
   }
 }
 
 const supportKeys = ["id", "sources", "assumptions", "charge_inclusion", "zero_reason", "engineering_fact_ids"];
-function support(obj: Record<string, unknown>, path: string, asOf: string, ids: Set<string>): void {
+function support(obj: Record<string, unknown>, path: string, asOf: string, ids: Set<string>, warnings: string[]): void {
   text(obj.id, `${path}.id`);
   if (ids.has(obj.id)) throw new Error(`${path} has a duplicate component/operation id`);
   ids.add(obj.id);
-  sources(obj.sources, `${path}.sources`, asOf);
+  sources(obj.sources, `${path}.sources`, asOf, warnings);
   for (const v of list(obj.assumptions, `${path}.assumptions`, 16, 1)) text(v, `${path}.assumptions`);
   if (obj.engineering_fact_ids !== undefined) {
     const ids = list(obj.engineering_fact_ids, `${path}.engineering_fact_ids`, 32, 1);
@@ -263,12 +269,13 @@ function calculateCostBasis(value: unknown, quantity: number, asOf: string, flat
   const totals: Record<keyof FlatCosts, Range> = { material_per_unit: zeroRange(), outside_per_unit: zeroRange(), labor_per_unit: zeroRange(), setup_total: zeroRange() };
   const components: CostBreakdown["components"] = [];
   const routing: CostBreakdown["routing"] = [];
+  const sourceWarnings: string[] = [];
   const ids = new Set<string>();
   const present = new Set<Category>();
   for (const [i, item] of list(root.components, "cost_basis.components", 64).entries()) {
     const p = `cost_basis.components[${i}]`;
     const c = record(item, p, [...supportKeys, "category", "allocation", "rate_kind", "original_unit", "quantity_unit", "quantity", "original_units_per_quantity_unit", "conversion_ratio", "yield_fraction", "minimum_quantity", "purchase_increment", "unit_cost", "minimum_charge"]);
-    support(c, p, asOf, ids);
+    support(c, p, asOf, ids, sourceWarnings);
     choice(c.category, `${p}.category`, ["material", "outside", "other"]);
     choice(c.allocation, `${p}.allocation`, ["material_per_unit", "outside_per_unit", "setup_total"]);
     if ((c.category === "material" && c.allocation !== "material_per_unit") || (c.category === "outside" && c.allocation !== "outside_per_unit")) throw new Error(`${p}.allocation conflicts with category`);
@@ -313,7 +320,7 @@ function calculateCostBasis(value: unknown, quantity: number, asOf: string, flat
   for (const [i, item] of list(root.routing, "cost_basis.routing", 64).entries()) {
     const p = `cost_basis.routing[${i}]`;
     const r = record(item, p, [...supportKeys, "setup_occurrences", "setup_time", "run_time", "process_quantity", "setup_rate", "run_rate"]);
-    support(r, p, asOf, ids);
+    support(r, p, asOf, ids, sourceWarnings);
     const occurrences = count(r.setup_occurrences, `${p}.setup_occurrences`, 10_000);
     const processQuantity = count(r.process_quantity, `${p}.process_quantity`, 10_000_000);
     const setupTime = record(r.setup_time, `${p}.setup_time`, ["unit", "values"]);
@@ -349,7 +356,7 @@ function calculateCostBasis(value: unknown, quantity: number, asOf: string, flat
     choice(n.category, `${p}.category`, ["material", "outside", "other", "routing"]);
     if (present.has(n.category as Category)) throw new Error(`${p} duplicates or contradicts a present category`);
     text(n.reason, `${p}.reason`);
-    sources(n.sources, `${p}.sources`, asOf);
+    sources(n.sources, `${p}.sources`, asOf, sourceWarnings);
     present.add(n.category as Category);
   }
   for (const category of ["material", "outside", "other", "routing"] as const) if (!present.has(category)) throw new Error(`cost_basis missing ${category} costs or sourced not_applicable disposition; unknown is not zero`);
@@ -383,6 +390,7 @@ function calculateCostBasis(value: unknown, quantity: number, asOf: string, flat
       "Historical and approved estimates support prospective review, not guaranteed actual costs or current buy prices",
       "Estimated production-line margin excludes freight, tax and separate order charges; no whole-order margin is claimed",
       "Cost ranges are scenario bounds, not statistical confidence; human approval is still required before customer release",
+      ...sourceWarnings,
     ],
   };
 }
