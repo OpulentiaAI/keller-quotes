@@ -1,0 +1,3 @@
+# Optional SDK for a FUTURE reviewed live executor; offline CLI needs only Python stdlib.
+# No live executor is included in this boundary implementation.
+wondersearch==0.2.0

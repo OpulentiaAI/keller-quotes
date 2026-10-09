@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "population": "development-only diagnostic of retained historical replay; not a new pricing evaluation",
+  "input_sha256": {
+    "cases": "12414d36a0f2d721d86d74dea61a66673c043931668f7573ece4f27553445311",
+    "register": "a7d84545b00ecb3f976d100d3e214885cca009189c1f59c500687539e5728757",
+    "retained_report": "be2a5c691f632546d99534c0a9c08fb3c1e1e06012fc44ff4b126ed1c1436e0e"
+  },
+  "retained_report_sha256": "be2a5c691f632546d99534c0a9c08fb3c1e1e06012fc44ff4b126ed1c1436e0e",
+  "script_sha256": "7bd362561c1454c4b759a6f53990593e190311804e8be617cfc500bdd5592f44",
+  "baseline_commit": "34a0880037cf1cd40ae062e68b7201ad0b8c4cd9",
+  "all_case_denominator": 250,
+  "unchanged_retained_all_pass": 45,
+  "inspected_development_cases": 208,
+  "other_cases_not_drilled_into": 42,
+  "development_statuses": {
+    "no_analog": 24,
+    "priced": 184
+  },
+  "development_all_pass": 33,
+  "development_failed_criteria": {
+    "extension_reconciles": 24,
+    "priced_finite": 24,
+    "unit_within_20pct": 175
+  },
+  "development_input_field_presence": {
+    "customer_id": 208,
+    "part_no": 208,
+    "description": 200,
+    "quantity": 208,
+    "material": 0,
+    "finish": 0,
+    "drawing_ref": 0,
+    "revision": 0,
+    "thickness": 0,
+    "dimensions": 0,
+    "tolerances": 0,
+    "routing": 0,
+    "cost_plus": 0,
+    "should_cost": 0
+  },
+  "development_exposed_analog_match": {
+    "no analog": 24,
+    "other analog": 184
+  },
+  "development_exact_history": {
+    "no_same_part_outside_source": 208,
+    "same_part_outside_source_but_not_eligible": 0,
+    "eligible_same_part": 0,
+    "eligible_priceable_same_part": 0
+  },
+  "development_retrieval": {
+    "zero_candidates": 11,
+    "held_with_zero_candidates": 11,
+    "held_with_candidates": 13,
+    "held_with_candidates_all_top3_quarantined": 13,
+    "priced_with_top3_admission": 184,
+    "no_usable_price_in_top12": 11,
+    "quantity_outside_all_top12_priceable_ranges": 12
+  },
+  "scored_policy_change": false,
+  "new_pricing_execution": false,
+  "provider_requests": 0,
+  "independent_manufacturing_judgments": null,
+  "current_cost_accuracy": null,
+  "realized_margin_accuracy": null,
+  "verification": {
+    "byte_identical_replay": true,
+    "existing_output_unchanged_on_rejection": true,
+    "wrong_case_hash_rejected": true,
+    "wrong_retained_report_hash_rejected": true,
+    "nonprivate_output_directory_rejected": true,
+    "private_case_artifact_sha256": "d8badace6227784d57bf7f89a0b03e2b3e448caf0970f7481de3898f813ba8cf"
+  }
+}
