@@ -42,6 +42,8 @@ Memo pointers, empty CSV columns and a miss in quote-filtered page search are no
 
 Capture source class/hash/locator, effective and expiry dates separately from capture date, original price unit and conversion, quantity/minimum/yield assumptions, low/base/high estimates, charge inclusions and reviewer disposition. Steel benchmarks can bound trend scenarios; they do not establish delivered buy cost for a grade, size, small lot or location. No automatic inflation factor makes an archive current.
 
+For every `approved_estimate` source, `source_date <= approval.date <= quote_date` is required, including component, routing and not-applicable evidence. A prior review cannot cover a later-dated source; obtain a review of that source or identify the correct earlier version rather than backdating evidence. An expired historical offer may still support an explicitly reviewed estimate, not a `current` claim. `captured_date` records archive capture, not review, commercial validity or independently proven first availability. These checks enforce supplied date consistency, not reviewer authentication.
+
 An explicit material/revision/finish/UOM/scope conflict blocks adoption of that analog transfer. Unknown applicability triggers the named lookup, then an approved estimate/assumption or a price-critical adoption hold; it is never silently a match. Unknown current cost blocks a supported margin claim, not historical price comparison. Missing acceptance/payment/closed-job actuals blocks realized-outcome claims, not a supported prospective estimate. Historical chronology conflicts still block prior-availability claims in replay.
 
 ## COST, SELL and estimating time
