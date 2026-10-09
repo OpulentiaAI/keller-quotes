@@ -57,6 +57,36 @@ function reconcile(b = basis(), costs = flat(), quantity = 10) {
 }
 
 describe("prospective cost-basis worksheet", () => {
+  it("retains source-validity warnings with explicitly partial component and routing coverage", async () => {
+    const b = basis();
+    b.components[0]!.quantity = 1;
+    b.components[0]!.partial_quantity_reason = "Synthetic customer supplies the other nine pieces";
+    b.routing[0]!.process_quantity = 1;
+    b.routing[0]!.partial_quantity_reason = "Synthetic first-article-only operation";
+    const req = request(b, flat(), 10);
+    req.parts[0]!.pricing = { method: "should_cost", cost_basis: b, margin_pct: 20, reason: "Synthetic composition regression" };
+    const baseline = await buildPricedOrder(reg, req, options);
+    for (const group of ["components", "routing"] as const) {
+      for (const item of b[group]) item.sources[0]!.expires_date = "2024-05-31";
+    }
+    const unchanged = JSON.stringify(req);
+    const order = await buildPricedOrder(reg, req, options);
+    for (const group of ["components", "routing"] as const) {
+      for (const [i] of b[group].entries()) {
+        expect(order.lines[0]!.warnings).toContain(
+          `Source validity: cost_basis.${group}[${i}].sources[0] expired on 2024-05-31; quote_date ${asOf}; retained as approved_estimate, not current-cost authority`,
+        );
+      }
+    }
+    expect(order.lines[0]!.unit_price).toBe(baseline.lines[0]!.unit_price);
+    expect(order.lines[0]!.extended_price).toBe(baseline.lines[0]!.extended_price);
+    expect(order.lines[0]!.cost_breakdown!.estimated_line_cost).toEqual(baseline.lines[0]!.cost_breakdown!.estimated_line_cost);
+    expect(order.total).toBe(baseline.total);
+    expect(order.state).toBe("PRICED_REQUIRES_REVIEW");
+    expect(order.requires_human_review).toBe(true);
+    expect(JSON.stringify(req)).toBe(unchanged);
+  });
+
   it("builds a should-cost proposal without analogs or manually copied flat costs", async () => {
     const req = request();
     req.parts[0]!.pricing = { method: "should_cost", cost_basis: basis(), margin_pct: 20, reason: "Synthetic reviewed engineering estimate" };
@@ -181,8 +211,49 @@ describe("prospective cost-basis worksheet", () => {
   ])("uses exact decimal multiples for quantity %s, conversion %s, yield %s, increment %s", (quantity, conversion, yieldFraction, increment, expected) => {
     const b = basis();
     Object.assign(b.components[0]!, { quantity, original_units_per_quantity_unit: conversion,
-      yield_fraction: yieldFraction, purchase_increment: increment });
+      yield_fraction: yieldFraction, purchase_increment: increment,
+      ...(quantity < 10 ? { partial_quantity_reason: "Synthetic arithmetic fixture deliberately covers part of the line" } : {}) });
     expect(deriveCostBasis(b, 10, asOf).components[0]!.priced_quantity).toBe(expected);
+  });
+
+  it("rejects worksheet rows that silently cover fewer pieces than the line quantity", () => {
+    for (const [mutate, pattern] of [
+      [(b: CostBasis) => { b.components[0]!.quantity = 1; }, /components\[0\]\.partial_quantity_reason/],
+      [(b: CostBasis) => { b.components[1]!.quantity = 9.999999; }, /components\[1\]\.partial_quantity_reason/],
+      [(b: CostBasis) => { b.routing[0]!.process_quantity = 9; }, /routing\[0\]\.partial_quantity_reason/],
+      [(b: CostBasis) => { b.routing[0]!.process_quantity = 0; b.routing[0]!.zero_reason = "No run"; }, /routing\[0\]\.partial_quantity_reason/],
+      [(b: CostBasis) => { b.components[0]!.partial_quantity_reason = "Not actually partial"; }, /requires a quantity below/],
+      [(b: CostBasis) => { b.routing[0]!.partial_quantity_reason = "Not actually partial"; }, /requires a quantity below/],
+      [(b: CostBasis) => { b.components[0]!.quantity = 1; b.components[0]!.partial_quantity_reason = " "; }, /partial_quantity_reason/],
+    ] as const) {
+      const b = basis();
+      mutate(b);
+      expect(() => deriveCostBasis(b, 10, asOf)).toThrow(pattern);
+      expect(() => reconcileCostBasis(b, 10, asOf, flat())).toThrow(pattern);
+    }
+    const perPiece = basis();
+    perPiece.components[0]!.quantity = 1;
+    perPiece.components[0]!.partial_quantity_reason = "Only one piece uses this material; remaining pieces are from customer-supplied stock";
+    perPiece.routing[0]!.process_quantity = 1;
+    perPiece.routing[0]!.partial_quantity_reason = "Only the first article runs through this operation";
+    expect(deriveCostBasis(perPiece, 10, asOf).reconciled_flat).toEqual({ material_per_unit: 0.125, labor_per_unit: 0.2, outside_per_unit: 2.5, setup_total: 60 });
+    expect(deriveCostBasis(basis(), 1, asOf).reconciled_flat).toMatchObject({ material_per_unit: 12.5, labor_per_unit: 24 });
+    const setupOnly = basis();
+    setupOnly.not_applicable = [];
+    setupOnly.components.push({ ...setupOnly.components[1]!, id: "tooling", category: "other", allocation: "setup_total", quantity: 1, minimum_charge: range(0) });
+    expect(() => deriveCostBasis(setupOnly, 10, asOf)).not.toThrow();
+    (setupOnly.components[2] as unknown as Record<string, unknown>).partial_quantity_reason = "Not applicable to setup";
+    expect(() => deriveCostBasis(setupOnly, 10, asOf)).toThrow(/not setup_total/);
+  });
+
+  it("does not compare stock, mass or lot quantities to finished-piece counts", () => {
+    for (const quantity_unit of ["sheet", "kg", "lot"]) {
+      const b = basis();
+      Object.assign(b.components[0]!, { quantity_unit, quantity: 0.3, original_units_per_quantity_unit: 1, yield_fraction: 1 });
+      expect(deriveCostBasis(b, 10, asOf).reconciled_flat.material_per_unit).toBe(0.3);
+      b.components[0]!.partial_quantity_reason = "Cannot compare unlike units";
+      expect(() => deriveCostBasis(b, 10, asOf)).toThrow(/requires a finished_piece quantity/);
+    }
   });
 
   it.each([0, -1, null, false, "1", NaN, Infinity, 1e9 + 1, 0.0000001])("rejects invalid purchase increment %s", increment => {

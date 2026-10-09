@@ -249,6 +249,57 @@ console.log(JSON.stringify(result));"""
         self.assertFalse(content['review']['customer_release_authorized'])
         self.assertTrue(content['review']['requires_human_review'])
 
+    def test_partial_piece_quantities_require_reasons_and_survive_named_review(self):
+        original = json.loads((ROOT / 'estimator/examples/should-cost-intake.json').read_text())
+        part = original['parts'][0]
+        del part['geometry'], part['source_evidence'], part['uom']
+        part['quantity'] = 10
+        basis = part['pricing']['cost_basis']
+        for entry in basis['components'] + basis['routing'] + basis['not_applicable']:
+            entry.pop('engineering_fact_ids', None)
+            for source in entry['sources']:
+                source.update(sha256='a' * 64, locator='synthetic-cost:worksheet')
+        component, route = basis['components'][0], basis['routing'][0]
+        component.update(quantity_unit='finished_piece', quantity=10)
+        route['process_quantity'] = 10
+        for method in ('should_cost', 'cost_plus'):
+            part['pricing']['method'] = method
+            if method == 'cost_plus':
+                part['pricing'].update(material_per_unit=40, labor_per_unit=20, outside_per_unit=0, setup_total=30)
+            baseline = self.invoke(original, corpus=None, no_database=True)
+            self.assertFalse(baseline.get('isError'), baseline)
+            self.assertEqual(baseline['content']['total'], 840)
+            for group, key in [('components', 'quantity'), ('routing', 'process_quantity')]:
+                with self.subTest(method=method, group=group):
+                    candidate = json.loads(json.dumps(original))
+                    item = candidate['parts'][0]['pricing']['cost_basis'][group][0]
+                    item[key] = 1
+                    if method == 'cost_plus':
+                        candidate['parts'][0]['pricing']['material_per_unit' if group == 'components' else 'labor_per_unit'] /= 10
+                    receipts = set(self.home.rglob('review.json'))
+                    denied = self.invoke(candidate, corpus=None, no_database=True)
+                    self.assertTrue(denied.get('isError'), denied)
+                    self.assertNotIn('artifacts', denied['content'])
+                    self.assertEqual(set(self.home.rglob('review.json')), receipts)
+                    item['partial_quantity_reason'] = ('SYNTHETIC: remaining nine pieces use customer-supplied stock'
+                        if group == 'components' else 'SYNTHETIC: first-article-only operation; nine pieces skip it')
+                    result = self.invoke(candidate, corpus=None, no_database=True)
+                    self.assertFalse(result.get('isError'), result)
+                    content = result['content']
+                    self.assertEqual(content['state'], 'PRICED_REQUIRES_REVIEW')
+                    self.assertEqual(content['total'], 360 if group == 'components' else 600)
+                    cost = content['order']['lines'][0]['cost_breakdown']
+                    self.assertEqual(cost[group][0]['partial_quantity'], {
+                        'quantity': 1, 'line_quantity': 10, 'reason': item['partial_quantity_reason']})
+                    self.assertEqual(cost['estimated_line_margin_pct']['base'], 25)
+                    self.assertEqual(cost['reconciled_flat']['setup_total'], 30)
+                    self.assertIn(item['partial_quantity_reason'].replace('-', r'\-'), content['markdown'])
+                    self.assertEqual(cost['supplied_basis'], candidate['parts'][0]['pricing']['cost_basis'])
+                    self.assertEqual(content['order']['request'], candidate)
+                    self.assertFalse(content['review']['customer_release_authorized'])
+                    self.assertEqual(content['review']['reviewer'], 'Synthetic Reviewer')
+                    self.assertEqual(content['review']['request_sha256'], content['request_sha256'])
+
     def test_cost_estimate_review_dates_must_follow_their_source_without_requiring_current_prices(self):
         original = json.loads((ROOT / 'estimator/examples/should-cost-intake.json').read_text())
         part = original['parts'][0]
