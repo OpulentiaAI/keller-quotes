@@ -48,6 +48,14 @@ For every `approved_estimate` source, `source_date <= approval.date <= quote_dat
 
 An explicit material/revision/finish/UOM/scope conflict blocks adoption of that analog transfer. Unknown applicability triggers the named lookup, then an approved estimate/assumption or a price-critical adoption hold; it is never silently a match. Unknown current cost blocks a supported margin claim, not historical price comparison. Missing acceptance/payment/closed-job actuals blocks realized-outcome claims, not a supported prospective estimate. Historical chronology conflicts still block prior-availability claims in replay.
 
+## Read drawing notes from retained PDFs
+
+For a deliberately selected owner-bound PDF, `keller_sources` action `pdf_text` returns bounded text from an explicit one-based `page`, with PDF and extracted-page hashes. Follow character offsets with both hashes pinned; use the PDF hash for later pages. See the [host dependency, limits and request contract](arsumbris-workspace.md#read-a-selected-pdf-page-without-mistaking-text-for-geometry). No external service receives the file.
+
+For an already captured attachment, use the explicitly owner-configured `intake` source set, its exact `keller-intake:` attachment `locator` instead of a path, and its retained SHA256 as `expected_pdf_sha256` on every read. The reader opens the immutable `.bin` copy, not a guessed original/archive filename. No intake listing or original-request reads are exposed. Preserve the returned locator/hash/page in the review; reading does not authorize changing a retained request in place.
+
+Extracted material, finish, tolerance or route notes can inform **separately reviewed** engineering facts; the reader does not infer their applicability or populate a costing worksheet. Reconcile the measured PDF hash with the retained attachment and preserve page references. `no_extractable_text` needs OCR/visual review, not a zero-complexity assumption. Embedded text can also omit symbols/dimensions or have incorrect reading order. Never interpret `text_extracted` as verified geometry, released revision, complete specifications or current cost. Frozen evaluation source access/cutoffs remain unchanged.
+
 ## Selected supplier offer to cost inputs
 
 After deliberately selecting a physical `VENDQUOT` row with `dbf_rows`, `keller_sources` action `dbf_supplier_costs` accepts its exact `vendor_quote` (`VEND_QUOT`), zero-based `record_index`, `expected_dbf_sha256`, `expected_record_sha256`, and explicit `price_break` 1..8. It reads the paired `QTYn`/`PRICEn`, `MINIMUM`, `SU_CHARGE`, identity, dates and void status. It never chooses the first, cheapest or newest row/tier; duplicate keys retain physical identity. Deleted/voided/unknown-status rows, missing amounts, zero placeholder quantities and unrepresentable values are rejected. Original price text/precision and field/record hashes remain evidence.

@@ -62,7 +62,7 @@ class SourceToolTest(unittest.TestCase):
         synthetic_dbf(self.sources / "OPERATIO.DBF", "OPER_ID")
         synthetic_dbf(self.sources / "UNKEYED.DBF", "PART_NO")
         self.config = self.base / "sources.json"
-        self.config.write_text(json.dumps({name: str(self.sources) for name in reader.SETS}))
+        self.config.write_text(json.dumps({name: str(self.sources) for name in reader.SETS if name != "intake"}))
         self.env = patch.dict(os.environ, {"KELLER_SOURCE_CONFIG": str(self.config)})
         self.env.start()
         self.addCleanup(self.env.stop)
@@ -72,7 +72,10 @@ class SourceToolTest(unittest.TestCase):
         return reader.read(reader.configuration(), request)
 
     def test_owner_configuration_and_closed_inventory(self):
-        self.assertEqual(len(self.call("sets")["source_sets"]), 4)
+        sets = self.call("sets")["source_sets"]
+        self.assertEqual(len(sets), 5)
+        self.assertEqual(next(s for s in sets if s["id"] == "intake"),
+                         {"id": "intake", "configured": False, "extensions": []})
         listing = self.call("list", source_set="transcripts")
         self.assertEqual([entry["name"] for entry in listing["entries"]], ["nested"])
         self.assertNotIn("synthetic-secret", json.dumps(listing))
