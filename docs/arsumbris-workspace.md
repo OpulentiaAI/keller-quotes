@@ -76,6 +76,10 @@ The ≥90% completed-quoting goal is **not established** by this workspace. The 
 
 The `keller_quote` tool is the controlled internal draft path, not a release mechanism. It requires an explicit public corpus ID, an order request satisfying the estimator's `OrderRequest` contract, and a named human reviewer; it reuses the local order CLI with explicit operator price/cost inputs or the selected read-only customer-PDF register. It preserves blocked lines and returns structured `order`, `markdown`, `review`, state/blockers, and opaque references to persisted private artifacts. **The response itself contains private customer/cost evidence** and must stay in approved internal channels; don't paste it into a public graph node or customer message. It performs no database write or hosted model call. Treat a `PRICED_REQUIRES_REVIEW` result as an internal calculation awaiting approval, not as a quote sent to a customer.
 
+### Reviewed supplier cost inputs
+
+`dbf_supplier_costs` reads one deliberately selected VENDQUOT physical record and one QTY/PRICE pair. Supply exact `vendor_quote`, `record_index`, both DBF/record hashes, `price_break` 1..8 and bounded JSON `supplier_review`. The review explicitly provides USD COST/original-unit meaning, quantity applicability, setup occurrences, minimum/setup relationship, source date and named estimating approval. It emits partial primary component inputs plus any separate setup component, with raw values and provenance; deleted/voided/unknown-status rows, unknown amounts and placeholder quantities fail closed. All sources remain supplied `approved_estimate` assertions, including unexpired offers. It neither selects applicable records nor validates current availability. See [supplier review and allocation contract](steve-pricing-workflow.md#selected-supplier-offer-to-cost-inputs) before use.
+
 ### Discover manufacturing catalog candidates without prior IDs
 
 `dbf_schema.catalog_lookup` advertises `dbf_catalog` only for the approved MATERIAL, OPERATIO and FORMULA definition shapes. Use it to discover candidate IDs for a new RFQ, not to select an applicable cost automatically. Synthetic request shape:
