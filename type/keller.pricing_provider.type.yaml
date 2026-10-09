@@ -1,0 +1,11 @@
+extends: source::au-base-types
+fields:
+  provider_name: String
+  priority: [primary_evaluation, parallel_evaluation, contract_dependent, alternative]
+  integration_status: [not_connected, implemented_disabled, live_verified]
+  verification: [documentation_only, synthetic_tests, authenticated_probe]
+  access_requirement: String
+  cadence: String
+  data_role: String
+  limitations: String
+  official_sources: String[]

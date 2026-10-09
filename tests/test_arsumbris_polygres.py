@@ -1,6 +1,8 @@
 """Synthetic contract checks for the native read-only Polygres tool."""
 
 import importlib.util
+from datetime import datetime, timezone
+import io
 import json
 import os
 from pathlib import Path
@@ -77,11 +79,22 @@ class NativePolygresTest(unittest.TestCase):
         self.assertEqual(conn.queries[1][1], (CORPUS,))
 
     def test_corpora_returns_snapshot_timestamp_and_counts(self):
-        conn = FakeConnection([None, [('a' * 64, 3, 4, 5, '2026-09-28T00:00:00+00:00')]])
+        conn = FakeConnection([None, [('a' * 64, 3, 4, 5, datetime(2026, 9, 28, tzinfo=timezone.utc))]])
         response = reader.read(conn, reader.validate({'action': 'corpora'}))
         self.assertEqual(response['corpora'], [{'corpus': 'a' * 64, 'documents': 3, 'pages': 4,
                                                 'verified_prices': 5, 'ingested_at': '2026-09-28T00:00:00+00:00'}])
         self.assertIn('order by ingested_at desc', conn.queries[1][0])
+
+    def test_corpora_main_serializes_native_database_timestamp(self):
+        conn = FakeConnection([None, [(CORPUS, 3, 4, 5, datetime(2026, 9, 28, 12, 34, 56, 123456, timezone.utc))]])
+        output = io.StringIO()
+        with patch.object(reader, 'connect', return_value=conn), \
+                patch.object(sys, 'stdin', io.StringIO('{"action":"corpora"}')), \
+                patch.object(sys, 'stdout', output):
+            reader.main()
+        result = json.loads(output.getvalue())
+        self.assertEqual(result['corpora'][0]['ingested_at'], '2026-09-28T12:34:56.123456+00:00')
+        self.assertEqual(result['corpora'][0]['verified_prices'], 5)
 
     def test_price_result_uses_existing_csv_validation(self):
         record = (1, "csv", "Q", "", 2, 1.2345, 2.47, None, None, "P", "C", "PRICE", "OUTPUT/quote.pdf", "b" * 64, "c" * 64)

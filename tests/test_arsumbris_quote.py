@@ -42,10 +42,12 @@ print(json.dumps({'sha256': hashlib.sha256(data).hexdigest(), 'rows': 2}))
         return {"order_id": "SYNTHETIC-1", "quote_date": "2024-06-01", "customer": "Sample Shop",
                 "parts": parts, **({"charges": charges} if charges is not None else {})}
 
-    def invoke(self, request, corpus=CORPUS, reviewer="Synthetic Reviewer", internal=None, artifact_change=None):
+    def invoke(self, request, corpus=CORPUS, reviewer="Synthetic Reviewer", internal=None, artifact_change=None, no_database=False):
         env = {**os.environ, "HOME": str(self.home), "KELLER_PYTHON": str(self.python),
                "POLYGRES_DIRECT_URL": "secret-never-exposed", "AI_GATEWAY_API_KEY": "sentinel-key",
                "TEAMVIEWER_PASSWORD": "sentinel-remote", "TAILSCALE_AUTH_KEY": "sentinel-tailnet"}
+        if no_database:
+            env.pop('POLYGRES_DIRECT_URL', None)
         script = """import fs from 'node:fs';
 import {syncBuiltinESMExports} from 'node:module';
 const change = JSON.parse(process.argv[2]);
@@ -74,6 +76,8 @@ const result = await createPlugin({workspace: process.cwd()}).invoke(JSON.parse(
 console.log(JSON.stringify(result));"""
         payload = {"corpus": corpus, "request": json.dumps(request) if not isinstance(request, str) else request,
                    "reviewer": reviewer, **(internal or {})}
+        if corpus is None:
+            payload.pop('corpus')
         completed = subprocess.run(["node", "--input-type=module", "-e", script, json.dumps(payload), json.dumps(artifact_change)], cwd=ROOT,
                                    env=env, capture_output=True, text=True, timeout=45, check=True)
         self.assertNotIn("secret-never-exposed", completed.stdout + completed.stderr)
@@ -106,6 +110,98 @@ console.log(JSON.stringify(result));"""
         self.assertEqual(content["markdown"], markdown)
         self.assertEqual(content["review"], review)
         return order, markdown
+
+    def test_uploaded_engineering_should_cost_survives_native_and_local_handoffs(self):
+        uploads = []
+        for name in ('drawing', 'worksheet'):
+            path = self.home / (name + '.txt')
+            path.write_text('SYNTHETIC evidence only: ' + name)
+            uploads.append({'id': name, 'path': str(path), 'media_type': 'text/plain'})
+        manifest = self.home / 'uploads.json'
+        manifest.write_text(json.dumps(uploads))
+        retained = subprocess.run(['node', str(ROOT / 'estimator/node_modules/tsx/dist/cli.mjs'),
+            str(ROOT / 'estimator/src/intake-cli.ts'), str(ROOT / 'estimator/examples/should-cost-intake.json'),
+            '--attachments', str(manifest), '--operator', 'Synthetic Operator'],
+            env={**os.environ, 'HOME': str(self.home)}, capture_output=True, text=True, check=True, timeout=20)
+        request_path = Path(json.loads(retained.stdout)['request_path'])
+        directory = request_path.parent
+        self.addCleanup(lambda: directory.chmod(0o700))
+        request = json.loads(request_path.read_text())
+        result = self.invoke(request, corpus=None, no_database=True)
+        self.assertFalse(result.get('isError'), result)
+        content = result['content']
+        self.assertEqual(content['total'], 120)
+        self.assertEqual(content['order']['request'], request)
+        line = content['order']['lines'][0]
+        self.assertEqual(line['analogs'], [])
+        self.assertEqual(line['cost_breakdown']['estimated_line_cost']['base'], 90)
+        self.assertEqual(line['cost_breakdown']['estimated_line_margin_pct']['base'], 25)
+        self.assertEqual(line['part']['geometry'], request['parts'][0]['geometry'])
+        self.assertFalse(content['review']['customer_release_authorized'])
+        self.assertEqual(content['review']['request_sha256'], content['order']['provenance']['request_sha256'])
+        # Existing local inbox must route the same fully supplied order to the order builder.
+        workspace = self.home / 'queue'
+        (workspace / 'inbox').mkdir(parents=True)
+        (workspace / 'inbox/rfq.json').write_text(json.dumps(request))
+        cycle = subprocess.run(['node', str(ROOT / 'scripts/keller-local.mjs'), 'cycle', '--workspace', str(workspace)],
+            env={**os.environ, 'HOME': str(self.home)}, capture_output=True, text=True, check=True, timeout=20)
+        self.assertEqual(json.loads(cycle.stdout)['drafted'], ['rfq.json'])
+        local = json.loads(next((workspace / 'drafts').glob('*.json')).read_text())
+        self.assertEqual(local['request'], request)
+        self.assertEqual(local['total'], 120)
+        self.assertIsNone(local['provenance']['register_sha256'])
+        # Corruption or a changed original quantity cannot be authorized by replaying locators.
+        changed = json.loads(json.dumps(request))
+        changed['parts'][0]['quantity'] = 2
+        self.assertTrue(self.invoke(changed, corpus=None, no_database=True).get('isError'))
+        attachment = directory / 'attachment-0.bin'
+        attachment.chmod(0o600)
+        attachment.write_text('changed synthetic bytes')
+        attachment.chmod(0o400)
+        self.assertTrue(self.invoke(request, corpus=None, no_database=True).get('isError'))
+
+    def test_unreferenced_engineering_conflict_blocks_native_order_completion(self):
+        request = self.request([{'line_id': 'cost', 'part_no': 'SYNTHETIC', 'quantity': 1,
+            'pricing': {'method': 'unit_price', 'unit_price': 120, 'reason': 'synthetic proposal'},
+            'geometry': [{'id': 'revision', 'field': 'drawing_revision', 'value': 'Explicit revision conflict',
+                          'source_ids': [], 'applicability': 'conflict'}]}], {'shipping': 0, 'tax': 0})
+        result = self.invoke(request, corpus=None, no_database=True)
+        self.assertFalse(result.get('isError'), result)
+        content = result['content']
+        self.assertEqual(content['state'], 'BLOCKED')
+        self.assertIsNone(content['total'])
+        self.assertEqual(content['order']['lines'][0]['unit_price'], 120)
+        self.assertIn('explicit engineering conflict', ' '.join(content['order']['blockers']))
+        self.assertFalse(content['review']['customer_release_authorized'])
+        self.assertTrue(content['review']['requires_human_review'])
+
+    def test_register_free_costs_need_no_database_and_still_bind_review(self):
+        request = self.request([{'line_id': 'cost', 'part_no': 'SYNTHETIC', 'quantity': 1,
+            'pricing': {'method': 'cost_plus', 'material_per_unit': 40, 'labor_per_unit': 20,
+                        'outside_per_unit': 0, 'setup_total': 30, 'margin_pct': 25, 'reason': 'synthetic worksheet'}}],
+            {'shipping': 0, 'tax': 0})
+        result = self.invoke(request, corpus=None, no_database=True)
+        self.assertFalse(result.get('isError'), result)
+        content = result['content']
+        self.assertEqual(content['total'], 120)
+        self.assertIsNone(content['corpus_sha256'])
+        self.assertIsNone(content['corpus_id'])
+        self.assertEqual(content['source_rows'], 0)
+        self.assertEqual(content['order']['request'], request)
+        self.assertEqual(content['order']['lines'][0]['analogs'], [])
+        self.assertFalse(content['review']['customer_release_authorized'])
+        self.assertEqual(content['review']['reviewer'], 'Synthetic Reviewer')
+        directory = self.home / '.local/share/keller-quotes/drafts' / content['draft_id']
+        self.assertFalse((directory / 'corpus.csv').exists())
+        self.assertEqual(content['request_sha256'], hashlib.sha256((directory / 'request.json').read_bytes()).hexdigest())
+        for change in ('hash', 'request', 'file_after_pricing'):
+            self.assertTrue(self.invoke(request, corpus=None, no_database=True, artifact_change=change).get('isError'))
+        # Invalid costs, mixed requests and explicit corpus selection may not take this path.
+        request['parts'].append({'line_id': 'history', 'part_no': 'OTHER', 'quantity': 1})
+        self.assertTrue(self.invoke(request, corpus=None, no_database=True).get('isError'))
+        request['parts'].pop()
+        request['parts'][0]['pricing']['margin_pct'] = 100
+        self.assertTrue(self.invoke(request, corpus=None, no_database=True).get('isError'))
 
     def test_changed_request_during_export_cannot_reach_review(self):
         with self.python.open('a') as script:

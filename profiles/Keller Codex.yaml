@@ -8,6 +8,7 @@ skills:
   - "[[keller-data-analysis]]"
 inject:
   - "[[keller-orientation]]"
+  - "[[keller-production-quote-memory]]"
 tools:
   - "[[mcp.tool.au_files::au-mcp-core]]"
   - "[[mcp.tool.au_instances_of::au-mcp-core]]"
@@ -20,4 +21,5 @@ tools:
   - "[[mcp.tool.keller_polygres]]"
   - "[[mcp.tool.keller_quote]]"
   - "[[mcp.tool.keller_sources]]"
+  - "[[mcp.tool.keller_market]]"
 nativeToolAllowlist: []

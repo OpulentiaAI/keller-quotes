@@ -69,6 +69,7 @@
     "retrieval_gains": null,
     "pricing_improvement": null
   },
+  "verification_scope": "Retained review-v5 results; production-v6 refresh only rebinds blocked artifacts after merge. See the production repair verification record for current checks.",
   "verification": {
     "pinned_sdk_synthetic_tests": 32,
     "pinned_sdk_synthetic_exit_code": 0,
@@ -87,14 +88,14 @@
     "cases": "12414d36a0f2d721d86d74dea61a66673c043931668f7573ece4f27553445311",
     "register": "a7d84545b00ecb3f976d100d3e214885cca009189c1f59c500687539e5728757"
   },
-  "implementation_sha256": "f63b2436883410e63197d83cb31fb9ecd68eb336b76d1ad2c97b4472e02e16ba",
-  "source_manifest_sha256": "4a489ea9f076c91813f4e6be49f6729bca574331a98f7e349d58873ed55c21dc",
-  "query_sequence_sha256": "2f89e882a22374bbf3371ba1b60041e2e957c7d4df0fe08106417ab28bd9375f",
-  "private_paired_report_sha256": "1678fd2cd55d92b61fec40a09a47b5c1d00731f5d34e9957ece3254094ad1058",
+  "implementation_sha256": "1e1608f5cfbc392299fbc3af2e575cd6fbe0e5aeb82b8f541ae338e0b9d943ef",
+  "source_manifest_sha256": "d478601edbf179ffd1bcf6b1eb9a0f942d613e65dc2ad26f8dcf28647c6b1364",
+  "query_sequence_sha256": "86e1c36463e11a886fd22e34e4e11460f6fbdb4ff1fe65de3d1b8cb62ffb7297",
+  "private_paired_report_sha256": "10ed9ba32e694410f2424f481f72fd766c8160bd9054aa465b44fd368c3b77d1",
   "provenance_refresh": {
-    "artifact_prefix": "review-v5",
-    "reason": "Final portability test edits changed the source fingerprint after review-v4 was sealed; new blocked artifacts bind the final implementation and regression test.",
-    "prior_public_report_sha256": "d50fd5caac1d0e693240711412c89578af5b1e926c8d8c5397b8531165764dda",
+    "artifact_prefix": "production-v6",
+    "reason": "Merging PR 29 with the retained-source verifier command from PR 28 changed the fingerprinted scripts/verify.mjs; fresh blocked artifacts bind the integrated source without rerunning pricing or contacting providers.",
+    "prior_public_report_sha256": "61fe0fc77cc7de69e3438b16584acd351212edc43dba2ebaa044898c438ab5ac",
     "prior_artifacts_preserved": true,
     "paired_outcomes_unchanged": true,
     "new_baseline_execution": false

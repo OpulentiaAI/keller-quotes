@@ -33,6 +33,34 @@ test('all eight actual worker-readable contracts exclude archived numeric and qu
   }
 })
 
+test('production memory expands one isolated hop without expanding orientation or operator diagnostics', () => {
+  const profile = readFileSync(join(root, 'profiles/Keller Codex.yaml'), 'utf8')
+  assert.match(profile, /inject:\n  - "\[\[keller-orientation\]\]"/)
+  assert.match(profile, /  - "\[\[keller-production-quote-memory\]\]"/)
+  const orientation = readFileSync(join(root, 'inject/keller-orientation.md'), 'utf8')
+  assert.doesNotMatch(orientation.split('---')[1], /^depth: [1-9]/m)
+  const seed = readFileSync(join(root, 'inject/keller-production-quote-memory.md'), 'utf8')
+  const [, frontmatter, body] = seed.split('---')
+  assert.match(frontmatter, /^depth: 1$/m)
+  assert.match(frontmatter, /^edge-kinds: \[navigational\]$/m)
+  const targets = [...body.matchAll(/\[\[([^\]]+)\]\]/g)].map(match => match[1]).sort()
+  const memory = 'Production RFQ retention and reviewed should-cost routing'
+  assert.deepEqual(targets, [memory])
+  const paths = ['inject/keller-orientation.md', 'inject/keller-production-quote-memory.md',
+    `knowledge/claims/${memory}.md`, 'skills/keller-quote-estimator.md']
+  for (const path of paths) {
+    const text = readFileSync(join(root, path), 'utf8')
+    assert.ok(!text.includes(archivedResult), path)
+    assert.ok(!text.includes(archivedQualitativeResult), path)
+    assert.doesNotMatch(text, /75\.5361%|63\.3716%|all-pass [89]\/50|priced 48\/50|234\/234 analog refs/i, path)
+    assert.doesNotMatch(text, /\[\[[^\]]*(operator findings|diagnostic|evaluation results)[^\]]*\]\]/i, path)
+  }
+  const memoryBody = readFileSync(join(root, `knowledge/claims/${memory}.md`), 'utf8')
+  for (const invariant of ['intake.ts', 'costing.ts', 'quote/tool.ts', 'customer_release_authorized',
+    'Cognition memory-repo reference', 'not real-job quote quality']) assert.ok(memoryBody.includes(invariant), invariant)
+  assert.match(readFileSync(join(root, 'skills/keller-quote-estimator.md'), 'utf8'), /\.agents\/skills\/keller-quote-estimator\/SKILL\.md/)
+})
+
 test('operator-only guide preserves original result text and its denominators and caveats', () => {
   const guide = readFileSync(operatorGuide, 'utf8')
   assert.ok(guide.includes(archivedResult))

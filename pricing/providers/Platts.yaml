@@ -1,0 +1,13 @@
+type: keller.pricing_provider
+tldr: User-shortlisted enterprise benchmark alternative; API documentation landing page only verified here.
+origin: https://developer.spglobal.com/energy/delivery-solutions/api
+provider_name: S&P Global / Platts
+priority: alternative
+integration_status: not_connected
+verification: documentation_only
+access_requirement: Dataset entitlement and enterprise API/licensing terms must be confirmed.
+cadence: User-supplied research states daily US HRC; detailed series specification not independently reverified in this session.
+data_role: Commodity benchmark assessments, not supplier-backed landed costs.
+limitations: No authenticated schema, series ID, prices, cadence or applicable purchasing terms verified. Do not infer implementation from this shortlist entry.
+official_sources:
+  - https://developer.spglobal.com/energy/delivery-solutions/api

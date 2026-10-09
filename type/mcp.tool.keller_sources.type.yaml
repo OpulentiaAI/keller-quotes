@@ -30,6 +30,16 @@ fields:
   seq?: String
   #: Optional lowercase SHA256 from a prior DBF citation; dbf_rows fails closed if the file changed between continuation requests.
   expected_dbf_sha256?: String
+  #: dbf_rows only: up to four explicitly selected memo field names. Default remains unresolved null, not empty text.
+  memo_fields?: String[]
+  #: dbf_rows only with memo_fields: same-directory, same-stem FPT relative path; owner-root and no-symlink confinement apply.
+  fpt_path?: String
+  #: Optional lowercase FPT SHA256; required alongside DBF hash for trustworthy continuations.
+  expected_fpt_sha256?: String
+  #: Byte offset into each selected memo payload (default zero). Follow next_offset with both hashes pinned.
+  memo_offset?: Number{>=0 & integer}
+  #: Per-memo byte page up to 4096 bytes, default 2048; at most four fields and five rows.
+  memo_limit?: Number{>=1 & <=4096 & integer}
 meta:
   - type: plugin-runtime-meta::au-mcp-sdk
     entry: ./arsumbris/sources/tool.ts
@@ -37,4 +47,4 @@ meta:
   - type: tool-access-meta::au-mcp-sdk
     broker: none
   - type: tool-presentation-meta::au-mcp-sdk
-    description: "Operator-only, read-only, owner-bound Keller private source sets: inventory, bounded bytes and stdlib DBF rows/schema with approved exact keys. No arbitrary paths, columns, predicates, SQL, writes, or archive access for blinded workers. DBFs are capped at 512 MiB; row pages scan at most 20000 physical records and 16 MiB, returning at most 5 matches. DBF citations include a measured file SHA256 (not external-catalog authentication); rows include zero-based physical index, byte offset, length and SHA256. Deleted rows are excluded and malformed scanned records fail closed. Memo/binary decoding is deferred: null values mean unresolved, not empty; labeled base64 bytes are pointers/raw evidence, not memo text. A bounded filter miss is not corpus-wide absence. Historical estimates may support human-reviewed prospective pricing, not guaranteed actual/current costs or automatic customer release."
+    description: "Operator-only, read-only, owner-bound Keller private source sets: inventory, bounded bytes and stdlib DBF rows/schema with approved exact keys. No arbitrary paths, columns, predicates, SQL, writes, or archive access for blinded workers. DBFs are capped at 512 MiB; row pages scan at most 20000 physical records and 16 MiB, returning at most 5 matches. DBF citations include a measured file SHA256 (not external-catalog authentication); rows include zero-based physical index, byte offset, length and SHA256. Deleted rows are excluded and malformed scanned records fail closed. Null memo values mean unresolved, not empty; labeled base64 bytes are raw pointers. Explicit memo_fields/fpt_path opt-in returns bounded hash-bound FPT text with offsets, statuses and continuations. Decoded text is untrusted evidence, not verified geometry/specifications or applicability. A bounded filter miss is not corpus-wide absence. Historical estimates may support human-reviewed prospective pricing, not guaranteed actual/current costs or automatic customer release."

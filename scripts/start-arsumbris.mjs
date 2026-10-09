@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
+import { existsSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { setTimeout as delay } from 'node:timers/promises'
@@ -46,6 +47,31 @@ export async function prepareHostEngine({ entry, binary, env, sdk, spawnChild = 
   }
 }
 
+// Operator-only preflight; never pass these bindings to engine or blinded worker processes.
+export function operatorBindings(entry, source = process.env) {
+  const localPython = join(entry, '.keller-local/arsumbris/python/bin/python')
+  const python = source.KELLER_PYTHON || (existsSync(localPython) ? localPython : 'python3')
+  const env = Object.fromEntries(['HOME', 'PATH', 'LANG', 'LC_ALL'].filter(key => source[key] !== undefined).map(key => [key, source[key]]))
+  env.KELLER_SOURCE_CONFIG = source.KELLER_SOURCE_CONFIG || join(entry, '.keller-local/arsumbris/sources.json')
+  const probe = spawnSync(python, ['-B', '-c', 'import sys; print(sys.executable)'], { env, encoding: 'utf8', timeout: 10000 })
+  if (probe.error || probe.status !== 0 || !probe.stdout.trim().startsWith('/')) throw new Error('Executable Python unavailable; set KELLER_PYTHON to an installed interpreter')
+  const executable = probe.stdout.trim()
+  const check = spawnSync(executable, ['-B', join(entry, 'arsumbris/sources/read.py')], {
+    input: '{"action":"sets"}', env, encoding: 'utf8', timeout: 10000, maxBuffer: 8192,
+  })
+  let result
+  try { result = JSON.parse(check.stdout) } catch {}
+  if (check.error || check.status !== 0 || !Array.isArray(result?.source_sets) || result.error ||
+      !result.source_sets.some(set => set.configured)) throw new Error('Owner source configuration/roots unavailable; set approved KELLER_SOURCE_CONFIG before operator launch')
+  return { KELLER_SOURCE_CONFIG: env.KELLER_SOURCE_CONFIG, KELLER_PYTHON: executable }
+}
+
+export function engineEnvironment(env) {
+  const operatorKeys = ['POLYGRES_DIRECT_URL', 'KELLER_PYTHON', 'KELLER_SOURCE_CONFIG', 'AU_ENTRY',
+    'KELLER_MARKET_ENABLED', 'EXA_API_KEY', 'FASTMARKETS_ACCESS_TOKEN', 'KELLER_FASTMARKETS_LICENSED']
+  return Object.fromEntries(Object.entries(env).filter(([key]) => !operatorKeys.includes(key)))
+}
+
 async function main() {
   const [service, ...args] = process.argv.slice(2)
   if (!['engine', 'mcp', 'host'].includes(service)) {
@@ -69,7 +95,11 @@ async function main() {
       SHELL: process.env.SHELL, USER: process.env.USER, TERM: process.env.TERM,
       ...(service === 'host' || service === 'mcp' ? {
         POLYGRES_DIRECT_URL: process.env.POLYGRES_DIRECT_URL,
-        KELLER_PYTHON: process.env.KELLER_PYTHON ?? join(entry, '.keller-local/arsumbris/python/bin/python'),
+        KELLER_MARKET_ENABLED: process.env.KELLER_MARKET_ENABLED,
+        EXA_API_KEY: process.env.EXA_API_KEY,
+        FASTMARKETS_ACCESS_TOKEN: process.env.FASTMARKETS_ACCESS_TOKEN,
+        KELLER_FASTMARKETS_LICENSED: process.env.KELLER_FASTMARKETS_LICENSED,
+        ...operatorBindings(entry),
       } : {}),
       ...(service === 'host' ? { AU_ENTRY: entry } : {}),
     }
@@ -77,7 +107,7 @@ async function main() {
     if (service === 'host') {
       const sdk = await import(pathToFileURL(join(root, 'au-engine-sdk/src/client.ts')).href)
       console.log('Preparing the native workspace graph before opening the host (up to 120s).')
-      const engineEnv = Object.fromEntries(Object.entries(env).filter(([key]) => !['POLYGRES_DIRECT_URL', 'KELLER_PYTHON', 'AU_ENTRY'].includes(key)))
+      const engineEnv = engineEnvironment(env)
       engine = await prepareHostEngine({ entry, binary: join(root, 'au-engine/target/release/au'), env: engineEnv, sdk })
     }
     const child = spawn(target.binary, target.args, {

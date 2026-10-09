@@ -26,6 +26,11 @@ const isOrder = (request) => request && typeof request === 'object' &&
   (['order_id', 'quote_date', 'charges', 'additional_charges'].some(key => Object.hasOwn(request, key)) ||
    Array.isArray(request.parts) && request.parts.some(part => part &&
      (Object.hasOwn(part, 'pricing') || Object.hasOwn(part, 'line_id'))));
+// This only selects transport; order-cli validates every supplied cost before pricing.
+const registerFor = (request) => !args.includes('--register') && isOrder(request) &&
+  Array.isArray(request.parts) && request.parts.length > 0 &&
+  request.parts.every(part => ['unit_price', 'cost_plus', 'should_cost'].includes(part?.pricing?.method))
+  ? null : register;
 const jobVersion = (bytes) => {
   try { return isOrder(JSON.parse(bytes.toString('utf8'))) ? 'keller-order-job-v1' : 'keller-job-v1'; }
   catch { return 'keller-job-v1'; }
@@ -45,7 +50,7 @@ const estimate = (request) => {
     const scratch = mkdtempSync(join(dir('claims'), 'order-build-'));
     try {
       const out = join(scratch, 'result');
-      const result = spawnSync(process.execPath, [runner, orderCli, request, '--register', register, '--out', out], {
+      const result = spawnSync(process.execPath, [runner, orderCli, request, ...(registerFor(parsed) ? ['--register', register] : []), '--out', out], {
         cwd: repo, env, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024,
       });
       if (result.error) throw result.error;
@@ -146,7 +151,6 @@ try {
     throw new Error('usage: node scripts/keller-local.mjs <onboard|cycle> [--workspace DIR] [--register CSV] [--fixture REQUEST]');
   }
   if (Number(process.versions.node.split('.')[0]) < 24) throw new Error('Node 24 or newer is required');
-  if (!existsSync(register) || !statSync(register).isFile()) throw new Error(`quote register not found: ${register}`);
   if (!existsSync(runner)) throw new Error('estimator dependencies missing; run cd estimator && npm ci');
   prepare();
 
@@ -164,12 +168,14 @@ try {
       gateway: process.env.AI_GATEWAY_API_KEY ? 'configured_unverified' : 'missing AI_GATEWAY_API_KEY',
     }));
   } else {
-    const registerSha = sha(readFileSync(register));
     const cycle = { drafted: [], duplicate: [], claimed: [], held: [], failed: [] };
     for (const file of readdirSync(dir('inbox'), { withFileTypes: true }).filter((entry) => entry.isFile() && entry.name.endsWith('.json')).sort((a, b) => a.name.localeCompare(b.name))) {
       const input = join(dir('inbox'), file.name);
       const bytes = readFileSync(input);
       const inputSha = sha(bytes);
+      let selectedRegister = register;
+      try { selectedRegister = registerFor(JSON.parse(bytes.toString('utf8'))); } catch {}
+      const registerSha = selectedRegister && existsSync(selectedRegister) ? sha(readFileSync(selectedRegister)) : null;
       const key = sha(`${jobVersion(bytes)}\n${inputSha}\n${registerSha}`);
       const draft = join(dir('drafts'), `${key}.json`);
       const proof = join(dir('proofs'), `${key}.json`);
@@ -198,7 +204,7 @@ try {
         const snapshot = join(lock.path, 'input.json');
         writeFileSync(snapshot, bytes, { flag: 'wx' });
         const quote = estimate(snapshot);
-        if (sha(readFileSync(register)) !== registerSha) throw new Error('register changed during pricing; retry with its new digest');
+        if (selectedRegister && sha(readFileSync(selectedRegister)) !== registerSha) throw new Error('register changed during pricing; retry with its new digest');
         const draftBytes = JSON.stringify(quote, null, 2) + '\n';
         writeAtomic(draft, draftBytes);
         const draftSha = sha(draftBytes);

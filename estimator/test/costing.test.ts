@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { reconcileCostBasis, type CostBasis, type CostRange, type CostSource, type FlatCosts } from "../src/costing.js";
+import { deriveCostBasis, reconcileCostBasis, type CostBasis, type CostRange, type CostSource, type FlatCosts } from "../src/costing.js";
 import { assertOrderRequest, buildPricedOrder, renderOrderMarkdown, type OrderRequest } from "../src/order.js";
 import { QuoteRegister } from "../src/register.js";
 
@@ -57,6 +57,45 @@ function reconcile(b = basis(), costs = flat(), quantity = 10) {
 }
 
 describe("prospective cost-basis worksheet", () => {
+  it("builds a should-cost proposal without analogs or manually copied flat costs", async () => {
+    const req = request();
+    req.parts[0]!.pricing = { method: "should_cost", cost_basis: basis(), margin_pct: 20, reason: "Synthetic reviewed engineering estimate" };
+    const unchanged = JSON.stringify(req);
+    const order = await buildPricedOrder(reg, req, options);
+    const baseline = await buildPricedOrder(reg, request(), options);
+    expect(order.total).toEqual(baseline.total);
+    expect(order.lines[0]!.analogs).toEqual([]);
+    expect(order.lines[0]!.cost_breakdown!.reconciled_flat).toEqual(flat());
+    expect(deriveCostBasis(basis(), 10, asOf).reconciled_flat).toEqual(flat());
+    expect(order.state).toBe("PRICED_REQUIRES_REVIEW");
+    expect(order.requires_human_review).toBe(true);
+    expect(order.lines[0]!.warnings.join(" ")).toContain("not historical analog transfer");
+    expect(JSON.stringify(req)).toBe(unchanged);
+  });
+
+  it("rejects mixed should-cost overrides, unsupported benchmark sources and missing scope", () => {
+    const req = request();
+    req.parts[0]!.pricing = { method: "should_cost", cost_basis: basis(), margin_pct: 20, reason: "Synthetic" };
+    expect(() => assertOrderRequest({ ...req, parts: [{ ...req.parts[0], pricing: { ...req.parts[0]!.pricing, material_per_unit: 0.01 } }] })).toThrow(/invalid should_cost/);
+    const b = basis();
+    (b.components[0]!.sources[0] as unknown as { source_class: string }).source_class = "market_benchmark";
+    expect(() => deriveCostBasis(b, 10, asOf)).toThrow(/source_class/);
+    b.components = [];
+    expect(() => deriveCostBasis(b, 10, asOf)).toThrow(/missing material/);
+  });
+
+  it("rejects should-cost invalid margin, expired current support and absent worksheets", () => {
+    const req = request();
+    for (const margin_pct of [-1, 100, NaN, Infinity]) {
+      req.parts[0]!.pricing = { method: "should_cost", cost_basis: basis(), margin_pct, reason: "Synthetic" };
+      expect(() => assertOrderRequest(req)).toThrow(/margin_pct/);
+    }
+    const b = basis();
+    b.components[0]!.sources[0] = { ...source(), status: "current", effective_date: "2023-01-01", expires_date: "2023-12-31", approval: undefined };
+    expect(() => deriveCostBasis(b, 10, asOf)).toThrow(/expired/);
+    expect(() => deriveCostBasis(undefined, 10, asOf)).toThrow(/plain object/);
+  });
+
   it("uses repeated setup plus processed quantity, material yield/conversion and outside lot minimum", () => {
     const result = reconcile();
     expect(result.reconciled_flat).toEqual(flat());

@@ -1,8 +1,8 @@
 extends: mcp.tool::au-mcp-sdk
 fields:
-  #: Explicit public ID of the verified historical PDF-price corpus, 64 lowercase hex characters; never infer latest.
-  corpus: String
-  #: JSON string matching the estimator OrderRequest contract. Preserve supplied identities and stable line IDs; unit_price/cost_plus require a reason. Preserve finite proposals separately from adoption and commercial readiness; explicit conflicts block transfer, unknown current costs block supported margin claims, not historical comparison. Use pricing.cost_basis only as defined by the source API. Missing charges/prices keep arithmetic BLOCKED.
+  #: Explicit verified historical PDF corpus, 64 lowercase hex characters; mandatory for historical/mixed or evaluation-scoped requests. Omit only when ALL lines supply validated pricing; no database/export then.
+  corpus?: String
+  #: JSON string matching the estimator OrderRequest contract. Preserve supplied identities and stable line IDs; unit_price/cost_plus/should_cost require a reason. Optional retained intake, source_evidence, uom and geometry use estimator/src/intake.ts; extracted facts are not verified geometry. Fully supplied should_cost uses reviewed CostBasis via existing margin arithmetic. Preserve finite proposals separately from adoption and commercial readiness; explicit conflicts block transfer, unknown current costs block supported margin claims, not historical comparison. Use pricing.cost_basis only as defined by the source API. Missing charges/prices keep arithmetic BLOCKED.
   request: String
   #: Name of the human estimator assigned to review this internal draft; naming a reviewer does not approve or release it.
   reviewer: String
@@ -17,4 +17,4 @@ meta:
   - type: tool-access-meta::au-mcp-sdk
     broker: none
   - type: tool-presentation-meta::au-mcp-sdk
-    description: "Draft an INTERNAL offline Keller order from a JSON OrderRequest against an explicit customer-PDF corpus, with a named human reviewer. Intake all lines, draft once, inspect contributors, then use one deduplicated exact evidence phase with bounded continuations for named critical gaps. Preserves private order.json/order.md, artifact refs, state, blockers, provenance and provisional proposal/evidence status. Recorded historical prices are not authenticated outcomes or current costs. Supported estimates need not await paid/closed-job ledgers. Numeric proposal, adopted amount and commercial readiness are distinct; complete arithmetic is not approval. Independent challenge and human review precede any customer release. Never approves or sends a quote."
+    description: "Draft an INTERNAL offline Keller order from a JSON OrderRequest with a named human reviewer. Historical/mixed requests require an explicit customer-PDF corpus; fully supplied unit_price/cost_plus/should_cost requests may omit it, recording null corpus/register provenance. Intake all lines, draft once, inspect contributors, then use one deduplicated exact evidence phase with bounded continuations for named critical gaps. Preserves private order.json/order.md, artifact refs, state, blockers, provenance and provisional proposal/evidence status. Recorded historical prices are not authenticated outcomes or current costs. Supported estimates need not await paid/closed-job ledgers. Numeric proposal, adopted amount and commercial readiness are distinct; complete arithmetic is not approval. Independent challenge and human review precede any customer release. Never approves or sends a quote."

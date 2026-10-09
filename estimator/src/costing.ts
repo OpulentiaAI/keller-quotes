@@ -18,6 +18,7 @@ interface SupportedCost {
   id: string;
   sources: CostSource[];
   assumptions: string[];
+  engineering_fact_ids?: string[];
   /** Describe labor/machine/overhead, minimums and other inclusions; never add them twice. */
   charge_inclusion: string;
   zero_reason?: string;
@@ -208,13 +209,18 @@ function sources(value: unknown, path: string, asOf: string): void {
   }
 }
 
-const supportKeys = ["id", "sources", "assumptions", "charge_inclusion", "zero_reason"];
+const supportKeys = ["id", "sources", "assumptions", "charge_inclusion", "zero_reason", "engineering_fact_ids"];
 function support(obj: Record<string, unknown>, path: string, asOf: string, ids: Set<string>): void {
   text(obj.id, `${path}.id`);
   if (ids.has(obj.id)) throw new Error(`${path} has a duplicate component/operation id`);
   ids.add(obj.id);
   sources(obj.sources, `${path}.sources`, asOf);
   for (const v of list(obj.assumptions, `${path}.assumptions`, 16, 1)) text(v, `${path}.assumptions`);
+  if (obj.engineering_fact_ids !== undefined) {
+    const ids = list(obj.engineering_fact_ids, `${path}.engineering_fact_ids`, 32, 1);
+    for (const id of ids) text(id, `${path}.engineering_fact_ids`);
+    if (new Set(ids).size !== ids.length) throw new Error(`${path}.engineering_fact_ids must be unique`);
+  }
   text(obj.charge_inclusion, `${path}.charge_inclusion`);
   if (obj.zero_reason !== undefined) text(obj.zero_reason, `${path}.zero_reason`);
 }
@@ -233,6 +239,14 @@ function costKind(value: unknown, path: string): void {
  * All ranges are scenario bounds, not probabilities or guarantees. No files are opened.
  */
 export function reconcileCostBasis(value: unknown, quantity: number, asOf: string, flat: FlatCosts, lineRevenue?: number): CostBreakdown {
+  return calculateCostBasis(value, quantity, asOf, flat, lineRevenue);
+}
+
+export function deriveCostBasis(value: unknown, quantity: number, asOf: string, lineRevenue?: number): CostBreakdown {
+  return calculateCostBasis(value, quantity, asOf, undefined, lineRevenue);
+}
+
+function calculateCostBasis(value: unknown, quantity: number, asOf: string, flat?: FlatCosts, lineRevenue?: number): CostBreakdown {
   count(quantity, "cost_basis.line_quantity", 10_000_000, 1);
   date(asOf, "cost_basis.quote_date");
   const root = record(value, "cost_basis", ["schema_version", "currency", "order_charges", "components", "routing", "not_applicable", "unresolved_assumptions"]);
@@ -321,9 +335,11 @@ export function reconcileCostBasis(value: unknown, quantity: number, asOf: strin
     const places = key === "setup_total" ? 2 : 4;
     const base = key === "setup_total" ? totals[key].base : div(totals[key].base, whole(quantity));
     reconciled[key] = display(base, places, `cost_basis.${key}`);
-    const supplied = number(flat[key], `cost_basis.flat.${key}`);
-    if (supplied.n * 10n ** BigInt(places) % supplied.d || compare(supplied, decimal(reconciled[key])) !== 0n) {
-      throw new Error(`cost_basis does not reconcile ${key} to flat cost_plus at ${places} decimal places`);
+    if (flat) {
+      const supplied = number(flat[key], `cost_basis.flat.${key}`);
+      if (supplied.n * 10n ** BigInt(places) % supplied.d || compare(supplied, decimal(reconciled[key])) !== 0n) {
+        throw new Error(`cost_basis does not reconcile ${key} to flat cost_plus at ${places} decimal places`);
+      }
     }
   }
   let margin: CostRange | null = null;

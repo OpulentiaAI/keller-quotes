@@ -1,0 +1,5 @@
+#: Public-only supplier research selectors; arbitrary query/customer/part text is forbidden.
+fields:
+  family: [carbon_steel, stainless_steel]
+  form: [sheet, plate, coil, tube, bar]
+  topic: [supplier, processing, specification]

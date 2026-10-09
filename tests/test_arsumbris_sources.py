@@ -149,6 +149,68 @@ class SourceToolTest(unittest.TestCase):
         with self.assertRaises(reader.InvalidRequest):
             self.call("dbf_rows", source_set="fabritrak", path="MATERIAL.DBF", quote_no="Q100")
 
+    def test_opt_in_fpt_text_is_hash_bound_paged_and_not_geometry(self):
+        path = self.sources / 'QUOTE.DBF'
+        data = bytearray(path.read_bytes())
+        data[0] = 0x30
+        header = int.from_bytes(data[8:10], 'little')
+        data[header + 20:header + 24] = (1).to_bytes(4, 'little')
+        path.write_bytes(data)
+        fpt = self.sources / 'QUOTE.FPT'
+        payload = b'Synthetic route: drill then inspect'
+        memo = bytearray(512)
+        memo[6:8] = (512).to_bytes(2, 'big')
+        memo.extend((1).to_bytes(4, 'big') + len(payload).to_bytes(4, 'big') + payload)
+        fpt.write_bytes(memo)
+        args = dict(source_set='fabritrak', path='QUOTE.DBF', quote_no='Q100', limit=1)
+        default = self.call('dbf_rows', **args)
+        self.assertNotIn('memo_text', default['rows'][0])
+        args.update(memo_fields=['COMMENT'], fpt_path='QUOTE.FPT', memo_limit=10)
+        first = self.call('dbf_rows', **args)
+        row = first['rows'][0]
+        text = row['memo_text']['COMMENT']
+        self.assertIsNone(row['values']['COMMENT'])
+        self.assertEqual(text['status'], 'decoded_text')
+        self.assertEqual(text['content'], payload[:10].decode())
+        self.assertEqual(text['fpt_text_byte_offset'], 520)
+        self.assertEqual(text['field_record_byte_offset'], 20)
+        args.update(expected_dbf_sha256=first['citation']['dbf_sha256'], expected_fpt_sha256=text['fpt_sha256'], memo_offset=text['next_offset'])
+        second = self.call('dbf_rows', **args)['rows'][0]['memo_text']['COMMENT']
+        self.assertEqual(second['content'], payload[10:20].decode())
+        fpt.write_bytes(memo + b'changed')
+        with self.assertRaisesRegex(reader.InvalidRequest, 'FPT hash mismatch'):
+            self.call('dbf_rows', **args)
+        del args['expected_fpt_sha256']
+        fpt.unlink()
+        missing = self.call('dbf_rows', **args)['rows'][0]['memo_text']['COMMENT']
+        self.assertEqual(missing['status'], 'memo_file_missing')
+        fpt.symlink_to(self.base / 'outside.txt')
+        with self.assertRaises(OSError):
+            self.call('dbf_rows', **args)
+
+    def test_fpt_rejects_unbounded_or_unrelated_paths_and_distinguishes_decode(self):
+        args = dict(source_set='fabritrak', path='QUOTE.DBF', quote_no='Q100', memo_fields=['COMMENT'], fpt_path='QUOTE.FPT')
+        for change in ({'fpt_path': '../QUOTE.FPT'}, {'fpt_path': 'MATERIAL.FPT'}, {'memo_fields': []},
+                       {'memo_fields': ['PRICE1']}, {'memo_limit': 4097}, {'memo_offset': -1}, {'expected_fpt_sha256': 'bad'}):
+            with self.subTest(change=change), self.assertRaises(reader.InvalidRequest):
+                self.call('dbf_rows', **{**args, **change})
+        data = bytearray((self.sources / 'QUOTE.DBF').read_bytes())
+        data[0] = 0x30
+        header = int.from_bytes(data[8:10], 'little')
+        data[header + 20:header + 24] = bytes(4)
+        (self.sources / 'QUOTE.DBF').write_bytes(data)
+        self.assertEqual(self.call('dbf_rows', **args)['rows'][0]['memo_text']['COMMENT']['status'], 'empty_pointer')
+        data[header + 20:header + 24] = (1).to_bytes(4, 'little')
+        (self.sources / 'QUOTE.DBF').write_bytes(data)
+        memo = bytearray(512)
+        memo[6:8] = (512).to_bytes(2, 'big')
+        memo.extend((1).to_bytes(4, 'big') + (1).to_bytes(4, 'big') + b'\xff')
+        (self.sources / 'QUOTE.FPT').write_bytes(memo)
+        self.assertEqual(self.call('dbf_rows', **args)['rows'][0]['memo_text']['COMMENT']['status'], 'decode_error')
+        memo[515] = 0  # picture/binary, never text
+        (self.sources / 'QUOTE.FPT').write_bytes(memo)
+        self.assertEqual(self.call('dbf_rows', **args)['rows'][0]['memo_text']['COMMENT']['status'], 'unsupported_memo_type')
+
     def test_native_child_environment_redacts_credentials(self):
         worker = self.base / "worker"
         worker.write_text("#!/usr/bin/env python3\nimport json, os\n"

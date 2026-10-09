@@ -1,7 +1,29 @@
 import assert from 'node:assert/strict'
 import { EventEmitter } from 'node:events'
 import test from 'node:test'
-import { prepareHostEngine } from '../start-arsumbris.mjs'
+import { prepareHostEngine, operatorBindings, engineEnvironment } from '../start-arsumbris.mjs'
+import { mkdtempSync, writeFileSync, rmSync, existsSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+test('operator preflight preserves private source override and finds installed Python without leaking bindings to engine', () => {
+  const root = fileURLToPath(new URL('../../', import.meta.url))
+  const dir = mkdtempSync(join(tmpdir(), 'synthetic-preflight-'))
+  try {
+    const config = join(dir, 'sources.json')
+    writeFileSync(config, JSON.stringify({ fabritrak: dir }), { mode: 0o600 })
+    const env = { PATH: process.env.PATH, HOME: dir, KELLER_SOURCE_CONFIG: config }
+    const bindings = operatorBindings(root, env)
+    assert.equal(bindings.KELLER_SOURCE_CONFIG, config)
+    assert.ok(existsSync(bindings.KELLER_PYTHON))
+    assert.deepEqual(engineEnvironment({ ...bindings, PATH: '/bin', POLYGRES_DIRECT_URL: 'synthetic', EXA_API_KEY: 'synthetic' }), { PATH: '/bin' })
+    assert.throws(() => operatorBindings(root, { ...env, KELLER_PYTHON: join(dir, 'missing-python') }), /Executable Python unavailable/)
+    writeFileSync(config, JSON.stringify({ fabritrak: join(dir, 'missing-root') }))
+    assert.throws(() => operatorBindings(root, env), /source configuration\/roots unavailable/)
+    assert.throws(() => operatorBindings(root, { ...env, KELLER_SOURCE_CONFIG: join(dir, 'missing.json') }), /source configuration\/roots unavailable/)
+  } finally { rmSync(dir, { recursive: true, force: true }) }
+})
 
 function fixture(probes, pid = null) {
   const child = new EventEmitter()

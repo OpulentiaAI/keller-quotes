@@ -40,6 +40,23 @@ describe("priced orders", () => {
     }
   });
 
+  it("blocks completion for unreferenced explicit engineering conflicts on historical and operator proposals", async () => {
+    const source = new QuoteRegister([row({ quote_no: "Q", part_no: "P-1",
+      quote_date: "2020-01-01", quantity: 3, unit_price: 2 })]);
+    for (const pricing of [base().parts[0]!.pricing, undefined,
+      { method: "cost_plus", material_per_unit: 1, labor_per_unit: 0, outside_per_unit: 0,
+        setup_total: 0, margin_pct: 20, reason: "synthetic" }]) {
+      const order = await buildPricedOrder(source, { ...base(), parts: [{ ...base().parts[0], pricing,
+        geometry: [{ id: "revision", field: "drawing_revision", value: "Unresolved explicit revision conflict",
+          source_ids: [], applicability: "conflict" }] }] }, opts);
+      expect(order.lines[0]!.unit_price).toBeGreaterThan(0); // Retain the comparison/proposal, never adopt it.
+      expect(order.state).toBe("BLOCKED");
+      expect(order.total).toBeNull();
+      expect(order.blockers.join(" ")).toMatch(/explicit engineering conflict.*drawing_revision/);
+      expect(order.lines[0]!.next_action).toMatch(/Resolve explicit engineering conflict/);
+    }
+  });
+
   it("preserves non-admitted specification evidence in operator order holds", async () => {
     const source = new QuoteRegister([row({ quote_no: "Q", part_no: "P-1", rev: "A",
       quote_date: "2020-01-01", quantity: 3, unit_price: 2 })]);
@@ -230,7 +247,7 @@ describe("order CLI", () => {
     expect(() => readFileSync(join(tmp, "no-output", "order.json"))).toThrow();
   });
 
-  it("resolves the repository-root register from source and compiled CLI modules", () => {
+  it("prices fully supplied source and compiled CLI requests without a default historical register", () => {
     const request = join(estimatorRoot, "examples/order-request.json");
     const build = spawnSync(process.execPath, [join(estimatorRoot, "node_modules/typescript/bin/tsc")], {
       cwd: estimatorRoot, encoding: "utf8",
@@ -247,8 +264,7 @@ describe("order CLI", () => {
       expect(result.status, result.stderr).toBe(0);
       expect(JSON.parse(result.stdout)).toMatchObject({ state: "PRICED_REQUIRES_REVIEW", total: 285.96 });
       const order = JSON.parse(readFileSync(join(output, "order.json"), "utf8"));
-      expect(order.provenance.register_sha256).toBe(createHash("sha256")
-        .update(readFileSync(join(estimatorRoot, "..", "quotes.csv"))).digest("hex"));
+      expect(order.provenance.register_sha256).toBeNull();
     }
   }, 30_000);
 });
