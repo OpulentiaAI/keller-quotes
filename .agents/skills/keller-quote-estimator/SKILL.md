@@ -72,6 +72,8 @@ For reviewed whole-stock or pack purchases, supply `purchase_increment` on the c
 
 ## Standalone CLI and complete internal order
 
+Use `quantity_unit: "finished_piece"` for component quantities measured in shipped pieces; scale per-piece entries to the full line. A per-unit component with that unit, or a routing `process_quantity`, below the shipped quantity requires `partial_quantity_reason` and supporting sources/assumptions (for example first-article-only work). This is a review assertion, not an authenticated exemption or automatic scope inference. Stock/mass/lot quantities are not comparable to shipped counts and remain unchanged; setup-total components are exempt. See the workflow's quantity-coverage section before pricing partial work.
+
 Run the estimate CLI only after choosing a register. This minimal example is synthetic and intentionally forces the deterministic offline path; put real customer requests/outputs in approved private storage outside the checkout:
 
 ```json
