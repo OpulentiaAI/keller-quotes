@@ -301,6 +301,11 @@ export async function buildPricedOrder(reg: QuoteRegister, request: unknown, opt
       next_action = "Resolve explicit engineering conflict before adoption or release; any numeric amount is comparison only";
       lineWarnings.push("Explicit engineering conflict blocks order completion even when supplied costs or historical arithmetic are complete");
     }
+    if (cents === 0n) {
+      blockers.push(`line ${line_id} rounds to a zero-cent extension; reviewed positive line amount required`);
+      lineWarnings.push("Positive unit price rounds to a zero-cent line extension; numeric proposal retained, order completion blocked");
+      next_action = `Resolve zero-cent extension before order completion; ${next_action}`;
+    }
     if (cents !== null) pricedCents = BigInt(safe(pricedCents + cents, "priced_subtotal"));
     else blockers.push(`line ${line_id} is unpriced`);
     warnings.push(...lineWarnings.map((warning) => `line ${line_id}: ${warning}`));
