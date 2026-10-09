@@ -87,6 +87,7 @@ const main = () => {
   run(process.execPath, [tsc], estimator, 'TypeScript build');
   run(process.execPath, [tsc, '--project', join(estimator, 'tsconfig.test.json')], estimator, 'estimator test typecheck');
   run(process.execPath, [tsc, '--project', join(repo, 'evals/tsconfig.json')], repo, 'evaluation typecheck');
+  run('python', ['-B', '-m', 'unittest', 'discover', '-s', 'scripts/test', '-p', 'test_wondersearch*.py', '-v'], repo, 'offline WonderSearch boundary tests');
   run('python', ['-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_pdf_transcription.py', '-v'], repo, 'PDF transcription tests');
   run('python', ['-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_document_register.py', '-v'], repo, 'document register tests');
   run('python', ['-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_generate_document_eval.py', '-v'], repo, 'document evaluation generator tests');
