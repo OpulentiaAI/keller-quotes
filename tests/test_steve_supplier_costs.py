@@ -96,7 +96,11 @@ console.log(JSON.stringify(await createPlugin({workspace: process.cwd()}).invoke
             self.assertEqual(source['status'], 'approved_estimate')
             self.assertEqual(source['approval']['reviewer'], self.review['reviewer'])
         self.assertEqual(self.call(self.request(index=0))['worksheet_inputs']['component']['unit_cost']['base'], 8.76543)
-        self.assertEqual(self.call(self.request(tier=8))['worksheet_inputs']['component']['unit_cost']['base'], 2.00001)
+        for tier, quantity, price in [(1, 1, 9.99999), (8, 1000, 2.00001)]:
+            request = self.request(tier=tier)
+            request['supplier_review'] = json.dumps({**self.review,
+                'quantity_basis': f'Synthetic {quantity} kg purchase at explicitly selected break {tier}'})
+            self.assertEqual(self.call(request)['worksheet_inputs']['component']['unit_cost']['base'], price)
 
     def test_explicit_minimum_scope_counts_setup_once_and_preserves_raw_charge(self):
         for occurrences, expected in [(1, 65), (2, 50), (6, 0)]:
