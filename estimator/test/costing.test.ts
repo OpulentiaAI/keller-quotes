@@ -148,6 +148,73 @@ describe("prospective cost-basis worksheet", () => {
     expect(result.components[0]).toMatchObject({ priced_quantity: 2, total_cost: range(20, 16, 24) });
   });
 
+  it("rounds purchased stock upward after yield and preserves the supplied unit and assumption", () => {
+    const b = basis();
+    b.components[0]!.purchase_increment = 1;
+    b.components[0]!.assumptions.push("Purchase whole sheets; charge this line for the remainder, no inventory credit");
+    const unchanged = JSON.stringify(b);
+    const result = reconcile(b, { ...flat(), material_per_unit: 2 });
+    expect(result.components[0]).toMatchObject({ priced_quantity: 2, total_cost: range(20, 16, 24),
+      purchase_rounding: { original_unit: "sheet", quantity_before_increment: 1.25, increment: 1 } });
+    expect(result.supplied_basis).toEqual(b);
+    expect(JSON.stringify(b)).toBe(unchanged);
+    expect(reconcile().components[0]).toMatchObject({ priced_quantity: 1.25, total_cost: range(12.5, 10, 15) });
+    expect(reconcile().components[0]).not.toHaveProperty("purchase_rounding");
+    expect(() => reconcile(b)).toThrow(/reconcile material_per_unit/);
+  });
+
+  it("applies minimum quantity before pack multiples and minimum money after them", () => {
+    const b = basis();
+    Object.assign(b.components[0]!, { minimum_quantity: 5, purchase_increment: 4, minimum_charge: range(75) });
+    const result = reconcile(b, { ...flat(), material_per_unit: 8 });
+    expect(result.components[0]).toMatchObject({ priced_quantity: 8, total_cost: range(80, 75, 96),
+      purchase_rounding: { quantity_before_increment: 5, increment: 4 } });
+  });
+
+  it.each([
+    [0.3, 1, 1, 0.1, 0.3],
+    [0.07, 1, 1, 0.01, 0.07],
+    [0.300001, 1, 1, 0.1, 0.4],
+    [1, 1, 0.3, 0.1, 3.4],
+    [0.3, 0.1, 1, 0.01, 0.03],
+    [0.000001, 1, 1, 0.000001, 0.000001],
+  ])("uses exact decimal multiples for quantity %s, conversion %s, yield %s, increment %s", (quantity, conversion, yieldFraction, increment, expected) => {
+    const b = basis();
+    Object.assign(b.components[0]!, { quantity, original_units_per_quantity_unit: conversion,
+      yield_fraction: yieldFraction, purchase_increment: increment });
+    expect(deriveCostBasis(b, 10, asOf).components[0]!.priced_quantity).toBe(expected);
+  });
+
+  it.each([0, -1, null, false, "1", NaN, Infinity, 1e9 + 1, 0.0000001])("rejects invalid purchase increment %s", increment => {
+    const b = basis();
+    (b.components[0] as unknown as Record<string, unknown>).purchase_increment = increment;
+    expect(() => deriveCostBasis(b, 10, asOf)).toThrow(/purchase_increment/);
+  });
+
+  it("supports explicitly purchased outside-processing batches without rounding setup or route quantities", () => {
+    const b = basis();
+    b.components[1]!.purchase_increment = 6;
+    const result = reconcile(b);
+    expect(result.components[1]).toMatchObject({ priced_quantity: 12, total_cost: range(25, 25, 36),
+      purchase_rounding: { original_unit: "piece", quantity_before_increment: 10, increment: 6 } });
+    expect(result.routing).toEqual(reconcile().routing);
+  });
+
+  it("prices should-cost from rounded purchases and keeps margin and customer review honest", async () => {
+    const b = basis();
+    b.components[0]!.purchase_increment = 1;
+    const req = request(b);
+    req.parts[0]!.pricing = { method: "should_cost", cost_basis: b, margin_pct: 20, reason: "Reviewed whole-sheet purchase" };
+    const order = await buildPricedOrder(reg, req, options);
+    expect(order.lines[0]).toMatchObject({ unit_price: 16.125, extended_price: 161.25 });
+    expect(order.lines[0]!.cost_breakdown).toMatchObject({
+      assertion_status: "supplied_not_authenticated", estimated_line_cost: range(129, 93, 170),
+      estimated_line_margin_pct: { low: -5.43, base: 20, high: 42.33 } });
+    expect(order.state).toBe("PRICED_REQUIRES_REVIEW");
+    expect(order.requires_human_review).toBe(true);
+    expect(order.total).toBe(171.25);
+  });
+
   it("allocates explicit other production costs without a new hidden flat component", () => {
     const b = basis();
     b.components.push({ ...b.components[1]!, id: "tooling", category: "other", allocation: "setup_total",
