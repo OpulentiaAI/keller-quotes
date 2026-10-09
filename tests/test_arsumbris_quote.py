@@ -114,11 +114,23 @@ console.log(JSON.stringify(result));"""
     def test_uploaded_engineering_should_cost_survives_native_and_local_handoffs(self):
         self.check_uploaded_engineering_should_cost()
 
+    def test_cycle_based_routing_survives_retention_native_review_and_local_inbox(self):
+        self.check_uploaded_engineering_should_cost(run_time={
+            'unit': 'cycles_per_hour', 'values': {'low': 6, 'base': 6, 'high': 6}, 'cycles_per_piece': 2})
+
     def test_purchase_increment_survives_retention_native_review_and_local_inbox(self):
         self.check_uploaded_engineering_should_cost(purchase_increment=2)
 
-    def check_uploaded_engineering_should_cost(self, purchase_increment=None):
+    def test_purchase_increment_and_cycle_routing_preserve_both_costs_and_margin(self):
+        self.check_uploaded_engineering_should_cost(purchase_increment=2, run_time={
+            'unit': 'cycles_per_hour', 'values': {'low': 6, 'base': 6, 'high': 6}, 'cycles_per_piece': 2})
+
+    def check_uploaded_engineering_should_cost(self, purchase_increment=None, run_time=None):
         original = json.loads((ROOT / 'estimator/examples/should-cost-intake.json').read_text())
+        if run_time is not None:
+            route = original['parts'][0]['pricing']['cost_basis']['routing'][0]
+            route['run_time'] = run_time
+            route['assumptions'].append('Two separate cycles per process piece at six cycles per hour, no batch sharing')
         expected_total, expected_cost = 120, 90
         if purchase_increment is not None:
             material = original['parts'][0]['pricing']['cost_basis']['components'][0]
@@ -155,6 +167,11 @@ console.log(JSON.stringify(result));"""
         self.assertEqual(line['analogs'], [])
         self.assertEqual(line['cost_breakdown']['estimated_line_cost']['base'], expected_cost)
         self.assertEqual(line['cost_breakdown']['estimated_line_margin_pct']['base'], 25)
+        if run_time is not None:
+            route = line['cost_breakdown']['routing'][0]
+            self.assertEqual(route['cycles_per_piece'], 2)
+            self.assertEqual(route['run_minutes_per_piece']['base'], 20)
+            self.assertEqual(line['cost_breakdown']['supplied_basis']['routing'][0]['run_time'], run_time)
         if purchase_increment is not None:
             material_cost = line['cost_breakdown']['components'][0]
             self.assertEqual(material_cost['priced_quantity'], 2)
@@ -169,6 +186,7 @@ console.log(JSON.stringify(result));"""
                 self.assertEqual(item['sources'][0]['sha256'], worksheet['sha256'])
                 self.assertEqual(item['sources'][0]['locator'], worksheet['locator'])
         self.assertEqual(line['part']['geometry'], request['parts'][0]['geometry'])
+        self.assertEqual(content['review']['reviewer'], 'Synthetic Reviewer')
         self.assertFalse(content['review']['customer_release_authorized'])
         self.assertEqual(content['review']['request_sha256'], content['order']['provenance']['request_sha256'])
         # Existing local inbox must route the same fully supplied order to the order builder.

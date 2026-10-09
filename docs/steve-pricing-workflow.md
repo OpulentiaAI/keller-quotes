@@ -65,6 +65,34 @@ Distinguish repeated delivery setups from a shared setup; allocate a shared char
 
 SELL rates must not silently enter `cost_plus` as costs or acquire margin a second time. A reviewed sell-rate proposal can use explicit `unit_price` with its derivation, but its margin remains unknown without a supported cost basis. `pricing.cost_basis` is an optional bounded worksheet, not an ERP engine; its exact JSON schema and validation live in [`OrderPricing`](../estimator/src/order.ts) and [`CostBasis`](../estimator/src/costing.ts). Preserve existing `unit_price`/`cost_plus` input paths. Do not send unsupported keys to older deployments; attach the worksheet privately for review instead. Respect the API's production-line cost scope and account for excluded order charges separately.
 
+### Translate repeated operations without losing their count
+
+When evidence describes repeated machine cycles rather than finished pieces, pass the duration or throughput and explicit repetition count together:
+
+```json
+{
+  "run_time": {
+    "unit": "cycles_per_hour",
+    "values": { "low": 50, "base": 100, "high": 200 },
+    "cycles_per_piece": 4
+  }
+}
+```
+
+This synthetic example means four cycles per process piece, not four finished pieces per hour. It produces low/base/high minutes per piece of `1.2/2.4/4.8`; faster throughput gives lower time. The other per-cycle units are `minutes_per_cycle`, `seconds_per_cycle` and `hours_per_cycle`. Each requires a positive integer `cycles_per_piece` (maximum 1,000,000), never a default of one. Existing finished-piece units remain supported, with `hours_per_piece` now explicit; they reject an additional cycle multiplier to prevent double counting.
+
+```text
+minutes per piece = cycles per piece × minutes per cycle
+minutes per piece = cycles per piece × 60 / cycles per hour
+run cost = process quantity × minutes per piece / 60 × run COST rate
+```
+
+Cycle count does not multiply setup time, setup occurrences or the process quantity again. Process quantity still includes explicitly supported scrap/overage. Inputs use bounded decimal values; the calculation retains rational precision through costing, even when displayed minutes are rounded. The review includes the cycle count, normalized time, original inputs, sources and assumptions. Zero throughput is invalid; zero duration requires an explicit sourced `zero_reason` under the existing rule.
+
+Retained `FORMULA.DBF` definitions demonstrate why the distinction matters: the operator archive's zero-based physical record `2` combines operations/hour with operations/part, and record `8` multiplies an operation count by minutes/operation. Source: catalog-relative `keller-source-audit/taildrop-2026-09-27/FORMULA.DBF`, SHA-256 `e54e56bd6368cf71ce8a5d60e872e2ce90dd5377da47cd31c80b0d0ac7abb3a5`. This is a semantic source anchor, not permission to admit any linked historical job or cost. Do not identify formulas by ID alone or execute their raw expressions. Inspect the pinned definition, variable descriptions, quote-specific overrides and applicable units, then supply the reviewed semantic inputs. Formula/rate record selection remains manual; this change does not interpret arbitrary FabriTRAK formulas, establish current rates or authenticate finished geometry.
+
+Worksheet sources and assumptions must support cycle scope/count, time, process quantity and rate inclusions. In particular, a complete multi-stroke cycle must not be charged again for each stroke, nor should concurrent/batch production be modeled as sequential repetitions without an explicit supported conversion. Quote-specific SELL rates are still rejected as costs.
+
 For total supported cost `C` and target gross margin fraction `m`, net sell = `C / (1 - m)`, with `0 <= m < 1`. Estimated margin = `(net revenue - supported estimated cost) / net revenue`; zero revenue is undefined. At the selected sell amount, use high cost for downside margin. This is **gross margin**, not `cost × (1 + markup)`. Fix the margin/competitiveness policy before comparison, and retain full source precision separately from four-decimal order units and cent extensions.
 
 ## Purchased quantity versus allocated consumption
