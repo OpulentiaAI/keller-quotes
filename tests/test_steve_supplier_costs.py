@@ -264,6 +264,12 @@ console.log(JSON.stringify(await createPlugin({workspace: process.cwd()}).invoke
                 self.assertEqual(line['cost_breakdown']['estimated_line_cost']['base'], expected_cost)
                 self.assertEqual(line['cost_breakdown']['estimated_line_margin_pct']['base'], 25)
                 self.assertEqual(line['cost_breakdown']['components'][0]['priced_quantity'], 10)
+                validity_warnings = [w for w in line['warnings'] if w.startswith('Source validity:')]
+                self.assertTrue(validity_warnings)
+                for warning in validity_warnings:
+                    self.assertIn('expired on 2020-02-01', warning)
+                    self.assertIn('retained as approved_estimate, not current-cost authority', warning)
+                self.assertIn(r'expired on 2020\-02\-01', content['markdown'])
                 self.assertEqual(line['cost_breakdown']['supplied_basis']['components'][1]['sources'], inputs['setup_component']['sources'])
                 for component in line['cost_breakdown']['supplied_basis']['components'][:2]:
                     for item in component['sources']:
