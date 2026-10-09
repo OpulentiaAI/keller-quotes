@@ -1,17 +1,23 @@
 extends: mcp.tool::au-mcp-sdk
 fields:
-  #: Discover configured source sets, list one directory, read bounded file bytes, or inspect/filter a FabriTRAK DBF.
-  action: [sets, list, read, dbf_schema, dbf_rows, dbf_catalog]
+  #: Discover source sets, list one directory, read bounded bytes, extract one PDF page's text, or inspect/filter a FabriTRAK DBF.
+  action: [sets, list, read, pdf_text, dbf_schema, dbf_rows, dbf_catalog]
   #: Owner-bound source set; required except for sets.
   source_set?: [fabritrak, pdfs, transcripts, manufacturing-audit]
   #: Relative directory or file path within the source set; empty or omitted means root for list.
   path?: String
-  #: Directory-entry offset for list, byte offset for read, or zero-based physical record index for DBF rows/catalog. A bounded miss is not corpus-wide absence; follow next_offset with the same key/query and hash.
+  #: Directory-entry offset for list, byte offset for read, Unicode-character offset for pdf_text, or physical record index for DBF rows/catalog. A bounded miss is not corpus-wide absence; follow next_offset with the same selection and hashes.
   offset?: Number{>=0 & integer}
-  #: Maximum entries for list (50), bytes for read (4096), or matching rows for DBF rows/catalog (5).
+  #: Maximum entries for list (50), bytes for read (4096), characters for pdf_text (4096), or matching rows for DBF rows/catalog (5).
   limit?: Number{>=1 & integer}
   #: For read: utf-8, latin-1 or base64. Text offsets and continuations are byte offsets.
   encoding?: [utf-8, latin-1, base64]
+  #: pdf_text only. Explicit one-based PDF page (1..10000); only owner-bound pdfs .pdf files up to 32 MiB. Requires host poppler-utils. Not OCR or verified geometry; no text means visual/OCR review, not absent specifications.
+  page?: Number{>=1 & <=10000 & integer}
+  #: pdf_text only. Lowercase measured PDF SHA256; mandatory for page > 1 or offset > 0. offset/limit count Unicode characters (max 4096 per response), not PDF bytes.
+  expected_pdf_sha256?: String
+  #: pdf_text only. Lowercase extracted page text SHA256, mandatory for offset > 0. Prevents mixing character pages across extractor/font changes; mismatch requires restarting the page.
+  expected_text_sha256?: String
   #: Exact QUOTE_NO; legacy schema-gated filter. Choose one complete key form listed by dbf_schema.exact_filters, never mix forms. Keys are case-sensitive trimmed stored strings.
   quote_no?: String
   #: Exact catalog identifier in one unambiguous ID, FORM_ID or OPER_ID character column; legacy alternative to quote_no.

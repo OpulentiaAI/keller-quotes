@@ -46,6 +46,12 @@ Capture source class/hash/locator, effective and expiry dates separately from ca
 
 An explicit material/revision/finish/UOM/scope conflict blocks adoption of that analog transfer. Unknown applicability triggers the named lookup, then an approved estimate/assumption or a price-critical adoption hold; it is never silently a match. Unknown current cost blocks a supported margin claim, not historical price comparison. Missing acceptance/payment/closed-job actuals blocks realized-outcome claims, not a supported prospective estimate. Historical chronology conflicts still block prior-availability claims in replay.
 
+## Read drawing notes from retained PDFs
+
+For a deliberately selected owner-bound PDF, `keller_sources` action `pdf_text` returns bounded text from an explicit one-based `page`, with PDF and extracted-page hashes. Follow character offsets with both hashes pinned; use the PDF hash for later pages. See the [host dependency, limits and request contract](arsumbris-workspace.md#read-a-selected-pdf-page-without-mistaking-text-for-geometry). No external service receives the file.
+
+Extracted material, finish, tolerance or route notes can inform **separately reviewed** engineering facts; the reader does not infer their applicability or populate a costing worksheet. Reconcile the measured PDF hash with the retained attachment and preserve page references. `no_extractable_text` needs OCR/visual review, not a zero-complexity assumption. Embedded text can also omit symbols/dimensions or have incorrect reading order. Never interpret `text_extracted` as verified geometry, released revision, complete specifications or current cost. Frozen evaluation source access/cutoffs remain unchanged.
+
 ## COST, SELL and estimating time
 
 The retained FabriTRAK quoting manual distinguishes operation-maintenance **COST** rates used in Unit Cost from quote-specific setup/run **SELL** rates used in Unit Sell. Quick Quote/Quick Entry accept estimated setup minutes and run minutes per part. Neither requires a previously completed paid job. The manual also describes an alternative rate-building mode: corroborate the installed mode and included labor/overhead rather than guessing from a field name. See the manual citation below.

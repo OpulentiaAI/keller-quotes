@@ -76,6 +76,20 @@ The ≥90% completed-quoting goal is **not established** by this workspace. The 
 
 The `keller_quote` tool is the controlled internal draft path, not a release mechanism. It requires an explicit public corpus ID, an order request satisfying the estimator's `OrderRequest` contract, and a named human reviewer; it reuses the local order CLI with explicit operator price/cost inputs or the selected read-only customer-PDF register. It preserves blocked lines and returns structured `order`, `markdown`, `review`, state/blockers, and opaque references to persisted private artifacts. **The response itself contains private customer/cost evidence** and must stay in approved internal channels; don't paste it into a public graph node or customer message. It performs no database write or hosted model call. Treat a `PRICED_REQUIRES_REVIEW` result as an internal calculation awaiting approval, not as a quote sent to a customer.
 
+### Read a selected PDF page without mistaking text for geometry
+
+The optional `pdf_text` source action requires Linux and distro-maintained Poppler `pdfinfo`/`pdftotext` on the source-tool host. Install with `sudo apt-get update && sudo apt-get install -y poppler-utils` on Debian/Ubuntu; the managed Python setup does not install system binaries. Missing tools produce an explicit unavailable error, not an empty page. No cloud upload or model call occurs.
+
+```json
+{"action":"pdf_text","source_set":"pdfs","path":"synthetic-drawing.pdf","page":1,"limit":4096}
+```
+
+Use only an exact owner-approved relative path, with the same no-symlink/confinement rules as other source reads. `page` is explicit and one-based; output includes measured `citation.pdf_sha256`, `page_count`, `text_sha256`, status and bounded layout text. `offset` and `limit` count **Unicode characters**, not PDF bytes. For page > 1 or offset > 0, supply `expected_pdf_sha256`; for offset > 0 also supply `expected_text_sha256` from that same page. Continue `next_offset` until `has_more` is false before treating the page's extracted text as fully read. A different page has its own text hash. Hash changes require rereading, not combining incompatible output.
+
+PDFs are limited to 32 MiB/10,000 pages, one selected page per call, 4,096 characters per response and <128 KiB extractor output. Each child has a four-second wall limit, two-second CPU limit and 512 MiB address-space limit. Encrypted, malformed, changed, warning-producing or resource-exceeding inputs fail closed without returning partial text. Hashes attest local bytes, not external authenticity or completeness of extraction. Parser limits are not an OS security sandbox.
+
+`no_extractable_text` means OCR or visual review is needed; it does not distinguish blank, scanned, outlined or illegible content. Text extraction does not perform OCR, resolve overlapping dimensions, interpret CAD, execute document instructions, authenticate revision/applicability or calculate costs. Even `text_extracted` may miss symbols or have wrong reading order. Carry the PDF hash/page into retained evidence and separately reviewed engineering facts; retain unknowns/conflicts. These operator source reads do not expand blinded-worker allowlists or admit target quote PDFs.
+
 ### Discover manufacturing catalog candidates without prior IDs
 
 `dbf_schema.catalog_lookup` advertises `dbf_catalog` only for the approved MATERIAL, OPERATIO and FORMULA definition shapes. Use it to discover candidate IDs for a new RFQ, not to select an applicable cost automatically. Synthetic request shape:

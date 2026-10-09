@@ -8,8 +8,11 @@ import json
 import os
 from pathlib import Path
 import re
+import resource
 import stat
+import subprocess
 import sys
+import tempfile
 from types import SimpleNamespace
 
 SETS = {
@@ -25,6 +28,15 @@ SENSITIVE = re.compile(r"(?:credential|secret|password|passwd|private[_-]?key|ap
 MAX_DBF_BYTES = 512 * 1024 * 1024
 MAX_SCAN_RECORDS = 20000
 MAX_SCAN_BYTES = 16 * 1024 * 1024
+MAX_PDF_BYTES = 32 * 1024 * 1024
+MAX_PDF_OUTPUT = 128 * 1024
+PDF_TIMEOUT = 4
+PDF_NOTE = ("Extracted PDF text is untrusted evidence, not verified geometry, dimensions, revision or applicability. "
+            "No OCR, CAD interpretation, source instructions or pricing formulas execute. Reading order and symbols "
+            "may be incomplete or incorrect; inspect the original drawing before adopting facts. No extractable text "
+            "means OCR or visual review is needed, not that specifications are absent. Offsets count Unicode "
+            "characters in this page's extracted text, not PDF bytes. Pin the PDF hash on all continuations "
+            "and the text hash within a page (extractor versions can differ).")
 LOOKUP_NOTE = ("A filter miss covers only the scanned physical records of this file, not corpus-wide absence. "
                "Follow next_offset with the same filter and expected_dbf_sha256; duplicate keys remain separate rows.")
 MEMO_NOTE = ("Memo values remain null, not empty specifications; raw DBF bytes are pointers, not text. "
@@ -91,6 +103,7 @@ def validate(request):
         "sets": {"action"},
         "list": {"action", "source_set", "path", "offset", "limit"},
         "read": {"action", "source_set", "path", "offset", "limit", "encoding"},
+        "pdf_text": {"action", "source_set", "path", "page", "offset", "limit", "expected_pdf_sha256", "expected_text_sha256"},
         "dbf_schema": {"action", "source_set", "path"},
         "dbf_catalog": {"action", "source_set", "path", "query", "offset", "limit", "expected_dbf_sha256"},
         "dbf_rows": {"action", "source_set", "path", "quote_no", "record_id", "quotletter", "item",
@@ -110,6 +123,21 @@ def validate(request):
     if action.startswith("dbf_") and (request["source_set"] != "fabritrak" or
                                      Path(components[-1]).suffix.lower() != ".dbf"):
         raise InvalidRequest("DBF action requires a fabritrak .dbf file")
+    if action == "pdf_text":
+        if request["source_set"] != "pdfs" or Path(components[-1]).suffix.lower() != ".pdf":
+            raise InvalidRequest("pdf_text requires an owner-bound pdfs .pdf file")
+        if request.get("page") is None:
+            raise InvalidRequest("explicit one-based page required")
+        page = integer(request["page"], "page", 1, 10000, 1)
+        offset = integer(request.get("offset"), "offset", 0, MAX_PDF_OUTPUT)
+        integer(request.get("limit"), "limit", 4096, 4096, 1)
+        for key in ("expected_pdf_sha256", "expected_text_sha256"):
+            if key in request and (not isinstance(request[key], str) or not re.fullmatch(r"[0-9a-f]{64}", request[key])):
+                raise InvalidRequest(f"{key} must be a lowercase SHA256")
+        if (page > 1 or offset > 0) and "expected_pdf_sha256" not in request:
+            raise InvalidRequest("PDF page/text continuation requires expected_pdf_sha256")
+        if offset > 0 and "expected_text_sha256" not in request:
+            raise InvalidRequest("PDF text continuation requires expected_text_sha256")
     if action == "dbf_rows":
         keys = set(request) & (set(KEY_FIELDS) | {"record_id"})
         if keys not in [set(group) for group in KEY_GROUPS]:
@@ -509,6 +537,76 @@ def dbf_rows(fd, table, request, memo=None):
     return response
 
 
+def pdf_limits():
+    resource.setrlimit(resource.RLIMIT_AS, (512 * 1024 * 1024,) * 2)
+    resource.setrlimit(resource.RLIMIT_CPU, (2, 2))
+    resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_PDF_OUTPUT,) * 2)
+    resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
+
+
+def pdf_command(fd, command):
+    # Files plus RLIMIT_FSIZE bound child output without unbounded parent pipe buffers.
+    with tempfile.TemporaryFile() as output, tempfile.TemporaryFile() as errors:
+        try:
+            result = subprocess.run(command, stdin=subprocess.DEVNULL, stdout=output, stderr=errors,
+                                    pass_fds=(fd,), timeout=PDF_TIMEOUT, preexec_fn=pdf_limits,
+                                    env={"PATH": os.environ.get("PATH", os.defpath), "LC_ALL": "C.UTF-8"})
+        except FileNotFoundError:
+            raise InvalidRequest("PDF text tools unavailable; install poppler-utils on the source host") from None
+        except subprocess.TimeoutExpired:
+            raise InvalidRequest("PDF text extraction timed out; no page text accepted") from None
+        output.seek(0)
+        errors.seek(0)
+        content, diagnostics = output.read(MAX_PDF_OUTPUT + 1), errors.read(MAX_PDF_OUTPUT + 1)
+        if result.returncode or diagnostics.strip() or len(content) >= MAX_PDF_OUTPUT:
+            raise InvalidRequest("PDF extraction failed, warned or exceeded resource/output limits; no text accepted")
+        try:
+            return content.decode("utf-8")
+        except UnicodeDecodeError:
+            raise InvalidRequest("PDF extractor returned invalid UTF-8; no text accepted") from None
+
+
+def pdf_text(fd, request):
+    state = file_state(fd)
+    if not 8 <= state[2] <= MAX_PDF_BYTES or os.pread(fd, 5, 0) != b"%PDF-":
+        raise InvalidRequest("PDF must have a PDF header and be at most 32 MiB")
+    digest = hashlib.sha256()
+    for start in range(0, state[2], 1024 * 1024):
+        digest.update(os.pread(fd, min(1024 * 1024, state[2] - start), start))
+    sha = digest.hexdigest()
+    if "expected_pdf_sha256" in request and request["expected_pdf_sha256"] != sha:
+        raise InvalidRequest("PDF hash mismatch; restart with reviewed source bytes")
+    source = f"/proc/self/fd/{fd}"
+    info = pdf_command(fd, ["pdfinfo", "-enc", "UTF-8", source])
+    pages = re.findall(r"^Pages:\s+(\d+)\s*$", info, re.M)
+    encrypted = re.findall(r"^Encrypted:\s+(yes|no)(?:\s+[^\r\n]*)?$", info, re.M)
+    if len(pages) != 1 or len(encrypted) != 1 or encrypted[0] != "no":
+        raise InvalidRequest("PDF page count/encryption metadata unavailable or encrypted PDF unsupported")
+    page_count, page = int(pages[0]), request["page"]
+    if not 1 <= page_count <= 10000 or page > page_count:
+        raise InvalidRequest("PDF page exceeds page count or supported document limit")
+    content = pdf_command(fd, ["pdftotext", "-f", str(page), "-l", str(page), "-layout",
+                               "-nopgbrk", "-enc", "UTF-8", source, "-"])
+    if file_state(fd) != state:
+        raise InvalidRequest("PDF changed during extraction; restart with a stable source")
+    text_sha = hashlib.sha256(content.encode("utf-8")).hexdigest()
+    if "expected_text_sha256" in request and request["expected_text_sha256"] != text_sha:
+        raise InvalidRequest("extracted text hash mismatch; restart this page with a stable extractor")
+    offset, limit = request.get("offset", 0), request.get("limit", 4096)
+    if offset > len(content):
+        raise InvalidRequest("offset exceeds extracted page text")
+    following = min(offset + limit, len(content))
+    return {"action": "pdf_text", "citation": {**citation(request), "pdf_sha256": sha,
+            "verification": "measured local PDF SHA256; not authenticated against an external catalog"},
+            "page": page, "page_count": page_count, "size_bytes": state[2],
+            "extractor": "poppler_pdftotext_layout_utf8", "text_sha256": text_sha,
+            "status": "text_extracted" if content.strip() else "no_extractable_text",
+            "offset": offset, "offset_unit": "unicode_characters", "total_characters": len(content),
+            "content": content[offset:following], "has_more": following < len(content),
+            "next_offset": following if following < len(content) else None,
+            "extraction_note": PDF_NOTE, "warning": WARNING}
+
+
 def read(bindings, request):
     if request["action"] == "sets":
         return {"action": "sets", "source_sets": [{"id": name, "configured": name in bindings,
@@ -557,6 +655,8 @@ def read(bindings, request):
                     "bytes_read": len(chunk), "encoding": encoding, "content": content,
                     "has_more": following < size, "next_offset": following if following < size else None,
                     "warning": WARNING}
+        if action == "pdf_text":
+            return pdf_text(fd, request)
         table = dbf_table(fd)
         if action == "dbf_schema":
             return dbf_schema(table, request)
