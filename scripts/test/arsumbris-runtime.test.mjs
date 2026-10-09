@@ -24,6 +24,8 @@ test('existing checkouts are never reset, including dirty or wrong-revision clon
   t.after(() => rmSync(root, { recursive: true, force: true }))
   const run = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim()
   run('init', '-q')
+  run('config', 'user.email', 'fixture@example.invalid')
+  run('config', 'user.name', 'Test fixture')
   run('remote', 'add', 'origin', 'https://github.com/arsumbris/au-engine.git')
   writeFileSync(join(root, 'tracked'), 'base')
   run('add', 'tracked')
@@ -77,7 +79,7 @@ test('pinned 25-file overlay applies only over clean baseline and refuses foreig
     writeFileSync(join(host, path), 'clean upstream baseline')
   }
   const run = (...args) => execFileSync('git', args, { cwd: host, stdio: ['ignore', 'pipe', 'pipe'] })
-  run('init', '-q'); run('add', '.'); run('commit', '-qm', 'fixture')
+  run('init', '-q'); run('config', 'user.email', 'fixture@example.invalid'); run('config', 'user.name', 'Test fixture'); run('add', '.'); run('commit', '-qm', 'fixture')
   assert.throws(() => hostOverlay(host, repo), /overlay incomplete/)
   assert.equal(hostOverlay(host, repo, true), 25)
   assert.equal(hostOverlay(host, repo), 25)

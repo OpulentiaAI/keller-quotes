@@ -196,14 +196,22 @@ describe("eligibility before screening", () => {
     expect(line.evidence_candidates!.some((p) => p.comparisons.some((c) => c.status === "conflict"))).toBe(true);
   });
 
-  it.each(["reject", "quarantine", "unavailable"] as const)("never re-admits %s or unscreened history", async (decision) => {
+  it.each(["reject", "quarantine", "unavailable"] as const)("preserves %s status and never prices unscreened history", async (decision) => {
     const jev = mockJev();
     jev.screenCandidate.mockResolvedValue(decision);
     const line = (await estimate(new QuoteRegister([row(), row({ quote_no: "TAIL", unit_price: 4 })]), { parts: [part] },
       { jev: jev as unknown as JevClient, screenTopN: 1 })).lines[0]!;
-    expect(line.unit_price).toBeNull();
-    expect(line.analogs).toEqual([]);
-    expect(jev.chooseStrategy.mock.calls[0]![1]).toEqual([]);
+    if (decision === "unavailable") {
+      expect(line.unit_price).toBeNull();
+      expect(line.analogs).toEqual([]);
+      expect(jev.chooseStrategy.mock.calls[0]![1]).toEqual([]);
+    } else {
+      expect(line.unit_price).toBe(12.3457);
+      expect(line.analogs.map((a) => a.quote_no)).toEqual(["SYN-Q1"]);
+      expect(line.analogs[0]!.evidence!.screening.status).toBe(decision === "reject" ? "rejected" : "quarantined");
+      expect(line.analogs[0]!.evidence!.pricing.used_for_unit_price).toBe(true);
+      expect(line.uncertainties).toContain("Jev admitted no high-confidence analog; retained candidate is a provisional human-review fallback");
+    }
     expect(line.evidence_candidates!.every((p) => !p.pricing.used_for_unit_price)).toBe(true);
     expect(line.evidence_candidates!.map((p) => p.screening.reason)).toContain("SCREEN_BUDGET");
     if (decision === "unavailable") expect(line.evidence_candidates!.map((p) => p.screening.reason)).toContain("SCREEN_UNAVAILABLE");
@@ -216,6 +224,16 @@ describe("eligibility before screening", () => {
     expect(line.unit_price).toBeNull();
     expect(jev.screenCandidate).not.toHaveBeenCalled();
     expect(line.evidence_candidates![0]!.screening.reason).toBe("SCREEN_BUDGET");
+  });
+
+  it("never restores explicit engineering conflicts as a provisional fallback", async () => {
+    const jev = mockJev();
+    jev.screenCandidate.mockResolvedValue("reject");
+    const line = (await estimate(new QuoteRegister([row({ material: "316" })]),
+      { parts: [{ ...part, material: "304" }] }, { jev: jev as unknown as JevClient })).lines[0]!;
+    expect(line.unit_price).toBeNull();
+    expect(jev.screenCandidate).not.toHaveBeenCalled();
+    expect(line.evidence_candidates![0]!.screening.status).toBe("incompatible");
   });
 
   it("does not restore excluded or future records into auxiliary evidence", async () => {

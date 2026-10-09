@@ -59,7 +59,12 @@ jobs:
       run:
         working-directory: estimator
     steps:
+      # The Ars Umbris overlay and runtime-lock tests read pinned historical
+      # commits from the workspace git graph, so this checkout must not be
+      # shallow; --depth 1 omits those revisions.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
