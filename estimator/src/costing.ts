@@ -236,22 +236,31 @@ function costKind(value: unknown, path: string): void {
 }
 
 /**
- * Validate and reconcile BASE worksheet amounts to supplied flat inputs. The order's
- * existing bigint gross-margin math remains authoritative for the sell price.
+ * Validate and reconcile BASE worksheet amounts to explicitly supplied flat inputs.
+ * Should-cost pricing uses exact worksheet totals instead of these rounded reports.
  * Component total = max(priced_quantity * unit_cost, minimum_charge); priced_quantity applies
  * yield, minimum quantity, then an optional original-unit purchase increment rounded upward.
  * Route total = occurrences * setup_minutes / 60 * setup_rate + process_quantity * run_minutes_per_piece / 60 * run_rate.
  * All ranges are scenario bounds, not probabilities or guarantees. No files are opened.
  */
 export function reconcileCostBasis(value: unknown, quantity: number, asOf: string, flat: FlatCosts, lineRevenue?: number): CostBreakdown {
-  return calculateCostBasis(value, quantity, asOf, flat, lineRevenue);
+  return calculateCostBasis(value, quantity, asOf, flat, lineRevenue).breakdown;
 }
 
 export function deriveCostBasis(value: unknown, quantity: number, asOf: string, lineRevenue?: number): CostBreakdown {
-  return calculateCostBasis(value, quantity, asOf, undefined, lineRevenue);
+  return calculateCostBasis(value, quantity, asOf, undefined, lineRevenue).breakdown;
 }
 
-function calculateCostBasis(value: unknown, quantity: number, asOf: string, flat?: FlatCosts, lineRevenue?: number): CostBreakdown {
+/** Apply gross margin to exact BASE line cost, returning half-up 1/10000-dollar unit-price ticks. */
+export function priceCostBasisUnit4(value: unknown, quantity: number, asOf: string, marginPct: number): bigint {
+  if (!Number.isFinite(marginPct) || marginPct < 0 || marginPct >= 100) throw new Error("cost_basis.margin_pct must be between 0 and 100 (exclusive)");
+  const { baseLineCost } = calculateCostBasis(value, quantity, asOf);
+  const margin = decimal(marginPct);
+  const retained = fraction(100n * margin.d - margin.n, 100n * margin.d);
+  return rounded(div(div(baseLineCost, whole(quantity)), retained), 4);
+}
+
+function calculateCostBasis(value: unknown, quantity: number, asOf: string, flat?: FlatCosts, lineRevenue?: number): { breakdown: CostBreakdown; baseLineCost: Fraction } {
   count(quantity, "cost_basis.line_quantity", 10_000_000, 1);
   date(asOf, "cost_basis.quote_date");
   const root = record(value, "cost_basis", ["schema_version", "currency", "order_charges", "components", "routing", "not_applicable", "unresolved_assumptions"]);
@@ -361,7 +370,7 @@ function calculateCostBasis(value: unknown, quantity: number, asOf: string, flat
     const marginAt = (cost: Fraction) => mul(div(add(revenue, { n: -cost.n, d: cost.d }), revenue), whole(100));
     margin = displayRange({ low: marginAt(lineCost.high), base: marginAt(lineCost.base), high: marginAt(lineCost.low) }, 2, "cost_basis.estimated_line_margin_pct");
   }
-  return {
+  const breakdown: CostBreakdown = {
     assertion_status: "supplied_not_authenticated", scope: "production_line_excluding_freight_tax_and_order_charges",
     rounding: "half_up_flat_unit_4dp_setup_2dp_cost_report_4dp_margin_2dp",
     supplied_basis: value as CostBasis, reconciled_flat: reconciled, components, routing,
@@ -373,4 +382,5 @@ function calculateCostBasis(value: unknown, quantity: number, asOf: string, flat
       "Cost ranges are scenario bounds, not statistical confidence; human approval is still required before customer release",
     ],
   };
+  return { breakdown, baseLineCost: lineCost.base };
 }

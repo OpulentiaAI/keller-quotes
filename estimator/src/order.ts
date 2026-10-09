@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { assertEngineeringLine, assertIntake, type EngineeringFact, type Intake, type OriginalUom, type SourceEvidence } from "./intake.js";
-import { deriveCostBasis, reconcileCostBasis, type CostBasis, type CostBreakdown } from "./costing.js";
+import { deriveCostBasis, priceCostBasisUnit4, reconcileCostBasis, type CostBasis, type CostBreakdown } from "./costing.js";
 import { estimate } from "./estimate.js";
 import { drawingNumber } from "./evidence.js";
 import { JevClient } from "./jev.js";
@@ -216,11 +216,7 @@ export async function buildPricedOrder(reg: QuoteRegister, request: unknown, opt
   const blockers: string[] = [];
   const warnings: string[] = [];
   let pricedCents = 0n;
-  for (const { line_id, pricing: requestedPricing, ...part } of request.parts) {
-    const pricing = requestedPricing?.method === "should_cost"
-      ? { ...requestedPricing, method: "cost_plus" as const,
-        ...deriveCostBasis(requestedPricing.cost_basis, part.quantity, request.quote_date).reconciled_flat }
-      : requestedPricing;
+  for (const { line_id, pricing, ...part } of request.parts) {
     let unit4: bigint | null = null;
     let pricing_source: PricedOrderLine["pricing_source"] = "unpriced";
     let pricing_reason = "No usable historical price; operator pricing required";
@@ -241,18 +237,24 @@ export async function buildPricedOrder(reg: QuoteRegister, request: unknown, opt
       evidence_status = "OPERATOR_INPUT";
       next_action = "Human review required before approval; verify operator price basis and assumptions";
       uncertainties = ["Operator amount is not verified current cost or approval"];
-    } else if (pricing?.method === "cost_plus") {
-      const costs = scaled(pricing.material_per_unit, "material_per_unit", 4) + scaled(pricing.labor_per_unit, "labor_per_unit", 4) + scaled(pricing.outside_per_unit, "outside_per_unit", 4);
-      const setup = scaled(pricing.setup_total, "setup_total", 2);
-      const margin = decimal(pricing.margin_pct);
-      const denominator = BigInt(part.quantity) * (100n * margin.denominator - margin.numerator);
-      unit4 = halfUp((costs * BigInt(part.quantity) + setup * 100n) * 100n * margin.denominator, denominator);
+    } else if (pricing?.method === "cost_plus" || pricing?.method === "should_cost") {
+      if (pricing.method === "should_cost") {
+        unit4 = priceCostBasisUnit4(pricing.cost_basis, part.quantity, request.quote_date, pricing.margin_pct);
+      } else {
+        const costs = scaled(pricing.material_per_unit, "material_per_unit", 4) + scaled(pricing.labor_per_unit, "labor_per_unit", 4) + scaled(pricing.outside_per_unit, "outside_per_unit", 4);
+        const setup = scaled(pricing.setup_total, "setup_total", 2);
+        const margin = decimal(pricing.margin_pct);
+        const denominator = BigInt(part.quantity) * (100n * margin.denominator - margin.numerator);
+        unit4 = halfUp((costs * BigInt(part.quantity) + setup * 100n) * 100n * margin.denominator, denominator);
+      }
       safe(unit4, `line ${line_id}.unit_price`);
       if (unit4 === 0n) throw new Error(`line ${line_id} cost build-up produces a zero price`);
       pricing_source = "cost_build_up";
       pricing_reason = pricing.reason;
       lineWarnings = ["Operator-supplied cost inputs and margin are a proposal, not approval"];
-      if (requestedPricing?.method === "should_cost") lineWarnings.push("Should-cost derived from supplied engineering worksheet, not historical analog transfer; source support still requires review");
+      if (pricing.method === "should_cost") lineWarnings.push(
+        "Should-cost derived from supplied engineering worksheet, not historical analog transfer; source support still requires review",
+        "Should-cost price uses unrounded base worksheet cost; flat costs are rounded reporting values, and final price rounding can change achieved margin");
       proposal_status = "NUMERIC_PROVISIONAL";
       evidence_status = "OPERATOR_INPUT";
       next_action = "Human review required before approval; verify operator costs, margin, and assumptions";
@@ -284,7 +286,10 @@ export async function buildPricedOrder(reg: QuoteRegister, request: unknown, opt
       }
     }
     const cents = unit4 === null ? null : extend(unit4, part.quantity, `line ${line_id}`);
-    const costBreakdown = pricing?.method === "cost_plus" && pricing.cost_basis !== undefined
+    const costBreakdown = pricing?.method === "should_cost"
+      ? deriveCostBasis(pricing.cost_basis, part.quantity, request.quote_date,
+        cents === null || cents === 0n ? undefined : amount(cents, 2, `line ${line_id}.extended_price`))
+      : pricing?.method === "cost_plus" && pricing.cost_basis !== undefined
       ? reconcileCostBasis(pricing.cost_basis, part.quantity, request.quote_date, pricing,
         cents === null || cents === 0n ? undefined : amount(cents, 2, `line ${line_id}.extended_price`))
       : undefined;
