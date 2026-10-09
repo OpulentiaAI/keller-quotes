@@ -289,7 +289,8 @@ class SteveSourceEvidenceTest(unittest.TestCase):
     def test_catalog_continuations_require_matching_hash_and_bounded_inputs(self):
         original = self.catalog_fixture()
         for changes in ({"query": ""}, {"query": None}, {"query": 3}, {"query": "x" * 81}, {"query": " x"},
-                        {"query": "x\n"}, {"query": "x\x7f"}, {"offset": 1}, {"offset": -1}, {"offset": True},
+                        {"query": "x\n"}, {"query": "x\x7f"}, {"query": "x\x80y"}, {"query": "x\x85y"},
+                        {"query": "x\x9fy"}, {"offset": 1}, {"offset": -1}, {"offset": True},
                         {"limit": 6}, {"limit": 0}, {"limit": True}, {"expected_dbf_sha256": "bad"},
                         {"column": "SU_COST"}, {"record_id": "C1"}, {"quote_no": "Q1"}, {"memo_fields": ["COMMENT"]}):
             with self.subTest(changes=changes), self.assertRaises(reader.InvalidRequest):

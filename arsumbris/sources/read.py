@@ -143,7 +143,7 @@ def validate(request):
         if "query" in request:
             query = request["query"]
             if (not isinstance(query, str) or not query.strip() or query != query.strip() or len(query) > 80
-                    or any(ord(c) < 32 or ord(c) == 127 for c in query)):
+                    or any(ord(c) < 32 or 127 <= ord(c) <= 159 for c in query)):
                 raise InvalidRequest("query must be 1..80 literal characters without edge whitespace or controls")
         if integer(request.get("offset"), "offset", 0, 10000000) and "expected_dbf_sha256" not in request:
             raise InvalidRequest("catalog continuation requires expected_dbf_sha256")
