@@ -60,6 +60,76 @@ class SteveSourceEvidenceTest(unittest.TestCase):
         request = reader.validate({"action": action, "source_set": "fabritrak", "path": name, **fields})
         return reader.read(self.bindings, request)
 
+    def test_unmatched_values_do_not_block_exact_evidence_or_continuation(self):
+        for kind, width, good, bad in [('N', 12, '12.50', 'overflow'), ('F', 12, '5.25', 'NaN'),
+                                      ('D', 8, '20240229', '20240230'), ('L', 1, 'F', 'X'),
+                                      ('C', 12, 'retained', b'\x81')]:
+            with self.subTest(kind=kind):
+                fields = [('QUOTE_NO', 'C', 7), ('VALUE', kind, width), ('COMMENT', 'M', 4)]
+                data = self.put('QUOTEN.DBF', fields, [(b' ', ['KEEP', good, bytes(4)]),
+                    (b' ', ['OTHER', bad, bytes(4)]), (b' ', ['KEEP', good, bytes(4)])])
+                digest = hashlib.sha256(data).hexdigest()
+                result = self.call('QUOTEN.DBF', quote_no='KEEP', expected_dbf_sha256=digest)
+                self.assertEqual([r['record_index'] for r in result['rows']], [0, 2])
+                self.assertFalse(result['has_more'])
+                self.assertEqual(result['scanned_records'], 3)
+                for row in result['rows']:
+                    self.assertEqual(row['values']['VALUE'], good)
+                    self.assertIsNone(row['values']['COMMENT'])
+                    offset = row['record_byte_offset']
+                    self.assertEqual(row['record_sha256'], hashlib.sha256(data[offset:offset + row['record_bytes']]).hexdigest())
+                first = self.call('QUOTEN.DBF', quote_no='KEEP', limit=1)
+                second = self.call('QUOTEN.DBF', quote_no='KEEP', offset=first['next_offset'], expected_dbf_sha256=digest)
+                self.assertEqual(second['rows'], result['rows'][1:])
+                missing = self.call('QUOTEN.DBF', quote_no='ABSENT')
+                self.assertEqual(missing['rows'], [])
+                self.assertFalse(missing['has_more'])
+                with self.assertRaises(reader.InvalidRequest):
+                    self.call('QUOTEN.DBF', quote_no='OTHER')
+                with self.assertRaisesRegex(reader.InvalidRequest, 'hash mismatch'):
+                    self.call('QUOTEN.DBF', quote_no='KEEP', expected_dbf_sha256='0' * 64)
+
+    def test_selection_fields_and_record_structure_still_fail_closed(self):
+        fields = [('QUOTE_NO', 'C', 7), ('VALUE', 'N', 8)]
+        for marker, key in [(b'?', 'OTHER'), (b' ', b'\x81')]:
+            self.put('QUOTEN.DBF', fields, [(marker, [key, '1']), (b' ', ['KEEP', '2'])])
+            with self.subTest(marker=marker, key=key), self.assertRaises(reader.InvalidRequest):
+                self.call('QUOTEN.DBF', quote_no='KEEP')
+        self.put('WOSEQ.DBF', [('WO_NO', 'C', 7), ('PAGE_NO', 'N', 4), ('SEQ', 'C', 3)],
+                 [(b' ', ['OTHER', 'oops', '1'])])
+        with self.assertRaisesRegex(reader.InvalidRequest, 'numeric'):
+            self.call('WOSEQ.DBF', wo_no='KEEP', page_no='1', seq='1')
+
+    def test_catalog_selection_precedes_full_value_decoding(self):
+        fields = [('id', 'C', 7), ('name', 'C', 12), ('othername', 'C', 12), ('PRICE', 'N', 8)]
+        self.put('MATERIAL.DBF', fields, [(b' ', ['OTHER', 'unrelated', '', 'oops']),
+                 (b' ', ['KEEP', 'Steel', '', '3.2500'])])
+        result = self.call('MATERIAL.DBF', 'dbf_catalog', query='steel')
+        self.assertEqual([r['record_index'] for r in result['rows']], [1])
+        self.assertEqual(result['rows'][0]['values']['PRICE'], '3.2500')
+        for query in [None, 'unrelated']:
+            with self.subTest(query=query), self.assertRaisesRegex(reader.InvalidRequest, 'numeric'):
+                self.call('MATERIAL.DBF', 'dbf_catalog', **({} if query is None else {'query': query}))
+        self.put('MATERIAL.DBF', fields, [(b' ', ['OTHER', b'\x81', '', '1'])])
+        with self.assertRaisesRegex(reader.InvalidRequest, 'undecodable'):
+            self.call('MATERIAL.DBF', 'dbf_catalog', query='steel')
+
+    def test_native_exact_lookup_recovers_scoped_rows_but_rejects_bad_selected_values(self):
+        self.put('QUOTEN.DBF', [('QUOTE_NO', 'C', 7), ('PRICE', 'N', 8)],
+                 [(b' ', ['OTHER', 'oops']), (b' ', ['KEEP', '12.5000'])])
+        config = self.root / 'sources.json'
+        config.write_text(json.dumps(self.bindings))
+        script = """import { createPlugin } from './arsumbris/sources/tool.ts';
+const plugin = createPlugin({workspace:process.cwd()});
+for (const quote_no of ['KEEP','OTHER']) console.log(JSON.stringify(await plugin.invoke({
+ action:'dbf_rows', source_set:'fabritrak', path:'QUOTEN.DBF', quote_no })));"""
+        result = subprocess.run(['node', '--input-type=module', '-e', script], cwd=ROOT,
+            env={**os.environ, 'KELLER_SOURCE_CONFIG': str(config)}, text=True, capture_output=True, check=True, timeout=20)
+        good, bad = map(json.loads, result.stdout.splitlines())
+        self.assertFalse(good.get('isError'), good)
+        self.assertEqual(good['content']['rows'][0]['values']['PRICE'], '12.5000')
+        self.assertTrue(bad.get('isError'), bad)
+
     def test_stdlib_schema_and_hash_proof_without_dbfread(self):
         fields = [("QUOTE_NO", "C", 7), ("PRICE", "N", 12), ("COMMENT", "M", 4)]
         data = self.put("QUOTEN.DBF", fields, [(b" ", ["Q1", "12.5000", b"\x01\x00\x00\x00"])], backlink=True)
@@ -168,9 +238,9 @@ class SteveSourceEvidenceTest(unittest.TestCase):
             self.call("QUOTEN.DBF", quote_no="Q1", expected_dbf_sha256="0" * 64)
         original_values = reader.record_values
 
-        def change_during_read(table, record):
+        def change_during_read(table, record, selected_fields=None):
             (self.root / "QUOTEN.DBF").write_bytes(data + b"extra")
-            return original_values(table, record)
+            return original_values(table, record, selected_fields)
 
         with patch.object(reader, "record_values", side_effect=change_during_read):
             with self.assertRaisesRegex(reader.InvalidRequest, "changed during read"):
