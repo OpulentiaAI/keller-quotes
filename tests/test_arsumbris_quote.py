@@ -117,9 +117,24 @@ console.log(JSON.stringify(result));"""
     def test_purchase_increment_survives_retention_native_review_and_local_inbox(self):
         self.check_uploaded_engineering_should_cost(purchase_increment=2)
 
-    def check_uploaded_engineering_should_cost(self, purchase_increment=None):
+    def test_exact_conversion_ratio_survives_retention_native_review_and_local_inbox(self):
+        self.check_uploaded_engineering_should_cost(conversion_ratio=True)
+
+    def check_uploaded_engineering_should_cost(self, purchase_increment=None, conversion_ratio=False):
         original = json.loads((ROOT / 'estimator/examples/should-cost-intake.json').read_text())
         expected_total, expected_cost = 120, 90
+        if conversion_ratio:
+            part = original['parts'][0]
+            part['quantity'] = part['uom']['original_quantity'] = 3
+            part['pricing']['cost_basis']['routing'][0]['process_quantity'] = 3
+            material = part['pricing']['cost_basis']['components'][0]
+            del material['original_units_per_quantity_unit']
+            material.update(conversion_ratio={'original_units': 2, 'quantity_units': 3},
+                            quantity=3, minimum_quantity=0, purchase_increment=1)
+            assumption = 'SYNTHETIC: two purchased blanks per three pieces; exact ratio, no separate scrap'
+            material['assumptions'] = [assumption]
+            next(f for f in part['geometry'] if f['id'] == 'material')['value'] = assumption
+            expected_total, expected_cost = 226.67, 170
         if purchase_increment is not None:
             material = original['parts'][0]['pricing']['cost_basis']['components'][0]
             material['purchase_increment'] = purchase_increment
@@ -133,6 +148,8 @@ console.log(JSON.stringify(result));"""
         for name in ('drawing', 'worksheet'):
             path = self.home / (name + '.txt')
             path.write_text('SYNTHETIC evidence only: ' + name +
+                            ('; two original blanks per three pieces, buy whole blanks'
+                             if name == 'worksheet' and conversion_ratio else '') +
                             (f'; purchase_increment={purchase_increment} blanks, no inventory credit'
                              if name == 'worksheet' and purchase_increment is not None else ''))
             uploads.append({'id': name, 'path': str(path), 'media_type': 'text/plain'})
@@ -155,6 +172,10 @@ console.log(JSON.stringify(result));"""
         self.assertEqual(line['analogs'], [])
         self.assertEqual(line['cost_breakdown']['estimated_line_cost']['base'], expected_cost)
         self.assertEqual(line['cost_breakdown']['estimated_line_margin_pct']['base'], 25)
+        if conversion_ratio:
+            self.assertEqual(line['cost_breakdown']['components'][0]['priced_quantity'], 2)
+            self.assertEqual(line['cost_breakdown']['supplied_basis']['components'][0]['conversion_ratio'],
+                             {'original_units': 2, 'quantity_units': 3})
         if purchase_increment is not None:
             material_cost = line['cost_breakdown']['components'][0]
             self.assertEqual(material_cost['priced_quantity'], 2)
