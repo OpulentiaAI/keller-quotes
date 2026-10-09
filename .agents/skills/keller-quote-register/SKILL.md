@@ -18,6 +18,8 @@ The separately derived `customer_quote_pdf` register contains conservatively ver
 
 In Ars Umbris, `keller_polygres` retrieves bounded, explicitly selected customer-PDF evidence; `keller_sources` can inspect the separately bound private `fabritrak`, `pdfs`, `transcripts`, and `manufacturing-audit` sets read-only. Use `sets`, `list`, `read`, `dbf_schema`, or exact `quote_no`-filtered `dbf_rows` only when the original evidence or an unresolved provenance gap requires inspection. Neither source reader validates today's manufacturing cost or changes the register's price basis.
 
+For operator source adjudication, the separate [ground-truth assessment workflow](../../../docs/ground-truth-assessment.md) reopens explicitly approved original bytes and retains source-bound case states and remediation, without replacing this register. Keep internal calculations, recorded customer letters, independently confirmed acceptance, actual manufacturing cost, supported current quotes and unsupported optimum/business outcomes in separate domains. Operator assertions are labeled assertions; an independently inspectable source record needs its own identity, quantity, currency/UOM, time/revision and reconciled full amount/extension. The maintenance assessment and its private outputs are not quote-worker context or release authority.
+
 For local frozen-register queries, use a CSV parser rather than physical-line `grep` or comma-splitting `awk`:
 
 ```sh

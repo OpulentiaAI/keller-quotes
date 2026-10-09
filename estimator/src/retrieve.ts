@@ -1,9 +1,17 @@
 import type { Candidate, PartRequest } from "./types.js";
 import {
+  ambiguousPartSources,
+  customerNamespace,
+  independentAttributesMatch,
+  matchingDrawing,
+  requestedDrawing,
+  searchableIdentifier,
+  sourceIncompatibilities,
+} from "./compatibility.js";
+import {
   QuoteRegister,
   descTokens,
   normalizeCustomer,
-  normalizePartNo,
   partBigrams,
   type QuoteGroup,
 } from "./register.js";
@@ -74,15 +82,57 @@ export function retrieve(
   };
   const wonAtCutoff = (g: QuoteGroup) => g.breaks.every((b) =>
     b.status === "won" && beforeCutoff(b.won_date));
-  const wantPn = part.part_no ? normalizePartNo(part.part_no) : "";
+  const sourceRow = (row: QuoteGroup["head"]) => opts.asOf
+    ? { ...row, material: beforeCutoff(row.letter_date) ? row.material : "" }
+    : row;
+  const wantPn = searchableIdentifier(part.part_no);
   const wantToks = descTokens(
     [part.description, part.material, part.finish, part.notes].filter(Boolean).join(" "),
   );
   const wantCust = opts.customer ? normalizeCustomer(opts.customer) : "";
+  const wantCustomerId = searchableIdentifier(opts.customerId) ? opts.customerId!.trim() : "";
+  const exactGroups = wantPn ? reg.exactPart(wantPn).filter((group) =>
+    !excluded(group) && searchableIdentifier(group.head.part_no)) : [];
+  const ambiguousIdentity = !wantCustomerId && ambiguousPartSources(exactGroups.map((group) => sourceRow(group.head)));
+  const drawingResolvesIdentity = Boolean(requestedDrawing(part)) && !ambiguousPartSources(exactGroups
+    .filter((group) => matchingDrawing(part, group.head) && !sourceIncompatibilities(part, group.breaks.map(sourceRow)).length)
+    .map((group) => sourceRow(group.head)));
+  const compatibility = new Map<QuoteGroup, { partNumber: boolean; exact: boolean; conflicts: string[] }>();
+  const assess = (g: QuoteGroup) => {
+    const cached = compatibility.get(g);
+    if (cached) return cached;
+    const namespace = customerNamespace(g.head, opts);
+    const independent = independentAttributesMatch(part, g.head);
+    const sourceId = searchableIdentifier(g.head.customer_id);
+    const literalMatch = part.part_no?.trim().toUpperCase() === g.head.part_no.trim().toUpperCase();
+    const unscopedMatch = !wantCustomerId && !sourceId;
+    const ambiguousMatch = ambiguousIdentity && g.search.partNo === wantPn;
+    const conflicts = sourceIncompatibilities(part, g.breaks.map(sourceRow));
+    const partNumber = namespace === "same" || (namespace === "unknown" &&
+      !(wantCustomerId && !sourceId) && (!ambiguousMatch || independent) &&
+      (literalMatch || unscopedMatch || independent));
+    const exact = partNumber && !conflicts.length &&
+      (namespace === "same" || literalMatch || unscopedMatch || matchingDrawing(part, g.head)) &&
+      (!ambiguousMatch || (drawingResolvesIdentity && matchingDrawing(part, g.head))) &&
+      (!searchableIdentifier(part.revision) || Boolean(searchableIdentifier(g.head.rev))) &&
+      (!requestedDrawing(part) || matchingDrawing(part, g.head));
+    if (namespace === "unknown" && g.search.partNo === wantPn && !independent &&
+      (ambiguousMatch || (!literalMatch && !unscopedMatch))) {
+      conflicts.push("unresolved part identity");
+    }
+    const result = { partNumber, exact, conflicts };
+    compatibility.set(g, result);
+    return result;
+  };
   const scored = new Map<QuoteGroup, { score: number; reasons: string[] }>();
 
   const bump = (g: QuoteGroup, s: number, reason: string) => {
     if (excluded(g)) return;
+    const namespace = customerNamespace(g.head, opts);
+    const describedSearch = reason.startsWith("desc tokens ") && descTokens(part.description ?? "").some((token) =>
+      /[A-Z]/.test(token) && g.search.descriptionTokens.includes(token));
+    if ((namespace === "different" || (namespace === "unknown" && wantCustomerId && !searchableIdentifier(g.head.customer_id))) &&
+      !independentAttributesMatch(part, g.head) && !scored.has(g) && !describedSearch) return;
     const cur = scored.get(g);
     if (cur) {
       cur.score += s;
@@ -93,11 +143,11 @@ export function retrieve(
   };
 
   // 1. Part-number matching
-  if (wantPn && !/[?*]/.test(part.part_no ?? "")) {
+  if (wantPn) {
     const wantBigrams = partBigrams(wantPn);
-    for (const g of reg.exactPart(part.part_no!)) {
-      if (/[?*]/.test(g.head.part_no)) continue;
-      bump(g, 1.0, "exact part_no");
+    for (const g of exactGroups) {
+      if (assess(g).exact) bump(g, 1.0, "exact part_no");
+      else bump(g, 0, "normalized part_no search");
     }
     if (scored.size < 200) {
       for (const g of reg.groups) {
@@ -106,6 +156,7 @@ export function retrieve(
         const { partNo: pn, partBigrams: pnBigrams } = g.search;
         if (!pn || !meaningfulPartNo(wantPn) || !meaningfulPartNo(pn)) continue;
         if (sharedPrefixLength(wantPn, pn) < 4) continue;
+        if (!assess(g).partNumber || pn === wantPn) continue;
         if (pn.startsWith(wantPn) || wantPn.startsWith(pn)) {
           bump(g, 0.75, "part_no prefix");
         } else {
@@ -117,11 +168,11 @@ export function retrieve(
   }
 
   // 1b. Drawing-number match (the "visualization" link: customer drawings ↔ quoted drawings)
-  const wantDwg = part.drawing_ref ? normalizePartNo(part.drawing_ref) : "";
+  const wantDwg = requestedDrawing(part);
   if (wantDwg) {
     for (const g of reg.groups) {
       const dw = g.search.drawingNo;
-      if (dw && (dw === wantDwg || dw.startsWith(wantDwg) || wantDwg.startsWith(dw))) {
+      if (dw && searchableIdentifier(g.head.drawing_no) && (dw === wantDwg || dw.startsWith(wantDwg) || wantDwg.startsWith(dw))) {
         bump(g, 0.85, "drawing_no match");
       }
     }
@@ -138,9 +189,9 @@ export function retrieve(
 
   // 3. Customer and material bonuses
   for (const [g, cur] of scored) {
-    if (opts.customerId && g.head.customer_id === opts.customerId) {
+    if (wantCustomerId && g.head.customer_id.trim() === wantCustomerId) {
       bump(g, 0.15, "same customer_id");
-    } else if (!opts.asOf && wantCust && normalizeCustomer(g.head.customer) === wantCust) {
+    } else if (!wantCustomerId && !opts.asOf && wantCust && normalizeCustomer(g.head.customer) === wantCust) {
       bump(g, 0.15, "same customer");
     }
     if (materialMatch(part.material,
@@ -157,19 +208,20 @@ export function retrieve(
     .map(([g, s]) => {
       const status = wonAtCutoff(g) ? "won" : g.breaks.every((row) => row.status === "unknown") ? "unknown" : "open";
       const redact = (row: typeof g.head) => ({
-        ...row,
+        ...sourceRow(row),
         status,
         won_date: status === "won" ? row.won_date : "",
         customer: "",
-        material: beforeCutoff(row.letter_date) ? row.material : "",
       });
       return {
         row: opts.asOf ? redact(g.head) : g.head,
         breaks: opts.asOf ? g.breaks.map(redact) : g.breaks,
         score: Math.min(1, s.score),
         reasons: s.reasons,
+        incompatibilities: assess(g).conflicts,
       };
     })
-    .sort((a, b) => b.score - a.score || b.row.quote_date.localeCompare(a.row.quote_date))
+    .sort((a, b) => Number(Boolean(a.incompatibilities.length)) - Number(Boolean(b.incompatibilities.length)) ||
+      b.score - a.score || b.row.quote_date.localeCompare(a.row.quote_date))
     .slice(0, limit);
 }
