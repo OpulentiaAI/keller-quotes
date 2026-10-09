@@ -57,6 +57,98 @@ function reconcile(b = basis(), costs = flat(), quantity = 10) {
 }
 
 describe("prospective cost-basis worksheet", () => {
+  it("retains source-validity warnings with exact ratios and whole-stock purchasing", async () => {
+    const b = basis();
+    delete b.components[0]!.original_units_per_quantity_unit;
+    b.components[0]!.conversion_ratio = { original_units: 2, quantity_units: 3 };
+    b.components[0]!.purchase_increment = 1;
+    const req = request(b, flat(), 10);
+    req.parts[0]!.pricing = { method: "should_cost", cost_basis: b, margin_pct: 20, reason: "Synthetic composition regression" };
+    const baseline = await buildPricedOrder(reg, req, options);
+    for (const group of ["components", "routing"] as const) {
+      for (const item of b[group]) item.sources[0]!.expires_date = "2024-05-31";
+    }
+    const unchanged = JSON.stringify(req);
+    const order = await buildPricedOrder(reg, req, options);
+    for (const group of ["components", "routing"] as const) {
+      for (const [i] of b[group].entries()) {
+        expect(order.lines[0]!.warnings).toContain(
+          `Source validity: cost_basis.${group}[${i}].sources[0] expired on 2024-05-31; quote_date ${asOf}; retained as approved_estimate, not current-cost authority`,
+        );
+      }
+    }
+    expect(order.lines[0]!.unit_price).toBe(baseline.lines[0]!.unit_price);
+    expect(order.lines[0]!.extended_price).toBe(baseline.lines[0]!.extended_price);
+    expect(order.lines[0]!.cost_breakdown!.estimated_line_cost).toEqual(baseline.lines[0]!.cost_breakdown!.estimated_line_cost);
+    expect(order.total).toBe(baseline.total);
+    expect(order.state).toBe("PRICED_REQUIRES_REVIEW");
+    expect(order.requires_human_review).toBe(true);
+    expect(JSON.stringify(req)).toBe(unchanged);
+  });
+
+  it("keeps recurring unit ratios exact before buying whole stock", () => {
+    const b = basis(), c = b.components[0]!;
+    Object.assign(c, { quantity: 3, original_units_per_quantity_unit: 0.666667,
+      yield_fraction: 1, minimum_quantity: 0, purchase_increment: 1 });
+    expect(deriveCostBasis(b, 3, asOf).components[0]!.priced_quantity).toBe(3);
+    delete c.original_units_per_quantity_unit;
+    c.conversion_ratio = { original_units: 2, quantity_units: 3 };
+    const result = deriveCostBasis(b, 3, asOf);
+    expect(result.components[0]).toMatchObject({ priced_quantity: 2, total_cost: range(20, 16, 24) });
+    expect(result.supplied_basis.components[0]!.conversion_ratio).toEqual(c.conversion_ratio);
+  });
+
+  it.each([
+    [1, 3, 3, 1, 0, 1, 1],
+    [1, 3, 4, 1, 0, 1, 2],
+    [1, 3, 3, 0.8, 0, 1, 2],
+    [1, 3, 3, 1, 2.1, 2, 4],
+    [21.049344, 4, 4, 1, 0, 0.5, 21.5],
+    [1, 3, 3000001, 1, 0, 1, 1000001],
+  ])("converts %s/%s exactly for %s units, yield %s, minimum %s and increment %s",
+    (originalUnits, quantityUnits, quantity, yieldFraction, minimum, increment, expected) => {
+      const b = basis(), c = b.components[0]!;
+      delete c.original_units_per_quantity_unit;
+      Object.assign(c, { conversion_ratio: { original_units: originalUnits, quantity_units: quantityUnits },
+        quantity, yield_fraction: yieldFraction, minimum_quantity: minimum, purchase_increment: increment });
+      b.components[1]!.quantity = b.routing[0]!.process_quantity = quantity;
+      expect(deriveCostBasis(b, quantity, asOf).components[0]!.priced_quantity).toBe(expected);
+    });
+
+  it("preserves fractional allocation and monetary minimums without an increment", () => {
+    const b = basis(), c = b.components[0]!;
+    delete c.original_units_per_quantity_unit;
+    Object.assign(c, { conversion_ratio: { original_units: 1, quantity_units: 3 }, quantity: 1,
+      yield_fraction: 1, minimum_quantity: 0, unit_cost: range(30), minimum_charge: range(12) });
+    expect(deriveCostBasis(b, 1, asOf).components[0]).toMatchObject({ priced_quantity: 0.333333, total_cost: range(12) });
+    c.minimum_charge = range(0);
+    expect(deriveCostBasis(b, 1, asOf).components[0]!.total_cost).toEqual(range(10));
+  });
+
+  it.each([null, [], {}, { original_units: 1 }, { original_units: 0, quantity_units: 3 },
+    { original_units: 1, quantity_units: 0 }, { original_units: -1, quantity_units: 3 },
+    { original_units: 1, quantity_units: -3 }, { original_units: "1", quantity_units: 3 },
+    { original_units: Infinity, quantity_units: 3 }, { original_units: 1, quantity_units: NaN },
+    { original_units: 1, quantity_units: 3, inferred: true },
+    { original_units: 0.0000001, quantity_units: 3 }, { original_units: 1, quantity_units: 0.0000001 },
+    { original_units: 1e9 + 1, quantity_units: 3 }, { original_units: 1, quantity_units: 1e9 + 1 },
+    { original_units: 1e9, quantity_units: 0.000001 },
+  ])("rejects malformed or unbounded ratio %j", value => {
+    const b = basis(), c = b.components[0]!;
+    delete c.original_units_per_quantity_unit;
+    c.conversion_ratio = value as typeof c.conversion_ratio;
+    expect(() => deriveCostBasis(b, 10, asOf)).toThrow();
+  });
+
+  it("requires exactly one conversion representation", () => {
+    const b = basis(), c = b.components[0]!;
+    c.conversion_ratio = { original_units: 1, quantity_units: 10 };
+    expect(() => deriveCostBasis(b, 10, asOf)).toThrow(/exactly one/);
+    delete c.conversion_ratio;
+    delete c.original_units_per_quantity_unit;
+    expect(() => deriveCostBasis(b, 10, asOf)).toThrow(/exactly one/);
+  });
+
   it("builds a should-cost proposal without analogs or manually copied flat costs", async () => {
     const req = request();
     req.parts[0]!.pricing = { method: "should_cost", cost_basis: basis(), margin_pct: 20, reason: "Synthetic reviewed engineering estimate" };

@@ -33,8 +33,9 @@ export interface CostComponent extends SupportedCost {
   original_unit: string;
   quantity_unit: string;
   quantity: number;
-  /** Original priced units per quantity_unit, BEFORE yield. */
-  original_units_per_quantity_unit: number;
+  /** Supply exactly one conversion form, BEFORE yield; never round a recurring ratio. */
+  original_units_per_quantity_unit?: number;
+  conversion_ratio?: { original_units: number; quantity_units: number };
   yield_fraction: number;
   minimum_quantity: number;
   /** Purchase a multiple of this many original priced units, after yield and minimum quantity. */
@@ -273,7 +274,7 @@ function calculateCostBasis(value: unknown, quantity: number, asOf: string, flat
   const present = new Set<Category>();
   for (const [i, item] of list(root.components, "cost_basis.components", 64).entries()) {
     const p = `cost_basis.components[${i}]`;
-    const c = record(item, p, [...supportKeys, "category", "allocation", "rate_kind", "original_unit", "quantity_unit", "quantity", "original_units_per_quantity_unit", "yield_fraction", "minimum_quantity", "purchase_increment", "unit_cost", "minimum_charge"]);
+    const c = record(item, p, [...supportKeys, "category", "allocation", "rate_kind", "original_unit", "quantity_unit", "quantity", "original_units_per_quantity_unit", "conversion_ratio", "yield_fraction", "minimum_quantity", "purchase_increment", "unit_cost", "minimum_charge"]);
     support(c, p, asOf, ids, sourceWarnings);
     choice(c.category, `${p}.category`, ["material", "outside", "other"]);
     choice(c.allocation, `${p}.allocation`, ["material_per_unit", "outside_per_unit", "setup_total"]);
@@ -282,7 +283,18 @@ function calculateCostBasis(value: unknown, quantity: number, asOf: string, flat
     text(c.original_unit, `${p}.original_unit`);
     text(c.quantity_unit, `${p}.quantity_unit`);
     const q = number(c.quantity, `${p}.quantity`, true);
-    const conversion = number(c.original_units_per_quantity_unit, `${p}.original_units_per_quantity_unit`, true);
+    if ((c.original_units_per_quantity_unit === undefined) === (c.conversion_ratio === undefined)) {
+      throw new Error(`${p} requires exactly one of original_units_per_quantity_unit or conversion_ratio`);
+    }
+    let conversion: Fraction;
+    if (c.conversion_ratio === undefined) {
+      conversion = number(c.original_units_per_quantity_unit, `${p}.original_units_per_quantity_unit`, true);
+    } else {
+      const ratio = record(c.conversion_ratio, `${p}.conversion_ratio`, ["original_units", "quantity_units"]);
+      conversion = div(number(ratio.original_units, `${p}.conversion_ratio.original_units`, true),
+        number(ratio.quantity_units, `${p}.conversion_ratio.quantity_units`, true));
+      if (compare(conversion, whole(1e9)) > 0n) throw new Error(`${p}.conversion_ratio must be <= 1e9`);
+    }
     const yieldFraction = number(c.yield_fraction, `${p}.yield_fraction`, true);
     if (compare(yieldFraction, whole(1)) > 0n) throw new Error(`${p}.yield_fraction must be <= 1`);
     const minimum = number(c.minimum_quantity, `${p}.minimum_quantity`);
