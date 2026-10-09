@@ -25,6 +25,18 @@ function jaccard(a: readonly string[], b: readonly string[]): number {
   return inter / (A.size + B.size);
 }
 
+/** Part-number prefix/fuzzy credit requires substantial IDs, never bare fragments like "-1". */
+function meaningfulPartNo(pn: string): boolean {
+  return pn.length >= 4 && /[A-Z0-9]{4}/.test(pn);
+}
+
+function sharedPrefixLength(a: string, b: string): number {
+  const max = Math.min(a.length, b.length);
+  let i = 0;
+  while (i < max && a[i] === b[i]) i++;
+  return i;
+}
+
 function materialMatch(want: string | undefined, rowMaterial: string, comment: string): boolean {
   if (!want) return false;
   const w = want.toUpperCase();
@@ -81,16 +93,19 @@ export function retrieve(
   };
 
   // 1. Part-number matching
-  if (wantPn) {
+  if (wantPn && !/[?*]/.test(part.part_no ?? "")) {
     const wantBigrams = partBigrams(wantPn);
     for (const g of reg.exactPart(part.part_no!)) {
+      if (/[?*]/.test(g.head.part_no)) continue;
       bump(g, 1.0, "exact part_no");
     }
     if (scored.size < 200) {
       for (const g of reg.groups) {
         if (scored.has(g)) continue;
+        if (/[?*]/.test(g.head.part_no)) continue;
         const { partNo: pn, partBigrams: pnBigrams } = g.search;
-        if (!pn) continue;
+        if (!pn || !meaningfulPartNo(wantPn) || !meaningfulPartNo(pn)) continue;
+        if (sharedPrefixLength(wantPn, pn) < 4) continue;
         if (pn.startsWith(wantPn) || wantPn.startsWith(pn)) {
           bump(g, 0.75, "part_no prefix");
         } else {

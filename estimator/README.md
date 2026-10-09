@@ -15,9 +15,12 @@ request.json (customer + parts[part_no, description, qty, material, drawing_ref]
                numbers match quoted drawings), description-token overlap,
                same-customer / material / won-quote bonuses
   → jev.rank   one bounded `choice` question over the top-8 candidate
-               descriptions → calibrated ordering + probabilities
+               descriptions → ordering + probabilities; known exact/prefix
+               part numbers retain priority, but placeholder IDs do not
   → jev.screen boolean "is this a genuine analog" on the top candidates;
-               rejects are dropped
+               rejects are dropped; if Jev admits none, the highest-ranked
+               screened usable break may be retained as a provisional human-review
+               fallback; a zero screening budget still holds without a price
   → jev.choose bounded choice of pricing strategy per line:
                latest | median_won | curve_fit | conservative
   → price      per-analog log-log interpolation of that quote's own qty/price

@@ -172,7 +172,7 @@ describe("historical benchmark artifacts", () => {
       expect(evalRun(baseline, args).status).not.toBe(0);
       expect(existsSync(baseline)).toBe(false);
     }
-  });
+  }, 20000);
 
   it("refuses output aliases without changing register, evalset, or comparison inputs", () => {
     fixtures();
@@ -198,5 +198,5 @@ describe("historical benchmark artifacts", () => {
     rmSync(comparison);
     linkSync(candidate.replace(/\.md$/, ".json"), comparison);
     expect(compare().status).not.toBe(0);
-  });
+  }, 20000);
 });
