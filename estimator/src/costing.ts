@@ -46,6 +46,8 @@ export interface CostComponent extends SupportedCost {
   rectangular_blank?: RectangularBlank;
   yield_fraction: number;
   minimum_quantity: number;
+  /** Purchase a multiple of this many original priced units, after yield and minimum quantity. */
+  purchase_increment?: number;
   unit_cost: CostRange;
   minimum_charge: CostRange;
 }
@@ -87,7 +89,8 @@ export interface CostBreakdown {
   reconciled_flat: FlatCosts;
   components: { id: string; category: CostComponent["category"]; allocation: Allocation;
     priced_quantity: number; total_cost: CostRange;
-    consumption?: { method: "rectangular_blank"; mass_per_blank: number; mass_unit: "kg" | "lb"; blank_count: number } }[];
+    consumption?: { method: "rectangular_blank"; mass_per_blank: number; mass_unit: "kg" | "lb"; blank_count: number };
+    purchase_rounding?: { original_unit: string; quantity_before_increment: number; increment: number } }[];
   routing: { id: string; setup_occurrences: number; setup_minutes: CostRange;
     run_minutes_per_piece: CostRange; process_quantity: number; setup_cost: CostRange; run_cost: CostRange }[];
   estimated_line_cost: CostRange;
@@ -234,6 +237,7 @@ function sources(value: unknown, path: string, asOf: string): void {
       text(approval.reviewer, `${p}.approval.reviewer`);
       text(approval.reason, `${p}.approval.reason`);
       date(approval.date, `${p}.approval.date`);
+      if (approval.date < s.source_date) throw new Error(`${p}.approval.date is before source_date`);
       if (approval.date > asOf) throw new Error(`${p}.approval.date is after quote_date`);
     } else if (s.approval !== undefined) throw new Error(`${p}.approval requires approved_estimate status`);
   }
@@ -264,7 +268,8 @@ function costKind(value: unknown, path: string): void {
 /**
  * Validate and reconcile BASE worksheet amounts to supplied flat inputs. The order's
  * existing bigint gross-margin math remains authoritative for the sell price.
- * Component total = max(max(quantity * conversion / yield, minimum_quantity) * unit_cost, minimum_charge).
+ * Component total = max(priced_quantity * unit_cost, minimum_charge); priced_quantity applies
+ * yield, minimum quantity, then an optional original-unit purchase increment rounded upward.
  * Route total = occurrences * setup_minutes / 60 * setup_rate + process_quantity * run_minutes_per_piece / 60 * run_rate.
  * All ranges are scenario bounds, not probabilities or guarantees. No files are opened.
  */
@@ -291,7 +296,7 @@ function calculateCostBasis(value: unknown, quantity: number, asOf: string, flat
   const present = new Set<Category>();
   for (const [i, item] of list(root.components, "cost_basis.components", 64).entries()) {
     const p = `cost_basis.components[${i}]`;
-    const c = record(item, p, [...supportKeys, "category", "allocation", "rate_kind", "original_unit", "quantity_unit", "quantity", "original_units_per_quantity_unit", "rectangular_blank", "yield_fraction", "minimum_quantity", "unit_cost", "minimum_charge"]);
+    const c = record(item, p, [...supportKeys, "category", "allocation", "rate_kind", "original_unit", "quantity_unit", "quantity", "original_units_per_quantity_unit", "rectangular_blank", "yield_fraction", "minimum_quantity", "purchase_increment", "unit_cost", "minimum_charge"]);
     support(c, p, asOf, ids);
     choice(c.category, `${p}.category`, ["material", "outside", "other"]);
     choice(c.allocation, `${p}.allocation`, ["material_per_unit", "outside_per_unit", "setup_total"]);
@@ -304,10 +309,16 @@ function calculateCostBasis(value: unknown, quantity: number, asOf: string, flat
     const yieldFraction = number(c.yield_fraction, `${p}.yield_fraction`, true);
     if (compare(yieldFraction, whole(1)) > 0n) throw new Error(`${p}.yield_fraction must be <= 1`);
     const minimum = number(c.minimum_quantity, `${p}.minimum_quantity`);
+    const increment = c.purchase_increment === undefined ? undefined : number(c.purchase_increment, `${p}.purchase_increment`, true);
     const costs = range(c.unit_cost, `${p}.unit_cost`);
     const charge = range(c.minimum_charge, `${p}.minimum_charge`);
     justifyZero(c, p, costs.low.n === 0n);
-    const pricedQuantity = max(div(mul(q, conversion), yieldFraction), minimum);
+    const quantityBeforeIncrement = max(div(mul(q, conversion), yieldFraction), minimum);
+    let pricedQuantity = quantityBeforeIncrement;
+    if (increment) {
+      const multiples = div(pricedQuantity, increment);
+      pricedQuantity = mul(increment, fraction((multiples.n + multiples.d - 1n) / multiples.d, 1n));
+    }
     const total = mapRange(costs, (v, k) => max(mul(pricedQuantity, v), charge[k]));
     const allocation = c.allocation as Allocation;
     totals[allocation] = sumRange(totals[allocation], total);
@@ -315,7 +326,9 @@ function calculateCostBasis(value: unknown, quantity: number, asOf: string, flat
     components.push({ id: c.id as string, category: c.category as CostComponent["category"], allocation,
       priced_quantity: display(pricedQuantity, 6, p), total_cost: displayRange(total, 4, p),
       ...("rectangular_blank" in c ? { consumption: { method: "rectangular_blank" as const,
-        mass_per_blank: display(conversion, 8, p), mass_unit: c.original_unit as "kg" | "lb", blank_count: c.quantity as number } } : {}) });
+        mass_per_blank: display(conversion, 8, p), mass_unit: c.original_unit as "kg" | "lb", blank_count: c.quantity as number } } : {}),
+      ...(increment ? { purchase_rounding: { original_unit: c.original_unit as string,
+        quantity_before_increment: display(quantityBeforeIncrement, 6, p), increment: c.purchase_increment as number } } : {}) });
   }
   for (const [i, item] of list(root.routing, "cost_basis.routing", 64).entries()) {
     const p = `cost_basis.routing[${i}]`;
