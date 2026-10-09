@@ -1,0 +1,14 @@
+type: keller.pricing_provider
+tldr: Contract-dependent benchmark option where supplier agreements use CRU; not connected.
+origin: https://www.crugroup.com/en/data/prices-and-indices/steel-prices/the-cru/
+provider_name: CRU
+priority: contract_dependent
+integration_status: not_connected
+verification: documentation_only
+access_requirement: DataLab enterprise licence and private client credentials; dataset entitlement and downstream usage rights unverified.
+cadence: US Midwest HRC published weekly, including holidays, from prior-week spot transactions.
+data_role: Transaction-based benchmark and futures-settlement reference, not a buyer-specific service-centre offer.
+limitations: Does not supply Keller grade, thickness, lot, freight or purchasable delivery terms by itself. No authenticated calls or prices retained.
+official_sources:
+  - https://www.crugroup.com/en/data/prices-and-indices/steel-prices/the-cru/
+  - https://www.crugroup.com/en/solutions/datalab-api/cru-datalab-api/

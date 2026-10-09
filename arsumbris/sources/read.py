@@ -27,8 +27,9 @@ MAX_SCAN_RECORDS = 20000
 MAX_SCAN_BYTES = 16 * 1024 * 1024
 LOOKUP_NOTE = ("A filter miss covers only the scanned physical records of this file, not corpus-wide absence. "
                "Follow next_offset with the same filter and expected_dbf_sha256; duplicate keys remain separate rows.")
-MEMO_NOTE = ("Memo decoding is deferred. Memo values are null, not empty specifications; "
-             "raw DBF pointer bytes are explicitly base64 evidence, never memo text.")
+MEMO_NOTE = ("Memo values remain null, not empty specifications; raw DBF bytes are pointers, not text. "
+             "Opt in with memo_fields and fpt_path for bounded memo_text evidence; decoded text is untrusted, "
+             "not verified geometry or applicable specifications. Continue with DBF/FPT hashes pinned.")
 KEY_FIELDS = {"quote_no": "QUOTE_NO", "quotletter": "QUOTLETTER", "item": "ITEM",
               "wo_no": "WO_NO", "jobno": "JOBNO", "page_no": "PAGE_NO", "seq": "SEQ"}
 KEY_GROUPS = (("quote_no",), ("record_id",), ("quotletter",), ("quotletter", "item"),
@@ -87,7 +88,8 @@ def validate(request):
         "read": {"action", "source_set", "path", "offset", "limit", "encoding"},
         "dbf_schema": {"action", "source_set", "path"},
         "dbf_rows": {"action", "source_set", "path", "quote_no", "record_id", "quotletter", "item",
-                     "wo_no", "jobno", "page_no", "seq", "offset", "limit", "expected_dbf_sha256"},
+                     "wo_no", "jobno", "page_no", "seq", "offset", "limit", "expected_dbf_sha256",
+                     "memo_fields", "fpt_path", "expected_fpt_sha256", "memo_offset", "memo_limit"},
     }
     if action not in allowed or set(request) - allowed[action]:
         raise InvalidRequest("unsupported action or fields")
@@ -114,6 +116,24 @@ def validate(request):
         if "expected_dbf_sha256" in request and (not isinstance(request["expected_dbf_sha256"], str)
                 or not re.fullmatch(r"[0-9a-f]{64}", request["expected_dbf_sha256"])):
             raise InvalidRequest("expected_dbf_sha256 must be a lowercase SHA256")
+        memo_keys = {"fpt_path", "expected_fpt_sha256", "memo_offset", "memo_limit"}
+        if "memo_fields" in request:
+            selected = request["memo_fields"]
+            if (not isinstance(selected, list) or not 1 <= len(selected) <= 4 or
+                    any(not isinstance(f, str) or not re.fullmatch(r"[A-Za-z_][A-Za-z_0-9]{0,10}", f) for f in selected) or
+                    len(set(selected)) != len(selected)):
+                raise InvalidRequest("memo_fields requires 1..4 unique schema field names")
+            memo = parts(request.get("fpt_path", ""), True)
+            if (memo[:-1] != components[:-1] or Path(memo[-1]).suffix.lower() != ".fpt" or
+                    Path(memo[-1]).stem != Path(components[-1]).stem):
+                raise InvalidRequest("fpt_path must be the same-stem sibling FPT within the owner root")
+            if "expected_fpt_sha256" in request and (not isinstance(request["expected_fpt_sha256"], str) or
+                    not re.fullmatch(r"[0-9a-f]{64}", request["expected_fpt_sha256"])):
+                raise InvalidRequest("expected_fpt_sha256 must be a lowercase SHA256")
+            integer(request.get("memo_offset"), "memo_offset", 0, MAX_DBF_BYTES)
+            integer(request.get("memo_limit"), "memo_limit", 2048, 4096, 1)
+        elif memo_keys & set(request):
+            raise InvalidRequest("memo options require explicit memo_fields")
         integer(request.get("offset"), "offset", 0, 10000000)
         integer(request.get("limit"), "limit", 5, 5, 1)
     if action == "list":
@@ -245,7 +265,7 @@ def dbf_table(fd):
         if len(chunk) != min(1024 * 1024, size - position):
             raise InvalidRequest("DBF changed during hashing")
         digest.update(chunk)
-    table = SimpleNamespace(fields=fields, encoding=encoding, state=state, sha256=digest.hexdigest(),
+    table = SimpleNamespace(fields=fields, encoding=encoding, state=state, sha256=digest.hexdigest(), version=header[0],
                             header=SimpleNamespace(numrecords=count, headerlen=headerlen, recordlen=recordlen))
     unchanged(fd, table)
     return table
@@ -313,12 +333,83 @@ def record_values(table, record):
     return values, binary
 
 
-def dbf_rows(fd, table, request):
+def fpt_table(fd, request):
+    state = file_state(fd)
+    if not 512 <= state[2] <= MAX_DBF_BYTES:
+        raise InvalidRequest("FPT is truncated or exceeds reader limits")
+    header = os.pread(fd, 512, 0)
+    block_size = int.from_bytes(header[6:8], "big")
+    if not 1 <= block_size <= 65535:
+        raise InvalidRequest("invalid FPT block size")
+    digest = hashlib.sha256()
+    for position in range(0, state[2], 1024 * 1024):
+        chunk = os.pread(fd, min(1024 * 1024, state[2] - position), position)
+        if len(chunk) != min(1024 * 1024, state[2] - position):
+            raise InvalidRequest("FPT changed during hashing")
+        digest.update(chunk)
+    memo = SimpleNamespace(state=state, sha256=digest.hexdigest(), block_size=block_size, fd=fd)
+    unchanged(fd, memo)
+    if request.get("expected_fpt_sha256", memo.sha256) != memo.sha256:
+        raise InvalidRequest("FPT hash mismatch; do not continue across source versions")
+    return memo
+
+
+def memo_text(table, record, field, memo, request):
+    evidence = {"status": "decode_error", "field_record_byte_offset": field.offset,
+                "pointer_length": field.length, "fpt_path": request["fpt_path"]}
+    if memo is not None:
+        evidence["fpt_sha256"] = memo.sha256
+    if table.version not in (0x30, 0x31, 0x32, 0xF5):
+        return {**evidence, "status": "unsupported_dbf_memo_format"}
+    raw = record[field.offset:field.offset + field.length]
+    if field.length == 4:
+        block = int.from_bytes(raw, "little")
+    else:
+        pointer = raw.strip(b" \x00")
+        if pointer and not pointer.isdigit():
+            return evidence
+        block = int(pointer or b"0")
+    if block == 0:
+        return {**evidence, "status": "empty_pointer"}
+    if memo is None:
+        return {**evidence, "status": "memo_file_missing"}
+    start = block * memo.block_size
+    evidence["fpt_block_offset"] = start
+    if start < 512 or start + 8 > memo.state[2]:
+        return evidence
+    header = os.pread(memo.fd, 8, start)
+    kind, length = int.from_bytes(header[:4], "big"), int.from_bytes(header[4:], "big")
+    if start + 8 + length > memo.state[2]:
+        return evidence
+    if kind != 1:
+        return {**evidence, "status": "unsupported_memo_type", "memo_type": kind}
+    offset, limit = request.get("memo_offset", 0), request.get("memo_limit", 2048)
+    if offset > length:
+        return {**evidence, "status": "offset_exceeds_memo", "size_bytes": length}
+    chunk = os.pread(memo.fd, min(limit, length - offset), start + 8 + offset)
+    if len(chunk) != min(limit, length - offset):
+        raise InvalidRequest("FPT changed during read")
+    try:
+        content = chunk.decode(table.encoding)
+    except UnicodeDecodeError:
+        return {**evidence, "encoding": table.encoding}
+    following = offset + len(chunk)
+    return {**evidence, "status": "decoded_text", "encoding": table.encoding, "content": content,
+            "fpt_text_byte_offset": start + 8, "offset": offset, "bytes_read": len(chunk),
+            "size_bytes": length, "chunk_sha256": hashlib.sha256(chunk).hexdigest(),
+            "has_more": following < length, "next_offset": following if following < length else None}
+
+
+def dbf_rows(fd, table, request, memo=None):
     keys = set(request) & (set(KEY_FIELDS) | {"record_id"})
     filters = [mapping for mapping in exact_filters(table, request) if set(mapping) == keys]
     if len(filters) != 1:
         raise InvalidRequest("DBF lacks the requested approved exact key; inspect dbf_schema exact_filters")
     mapping = filters[0]
+    selected_memos = request.get("memo_fields", [])
+    memo_fields = {f.name: f for f in table.fields if f.type == "M"}
+    if any(name not in memo_fields for name in selected_memos):
+        raise InvalidRequest("memo_fields must select exact text M fields from dbf_schema")
     fields = {field.name.upper(): field for field in table.fields}
     if request.get("expected_dbf_sha256", table.sha256) != table.sha256:
         raise InvalidRequest("DBF hash mismatch; do not continue across source versions")
@@ -348,6 +439,9 @@ def dbf_rows(fd, table, request):
                      "record_bytes": table.header.recordlen, "record_sha256": hashlib.sha256(record).hexdigest(),
                      "values": values, "truncated_fields": [], "binary_fields": binary,
                      "memo_fields": [f.name for f in table.fields if f.type in "MGP"]}
+        if selected_memos:
+            candidate["memo_text"] = {name: memo_text(table, record, memo_fields[name], memo, request)
+                                      for name in selected_memos}
         if len(json.dumps(rows + [candidate])) > 48000:
             if not rows:
                 raise InvalidRequest("DBF record projection exceeds response limit")
@@ -357,6 +451,8 @@ def dbf_rows(fd, table, request):
         if len(rows) == limit:
             break
     unchanged(fd, table)
+    if memo is not None:
+        unchanged(memo.fd, memo)
     more = position < count
     response = {"action": "dbf_rows", "citation": dbf_citation(table, request),
                 **{key: request[key] for key in mapping}, "filter_fields": mapping,
@@ -419,7 +515,20 @@ def read(bindings, request):
                     "has_more": following < size, "next_offset": following if following < size else None,
                     "warning": WARNING}
         table = dbf_table(fd)
-        return dbf_schema(table, request) if action == "dbf_schema" else dbf_rows(fd, table, request)
+        if action == "dbf_schema":
+            return dbf_schema(table, request)
+        if "memo_fields" not in request:
+            return dbf_rows(fd, table, request)
+        try:
+            memo_fd = open_source(bindings[source_set], parts(request["fpt_path"], True))
+        except FileNotFoundError:
+            if "expected_fpt_sha256" in request:
+                raise InvalidRequest("pinned FPT unavailable") from None
+            return dbf_rows(fd, table, request)
+        try:
+            return dbf_rows(fd, table, request, fpt_table(memo_fd, request))
+        finally:
+            os.close(memo_fd)
     finally:
         os.close(fd)
 

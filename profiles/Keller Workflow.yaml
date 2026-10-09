@@ -8,6 +8,7 @@ skills:
   - "[[keller-data-analysis]]"
 inject:
   - "[[keller-orientation]]"
+  - "[[keller-production-quote-memory]]"
 tools:
   - "[[mcp.tool.au_files::au-mcp-core]]"
   - "[[mcp.tool.au_instances_of::au-mcp-core]]"

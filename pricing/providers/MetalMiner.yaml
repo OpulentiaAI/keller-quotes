@@ -1,0 +1,14 @@
+type: keller.pricing_provider
+tldr: Parallel procurement and should-cost evaluation candidate; documented MCP, not connected.
+origin: https://agmetalminer.com/mcp-metal-prices/
+provider_name: MetalMiner
+priority: parallel_evaluation
+integration_status: not_connected
+verification: documentation_only
+access_requirement: OAuth 2.0 MetalMiner account via https://mcp.metalminer.com/mcp; production-cost, forecast and scenario tools require premium entitlement. Confirm downstream and AI-use licensing.
+cadence: Provider advertises live data; per-steel-series assessment schedule and source freshness not independently established.
+data_role: Industrial-metal prices, forecasts, analyst research and modeled regional production costs; should-cost is an estimate, not Keller actual cost.
+limitations: Public examples do not define authenticated tool schemas. Must discover and allowlist actual schemas after connection; verify units, dates, regions and applicable grade/form/quantity before reviewed use. No authenticated result or measured quality comparison.
+official_sources:
+  - https://agmetalminer.com/metals-101/should-cost-model/
+  - https://agmetalminer.com/mcp-metal-prices/

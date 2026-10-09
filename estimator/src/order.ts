@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { reconcileCostBasis, type CostBasis, type CostBreakdown } from "./costing.js";
+import { assertEngineeringLine, assertIntake, type EngineeringFact, type Intake, type OriginalUom, type SourceEvidence } from "./intake.js";
+import { deriveCostBasis, reconcileCostBasis, type CostBasis, type CostBreakdown } from "./costing.js";
 import { estimate } from "./estimate.js";
 import { drawingNumber } from "./evidence.js";
 import { JevClient } from "./jev.js";
@@ -8,11 +9,15 @@ import type { EvidenceStatus, LineEstimate, PartRequest, ProposalStatus } from "
 
 export type OrderPricing =
   | { method: "unit_price"; unit_price: number; reason: string }
-  | { method: "cost_plus"; material_per_unit: number; labor_per_unit: number; outside_per_unit: number; setup_total: number; margin_pct: number; reason: string; cost_basis?: CostBasis };
+  | { method: "cost_plus"; material_per_unit: number; labor_per_unit: number; outside_per_unit: number; setup_total: number; margin_pct: number; reason: string; cost_basis?: CostBasis }
+  | { method: "should_cost"; cost_basis: CostBasis; margin_pct: number; reason: string };
 
 export interface OrderLineRequest extends PartRequest {
   line_id: string;
   pricing?: OrderPricing;
+  uom?: OriginalUom;
+  geometry?: EngineeringFact[];
+  source_evidence?: SourceEvidence[];
 }
 
 export interface OrderRequest {
@@ -21,6 +26,7 @@ export interface OrderRequest {
   customer: string;
   customer_id?: string;
   rfq_no?: string;
+  intake?: Intake;
   parts: OrderLineRequest[];
   charges?: { shipping?: number | null; tax?: number | null };
   additional_charges?: { label: string; amount: number }[];
@@ -29,7 +35,7 @@ export interface OrderRequest {
 
 export interface PricedOrderLine {
   line_id: string;
-  part: PartRequest;
+  part: Omit<OrderLineRequest, "line_id" | "pricing">;
   unit_price: number | null;
   extended_price: number | null;
   pricing_source: "historical_analog" | "explicit_unit_price" | "cost_build_up" | "unpriced";
@@ -62,7 +68,7 @@ export interface PricedOrder {
   total: number | null;
   blockers: string[];
   warnings: string[];
-  provenance: { request_sha256: string; register_sha256: string; as_of: string; mode: "offline" };
+  provenance: { request_sha256: string; register_sha256: string | null; as_of: string; mode: "offline" };
 }
 
 function object(value: unknown, path: string, keys: string[]): Record<string, unknown> {
@@ -127,7 +133,8 @@ function extend(unit4: bigint, quantity: number, path: string): bigint {
 }
 
 export function assertOrderRequest(request: unknown): asserts request is OrderRequest {
-  const req = object(request, "request", ["order_id", "quote_date", "customer", "customer_id", "rfq_no", "parts", "charges", "additional_charges", "notes"]);
+  const req = object(request, "request", ["order_id", "quote_date", "customer", "customer_id", "rfq_no", "parts", "charges", "additional_charges", "notes", "intake"]);
+  if (req.intake !== undefined) assertIntake(req.intake);
   text(req.order_id, "request.order_id", true);
   date(req.quote_date);
   text(req.customer, "request.customer", true);
@@ -136,7 +143,7 @@ export function assertOrderRequest(request: unknown): asserts request is OrderRe
   const ids = new Set<string>();
   for (const [i, item] of req.parts.entries()) {
     const path = `request.parts[${i}]`;
-    const part = object(item, path, ["line_id", "part_no", "description", "quantity", "material", "finish", "revision", "drawing_no", "drawing_revision", "drawing_ref", "notes", "pricing"]);
+    const part = object(item, path, ["line_id", "part_no", "description", "quantity", "material", "finish", "revision", "drawing_no", "drawing_revision", "drawing_ref", "notes", "pricing", "uom", "geometry", "source_evidence"]);
     text(part.line_id, `${path}.line_id`, true);
     if (ids.has(part.line_id as string)) throw new Error(`duplicate line_id: ${part.line_id}`);
     ids.add(part.line_id as string);
@@ -164,8 +171,15 @@ export function assertOrderRequest(request: unknown): asserts request is OrderRe
           material_per_unit: pricing.material_per_unit as number, labor_per_unit: pricing.labor_per_unit as number,
           outside_per_unit: pricing.outside_per_unit as number, setup_total: pricing.setup_total as number,
         });
+      } else if (pricing.method === "should_cost") {
+        if (Object.keys(pricing).some((key) => !["method", "cost_basis", "margin_pct", "reason"].includes(key))) throw new Error(`${path}.pricing has invalid should_cost fields`);
+        if (typeof pricing.margin_pct !== "number" || !Number.isFinite(pricing.margin_pct) || pricing.margin_pct < 0 || pricing.margin_pct >= 100) {
+          throw new Error(`${path}.pricing.margin_pct must be finite and between 0 and 100 (exclusive)`);
+        }
+        deriveCostBasis(pricing.cost_basis, part.quantity as number, req.quote_date);
       } else throw new Error(`${path}.pricing.method is not supported`);
     }
+    assertEngineeringLine(part, req.intake as Intake | undefined);
   }
   if (req.charges !== undefined) {
     const charges = object(req.charges, "request.charges", ["shipping", "tax"]);
@@ -182,17 +196,31 @@ export function assertOrderRequest(request: unknown): asserts request is OrderRe
   }
 }
 
-export async function buildPricedOrder(reg: QuoteRegister, request: unknown, options: { registerSha256: string }): Promise<PricedOrder> {
+/** Validation must precede routing: incomplete/invalid costs never silently fall back to history. */
+export function requiresHistoricalRegister(request: unknown): boolean {
   assertOrderRequest(request);
-  if (!options || typeof options.registerSha256 !== "string" || !/^[a-f\d]{64}$/i.test(options.registerSha256)) {
-    throw new Error("registerSha256 must be a 64-character hex digest");
+  return request.parts.some(part => part.pricing === undefined);
+}
+
+export async function buildPricedOrder(reg: QuoteRegister, request: unknown, options: { registerSha256: string | null }): Promise<PricedOrder> {
+  assertOrderRequest(request);
+  if (!options || (options.registerSha256 !== null &&
+      (typeof options.registerSha256 !== "string" || !/^[a-f\d]{64}$/i.test(options.registerSha256)))) {
+    throw new Error("registerSha256 must be a 64-character hex digest or null for fully supplied pricing");
+  }
+  if (options.registerSha256 === null && requiresHistoricalRegister(request)) {
+    throw new Error("Historical or mixed requests require an explicit register");
   }
   const requestSha = createHash("sha256").update(JSON.stringify(request)).digest("hex");
   const lines: PricedOrderLine[] = [];
   const blockers: string[] = [];
   const warnings: string[] = [];
   let pricedCents = 0n;
-  for (const { line_id, pricing, ...part } of request.parts) {
+  for (const { line_id, pricing: requestedPricing, ...part } of request.parts) {
+    const pricing = requestedPricing?.method === "should_cost"
+      ? { ...requestedPricing, method: "cost_plus" as const,
+        ...deriveCostBasis(requestedPricing.cost_basis, part.quantity, request.quote_date).reconciled_flat }
+      : requestedPricing;
     let unit4: bigint | null = null;
     let pricing_source: PricedOrderLine["pricing_source"] = "unpriced";
     let pricing_reason = "No usable historical price; operator pricing required";
@@ -224,6 +252,7 @@ export async function buildPricedOrder(reg: QuoteRegister, request: unknown, opt
       pricing_source = "cost_build_up";
       pricing_reason = pricing.reason;
       lineWarnings = ["Operator-supplied cost inputs and margin are a proposal, not approval"];
+      if (requestedPricing?.method === "should_cost") lineWarnings.push("Should-cost derived from supplied engineering worksheet, not historical analog transfer; source support still requires review");
       proposal_status = "NUMERIC_PROVISIONAL";
       evidence_status = "OPERATOR_INPUT";
       next_action = "Human review required before approval; verify operator costs, margin, and assumptions";
@@ -248,6 +277,12 @@ export async function buildPricedOrder(reg: QuoteRegister, request: unknown, opt
         proposal_status = "NUMERIC_PROVISIONAL";
       }
     }
+    if (part.geometry?.length || part.source_evidence?.length) {
+      lineWarnings.push("Retained/extracted engineering evidence is untrusted input, not verified geometry or automatic compatibility");
+      for (const fact of part.geometry ?? []) if (["unknown", "conflict", "assumed"].includes(fact.applicability)) {
+        uncertainties.push(`Engineering ${fact.field}: ${fact.applicability}; human scope/applicability review required`);
+      }
+    }
     const cents = unit4 === null ? null : extend(unit4, part.quantity, `line ${line_id}`);
     const costBreakdown = pricing?.method === "cost_plus" && pricing.cost_basis !== undefined
       ? reconcileCostBasis(pricing.cost_basis, part.quantity, request.quote_date, pricing,
@@ -257,6 +292,14 @@ export async function buildPricedOrder(reg: QuoteRegister, request: unknown, opt
       lineWarnings.push(...costBreakdown.warnings);
       uncertainties.push(...costBreakdown.supplied_basis.unresolved_assumptions);
       next_action = "Human review required before release; verify supplied worksheet sources, scope, cost ranges, exclusions and unresolved assumptions";
+    }
+    const engineeringConflicts = (part.geometry ?? []).filter(fact => fact.applicability === "conflict");
+    if (engineeringConflicts.length) {
+      // Never make completion depend on whether a worksheet happened to link the conflicting fact.
+      // Preserve the proposed/comparison amount but prohibit adoption/completion on every pricing path.
+      blockers.push(...engineeringConflicts.map(fact => `line ${line_id} explicit engineering conflict: ${fact.field}`));
+      next_action = "Resolve explicit engineering conflict before adoption or release; any numeric amount is comparison only";
+      lineWarnings.push("Explicit engineering conflict blocks order completion even when supplied costs or historical arithmetic are complete");
     }
     if (cents !== null) pricedCents = BigInt(safe(pricedCents + cents, "priced_subtotal"));
     else blockers.push(`line ${line_id} is unpriced`);
@@ -280,7 +323,7 @@ export async function buildPricedOrder(reg: QuoteRegister, request: unknown, opt
     currency: "USD", state: blockers.length ? "BLOCKED" : "PRICED_REQUIRES_REVIEW", requires_human_review: true,
     lines, charges: { shipping, tax }, additional_charges: request.additional_charges ?? [],
     priced_subtotal: amount(pricedCents, 2, "priced_subtotal"), subtotal, total, blockers, warnings,
-    provenance: { request_sha256: requestSha, register_sha256: options.registerSha256.toLowerCase(), as_of: request.quote_date, mode: "offline" },
+    provenance: { request_sha256: requestSha, register_sha256: options.registerSha256?.toLowerCase() ?? null, as_of: request.quote_date, mode: "offline" },
   };
 }
 
@@ -298,6 +341,7 @@ export function renderOrderMarkdown(order: PricedOrder): string {
     `Customer ID: ${md(order.request.customer_id)}  `,
     `RFQ: ${md(order.request.rfq_no)}  `,
     `Order notes: ${md(order.request.notes)}  `,
+    ...(order.request.intake ? [`Retained intake (untrusted source bytes, not authenticated geometry): ${md(JSON.stringify(order.request.intake))}  `] : []),
     `State: ${md(order.state)} — human review required`, "",
     "| Line | Part / description | Qty | Unit price | Extended | Source | Proposal | Evidence | Next action |",
     "| --- | --- | ---: | ---: | ---: | --- | --- | --- | --- |",

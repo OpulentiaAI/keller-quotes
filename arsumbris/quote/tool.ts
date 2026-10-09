@@ -35,11 +35,11 @@ function childEnvironment(): NodeJS.ProcessEnv {
   return env
 }
 
-function valid(input: unknown): input is { corpus: string; request: string; reviewer: string; evaluation_scope_path?: string; evaluation_scope_sha256?: string } {
+function valid(input: unknown): input is { corpus?: string; request: string; reviewer: string; evaluation_scope_path?: string; evaluation_scope_sha256?: string } {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return false
   const value = input as Record<string, unknown>
   return Object.keys(value).every(key => ['corpus', 'request', 'reviewer', 'evaluation_scope_path', 'evaluation_scope_sha256'].includes(key)) &&
-    typeof value.corpus === 'string' && /^[a-f0-9]{64}$/.test(value.corpus) &&
+    (value.corpus === undefined || typeof value.corpus === 'string' && /^[a-f0-9]{64}$/.test(value.corpus)) &&
     typeof value.request === 'string' && value.request.length > 0 && Buffer.byteLength(value.request) <= 128 * 1024 &&
     typeof value.reviewer === 'string' && value.reviewer.trim().length > 0 && value.reviewer.length <= 120 &&
     !/[\x00-\x1f\x7f]/.test(value.reviewer) &&
@@ -52,7 +52,7 @@ function valid(input: unknown): input is { corpus: string; request: string; revi
 export function createPlugin(_ctx: PluginContext): PluginRuntime {
   return {
     async invoke(input: unknown): Promise<CallableResult> {
-      if (!valid(input)) return { content: { error: 'Explicit corpus, OrderRequest JSON and named reviewer are required' }, isError: true }
+      if (!valid(input)) return { content: { error: 'OrderRequest JSON and named reviewer required; corpus is optional only for fully supplied pricing' }, isError: true }
       let request: unknown
       try {
         request = JSON.parse(input.request)
@@ -63,7 +63,6 @@ export function createPlugin(_ctx: PluginContext): PluginRuntime {
       } catch {
         return { content: { error: 'Invalid OrderRequest JSON (maximum 50 parts)' }, isError: true }
       }
-      if (!process.env.POLYGRES_DIRECT_URL) return { content: { error: 'Polygres read access is not configured' }, isError: true }
       let draft: string | undefined
       try {
         if (input.evaluation_scope_path && input.evaluation_scope_sha256) {
@@ -83,41 +82,56 @@ export function createPlugin(_ctx: PluginContext): PluginRuntime {
         const requestSha = createHash('sha256').update(requestJson).digest('hex')
         writeFileSync(requestPath, requestJson, { flag: 'wx', mode: 0o600 })
         const childEnv = childEnvironment()
-        await run(process.execPath, [tsx, join(root, 'arsumbris/quote/validate.ts'), requestPath], {
+        const validation = await run(process.execPath, [tsx, join(root, 'arsumbris/quote/validate.ts'), requestPath], {
           cwd: root, env: childEnv, timeout: 15000, maxBuffer: 1024,
         })
-        const { stdout } = await run(python, [join(root, 'arsumbris/quote/export.py'), input.corpus, csvPath], {
-          cwd: root, env: { ...childEnv, POLYGRES_DIRECT_URL: process.env.POLYGRES_DIRECT_URL },
-          timeout: 180000, maxBuffer: 4096,
-        })
-        const exported = JSON.parse(stdout) as { sha256?: string; rows?: number }
-        const csvStat = lstatSync(csvPath)
-        if (!csvStat.isFile() || csvStat.isSymbolicLink() || csvStat.uid !== process.getuid?.() ||
-            (csvStat.mode & 0o777) !== 0o600) throw new Error('invalid private corpus export')
-        const exportSha = createHash('sha256').update(readFileSync(csvPath)).digest('hex')
-        if (exported.sha256 !== exportSha || !Number.isSafeInteger(exported.rows)) throw new Error('invalid export proof')
+        const needsRegister = JSON.parse(validation.stdout).requires_register
+        if (typeof needsRegister !== 'boolean') throw new Error('invalid validation result')
+        // An explicitly selected corpus is never silently ignored. Scoped calls always export/filter.
+        if ((needsRegister || input.evaluation_scope_path) && !input.corpus) throw new Error('explicit historical corpus required')
+        let exportSha: string | null = null
+        let sourceRows = 0
+        if (input.corpus) {
+          if (!process.env.POLYGRES_DIRECT_URL) throw new Error('Polygres read access is not configured')
+          const { stdout } = await run(python, [join(root, 'arsumbris/quote/export.py'), input.corpus, csvPath], {
+            cwd: root, env: { ...childEnv, POLYGRES_DIRECT_URL: process.env.POLYGRES_DIRECT_URL },
+            timeout: 180000, maxBuffer: 4096,
+          })
+          const exported = JSON.parse(stdout) as { sha256?: string; rows?: number }
+          const csvStat = lstatSync(csvPath)
+          if (!csvStat.isFile() || csvStat.isSymbolicLink() || csvStat.uid !== process.getuid?.() ||
+              (csvStat.mode & 0o777) !== 0o600) throw new Error('invalid private corpus export')
+          exportSha = createHash('sha256').update(readFileSync(csvPath)).digest('hex')
+          if (exported.sha256 !== exportSha || !Number.isSafeInteger(exported.rows) || exported.rows! < 0) throw new Error('invalid export proof')
+          sourceRows = exported.rows!
+        }
         const scoped = input.evaluation_scope_path && input.evaluation_scope_sha256
           ? scopedRegister(input.evaluation_scope_path, input.evaluation_scope_sha256, root, input.corpus,
             request, input.reviewer, csvPath, exportSha, join(draft, 'scoped-corpus.csv')) : undefined
-        const registerPath = scoped ? join(draft, 'scoped-corpus.csv') : csvPath
+        const registerPath = scoped ? join(draft, 'scoped-corpus.csv') : input.corpus ? csvPath : undefined
         const corpusSha = scoped?.sha256 ?? exportSha
         scoped?.verify()
         if (readFileSync(requestPath, 'utf8') !== requestJson) throw new Error('request changed before pricing')
         try {
           await run(process.execPath, [tsx, join(root, 'estimator/src/order-cli.ts'), requestPath,
-            '--register', registerPath, '--out', out], { cwd: root, env: childEnv, timeout: 180000, maxBuffer: 4096 })
+            ...(registerPath ? ['--register', registerPath] : []), '--out', out], { cwd: root, env: childEnv, timeout: 180000, maxBuffer: 4096 })
         } catch (error) {
           if ((error as { code?: number }).code !== 3) throw error
         }
         scoped?.verify()
+        if ((request as { intake?: unknown }).intake) {
+          await run(process.execPath, [tsx, join(root, 'arsumbris/quote/validate.ts'), requestPath], {
+            cwd: root, env: childEnv, timeout: 15000, maxBuffer: 1024,
+          })
+        }
         if (readFileSync(requestPath, 'utf8') !== requestJson) throw new Error('request changed during pricing')
-        if (createHash('sha256').update(readFileSync(registerPath)).digest('hex') !== corpusSha) throw new Error('register changed during pricing')
+        if (registerPath && createHash('sha256').update(readFileSync(registerPath)).digest('hex') !== corpusSha) throw new Error('register changed during pricing')
         const jsonPath = join(out, 'order.json')
         const markdownPath = join(out, 'order.md')
         let order = JSON.parse(readFileSync(jsonPath, 'utf8')) as {
           request: unknown;
           state: string; total: number | null; blockers: string[]; requires_human_review: boolean;
-          provenance: { register_sha256: string; request_sha256: string; mode: string };
+          provenance: { register_sha256: string | null; request_sha256: string; mode: string };
           lines: { pricing_source: string }[];
         }
         if (!['BLOCKED', 'PRICED_REQUIRES_REVIEW'].includes(order.state) || order.requires_human_review !== true ||
@@ -135,7 +149,7 @@ export function createPlugin(_ctx: PluginContext): PluginRuntime {
         writeFileSync(reviewPath, JSON.stringify({
           status: 'PENDING_NAMED_HUMAN_REVIEW', reviewer: input.reviewer.trim(),
           requires_human_review: true, customer_release_authorized: false, state: order.state,
-          corpus_id: input.corpus, corpus_sha256: corpusSha, request_sha256: order.provenance.request_sha256,
+          corpus_id: input.corpus ?? null, corpus_sha256: corpusSha, request_sha256: order.provenance.request_sha256,
           warning, ...(scoped ? { evaluation_scope_sha256: input.evaluation_scope_sha256, source_rows: scoped.rows } : {}),
         }, null, 2) + '\n', { flag: 'wx', mode: 0o600 })
         const markdown = readFileSync(markdownPath, 'utf8')
@@ -148,7 +162,7 @@ export function createPlugin(_ctx: PluginContext): PluginRuntime {
           requires_human_review: true, total: order.total, blockers: order.blockers,
           order, markdown, review,
           price_bases: [...new Set(order.lines.map(line => line.pricing_source))],
-          warning, corpus_id: input.corpus, corpus_sha256: corpusSha, source_rows: scoped?.rows ?? exported.rows,
+          warning, corpus_id: input.corpus ?? null, corpus_sha256: corpusSha, source_rows: scoped?.rows ?? sourceRows,
           ...(scoped ? { evaluation_scope_sha256: input.evaluation_scope_sha256 } : {}),
           request_sha256: order.provenance.request_sha256,
           artifacts: { order_json: `quote-draft:${id}/order.json`, order_markdown: `quote-draft:${id}/order.md`,

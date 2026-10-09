@@ -10,6 +10,8 @@ Use the [[premise - Keller operator findings]] to check the publication and acti
 
 ## Git-linked access
 
+[[map - Steve should-cost and retrieval lanes]] tracks the separate 2026-10-09 provider, non-analog costing and isolated retrieval work without changing this graph's earlier findings.
+
 [[Keller Git delivery and private artifact access 2026-10-07]] connects this graph to pinned code checkpoints and authenticated private evidence recovery.
 The [[git-evidence-access]] guide explains downloads, checksum validation and the unchanged operator/worker boundary.
 
@@ -32,3 +34,4 @@ The [[git-evidence-access]] guide explains downloads, checksum validation and th
 [[Workflow recovery and correct holds are not completed priced quotes]] connects the reconstructed trajectories and development iterations while preserving their denominators and adopted-price distinction.
 [[Blinded evaluations require content isolation and untouched confirmation sources]] records the observed exposure channels and the need for separate clean confirmation.
 [[Typed runtime and synthetic tests do not establish live quoting accuracy]] distinguishes engineering verification, controlled knowledge maintenance and the independent release gates.
+[[Steve production repair verification 2026-10-09]] records reproduced native handoff defects, source-to-review execution and the remaining present-job commercial inputs.

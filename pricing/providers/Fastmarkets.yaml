@@ -1,0 +1,17 @@
+type: keller.pricing_provider
+tldr: Primary benchmark API evaluation candidate; disabled adapter, no authenticated price result.
+origin: https://www.fastmarkets.com/platform/api/
+provider_name: Fastmarkets
+priority: primary_evaluation
+integration_status: implemented_disabled
+verification: synthetic_tests
+access_requirement: Permissioned bearer token plus owner-confirmed API, derived-pricing, display and AI-use licence; not yet verified.
+cadence: MB-STE-0184 daily; MB-STE-0185 weekly; MB-STE-0883 weekly. Delivery speed does not increase assessment frequency.
+data_role: Physical steel assessments in USD/cwt, FOB mill US; low/mid/high, assessment timestamp and revision preserved.
+limitations: Not delivered supplier offers; grade, gauge, coating extras, quantity, service-centre premium, freight, validity and stock availability require applicable evidence. No authenticated endpoint tested.
+official_sources:
+  - https://help.fastmarkets.com/en_US/fastmarkets-physical-prices-api
+  - https://www.fastmarkets.com/data-licensing/
+  - https://www.fastmarkets.com/commodity-prices/steel-hot-rolled-coil-index-fob-mill-us-midwest-dollar-cwt-mb-ste-0184/
+  - https://www.fastmarkets.com/commodity-prices/steel-cold-rolled-coil-fob-mill-us-dollar-cwt-mb-ste-0185/
+  - https://www.fastmarkets.com/commodity-prices/steel-hot-dipped-galvanized-coil-hot-rolled-base-fob-mill-us-dollar-cwt-mb-ste-0883/

@@ -11,10 +11,12 @@ import { exchange, openAudit, parseArgs, parseRequest } from '../call-arsumbris-
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const cli = join(repo, 'scripts/call-arsumbris-tool.mjs')
 
-test('workflow profile keeps Codex skills, inject, and eleven tools but uses CC and no native tools', () => {
+test('workflow profile keeps core Codex tools and guidance but excludes operator-only market access', () => {
   const codex = readFileSync(join(repo, 'profiles/Keller Codex.yaml'), 'utf8')
   const workflow = readFileSync(join(repo, 'profiles/Keller Workflow.yaml'), 'utf8')
-  assert.equal(workflow, codex.replace('mcp.adapter.codex::au-mcp-adapter-codex', 'mcp.adapter.cc::au-mcp-adapter-cc'))
+  assert.equal(workflow, codex.replace('mcp.adapter.codex::au-mcp-adapter-codex', 'mcp.adapter.cc::au-mcp-adapter-cc')
+    .replace('  - "[[mcp.tool.keller_market]]"\n', ''))
+  assert.doesNotMatch(workflow, /mcp\.tool\.keller_market/)
   assert.match(workflow, /nativeToolAllowlist: \[\]/)
 })
 
