@@ -20,4 +20,5 @@ tools:
   - "[[mcp.tool.keller_polygres]]"
   - "[[mcp.tool.keller_quote]]"
   - "[[mcp.tool.keller_sources]]"
+  - "[[mcp.tool.keller_knowledge]]"
 nativeToolAllowlist: []

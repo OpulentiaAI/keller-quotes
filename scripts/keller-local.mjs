@@ -18,6 +18,13 @@ const value = (name, fallback) => {
 const register = resolve(value('--register', join(repo, 'quotes.csv')));
 const workspace = resolve(value('--workspace', join(repo, '.keller-local')));
 const fixture = resolve(value('--fixture', join(repo, 'estimator/examples/request.json')));
+const maxJobsRaw = value('--max-jobs', '10');
+const timeoutRaw = value('--timeout-ms', '30000');
+const budgetRaw = value('--budget-ms', '120000');
+const maxJobs = Number(maxJobsRaw);
+const timeoutMs = Number(timeoutRaw);
+const budgetMs = Number(budgetRaw);
+let deadline;
 const runner = join(repo, 'estimator/node_modules/tsx/dist/cli.mjs');
 const cli = join(repo, 'estimator/src/cli.ts');
 const sha = (bytes) => createHash('sha256').update(bytes).digest('hex');
@@ -31,6 +38,7 @@ const estimate = (request) => {
   delete env.AI_GATEWAY_API_KEY;
   const result = spawnSync(process.execPath, [runner, cli, request, '--offline', '--register', register], {
     cwd: repo, env, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024,
+    timeout: Math.max(1, Math.min(timeoutMs, deadline === undefined ? timeoutMs : deadline - Date.now())),
   });
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error((result.stderr || `estimator exit ${result.status}`).trim());
@@ -106,8 +114,15 @@ const verifyDraft = (key, inputSha, registerSha, bytes, draftPath, proofPath, re
 
 try {
   if (!['onboard', 'cycle'].includes(command) || args.length % 2 || args.some((arg, i) =>
-    i % 2 === 0 ? !['--register', '--workspace', '--fixture'].includes(arg) : arg.startsWith('--'))) {
-    throw new Error('usage: node scripts/keller-local.mjs <onboard|cycle> [--workspace DIR] [--register CSV] [--fixture REQUEST]');
+    i % 2 === 0 ? !['--register', '--workspace', '--fixture', '--max-jobs', '--timeout-ms', '--budget-ms'].includes(arg) : arg.startsWith('--'))) {
+    throw new Error('usage: node scripts/keller-local.mjs <onboard|cycle> [--workspace DIR] [--register CSV] [--fixture REQUEST] [--max-jobs N] [--timeout-ms N] [--budget-ms N]');
+  }
+  if (args.filter((arg, i) => i % 2 === 0).some((arg, i, flags) => flags.indexOf(arg) !== i)) throw new Error('duplicate options');
+  for (const [name, raw, number, maximum] of [
+    ['--max-jobs', maxJobsRaw, maxJobs, 100], ['--timeout-ms', timeoutRaw, timeoutMs, 120000],
+    ['--budget-ms', budgetRaw, budgetMs, 900000],
+  ]) if (!/^[1-9]\d*$/.test(raw) || !Number.isSafeInteger(number) || number > maximum) {
+    throw new Error(`${name} must be an integer from 1 to ${maximum}`);
   }
   if (Number(process.versions.node.split('.')[0]) < 24) throw new Error('Node 24 or newer is required');
   if (!existsSync(register) || !statSync(register).isFile()) throw new Error(`quote register not found: ${register}`);
@@ -129,8 +144,11 @@ try {
     }));
   } else {
     const registerSha = sha(readFileSync(register));
-    const cycle = { drafted: [], duplicate: [], claimed: [], held: [], failed: [] };
+    const cycle = { drafted: [], duplicate: [], claimed: [], held: [], failed: [], deferred: [] };
+    let attempted = 0;
+    deadline = Date.now() + budgetMs;
     for (const file of readdirSync(dir('inbox'), { withFileTypes: true }).filter((entry) => entry.isFile() && entry.name.endsWith('.json')).sort((a, b) => a.name.localeCompare(b.name))) {
+      if (Date.now() >= deadline) { cycle.deferred.push(file.name); continue; }
       const input = join(dir('inbox'), file.name);
       const bytes = readFileSync(input);
       const inputSha = sha(bytes);
@@ -159,6 +177,8 @@ try {
           }
           continue;
         }
+        if (attempted >= maxJobs) { cycle.deferred.push(file.name); continue; }
+        attempted++;
         const snapshot = join(lock.path, 'input.json');
         writeFileSync(snapshot, bytes, { flag: 'wx' });
         const quote = estimate(snapshot);

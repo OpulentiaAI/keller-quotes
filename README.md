@@ -11,7 +11,7 @@ A historical quote evidence register and an Ars Umbris workspace for C. Keller M
 
 ## How to use this
 
-Start with [the Ars Umbris workspace guide](docs/arsumbris-workspace.md) or the five canonical workflows in `.agents/skills/`. All quoted prices and internal proposals require a named human reviewer before any customer release.
+Start with [the Ars Umbris workspace guide](docs/arsumbris-workspace.md) or the canonical workflows in `.agents/skills/`. For private onboarding, operator feedback, reviewed knowledge and measured improvement, use [the learning-environment guide](docs/keller-learning-environment.md). All quoted prices and internal proposals require a named human reviewer before any customer release.
 
 The `Keller Codex` profile has bounded read-only Polygres and private-source tools plus `keller_quote` for an offline internal order draft. Its structured order, Markdown, and review output remains private; the tool does not approve or send a quote, and it does not establish the ≥90% completed-quoting goal.
 

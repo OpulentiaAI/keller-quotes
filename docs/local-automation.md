@@ -55,3 +55,9 @@ If a request is invalid, `held/<job-key>.json` records `HELD_INVALID_REQUEST`; c
 The [single canonical host prompt](host-automation-prompt.md) is read directly by `scripts/export-host-automation.mjs`; do not maintain a second copy inside an automation UI. The owner/host chooses the approved request source and writes it atomically to the inbox. The prompt handles capability renewal, the local cycle, held/failed branches, and manual review without sending a quote.
 
 DB refresh is separate from the offline quote worker. Only an operator with an approved source extract should run `scripts/load.py` against a disposable or authorized direct PostgreSQL endpoint; embeddings require separate authorized model access. The CSV worker does not query Polygres. The brand overlay in `brand/ckeller/au-host` is not a host integration or runnable scheduler.
+
+## Bounded execution and separate learning
+
+The local worker now defaults to at most 10 new estimator attempts per cycle, a 30-second subprocess timeout and a 120-second cycle budget. Use explicit `--max-jobs`, `--timeout-ms` and `--budget-ms` within their validated limits when the owner approves different bounds. `deferred` means work remains for a later invocation; it is neither a hold nor a completed draft. Verified duplicates do not consume the new-estimation budget, so repeated old inbox files do not starve later new jobs. A timed-out estimator appears in `failed`, returns nonzero and creates no success receipt. Claim safety and source/request job identities are unchanged.
+
+The [continuous learning environment](keller-learning-environment.md) is a separate operator workflow. Its experiments fingerprint code, locks and skills; the quote inbox's older input/register job key continues to identify an existing historical draft, not proof that changed estimator code executed.

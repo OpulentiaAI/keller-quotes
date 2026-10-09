@@ -1,0 +1,30 @@
+{
+  "$schema": "https://api.capy.ai/schemas/setup.v1.json",
+  "format_version": 1,
+  "scripts": {
+    "initialize": "node scripts/bootstrap-keller.mjs",
+    "refresh": "node scripts/bootstrap-keller.mjs"
+  },
+  "timeouts": {
+    "initialize": 900,
+    "refresh": 300
+  },
+  "startup": [],
+  "commands": [
+    {
+      "name": "Verify Keller",
+      "command": "node scripts/keller-environment.mjs verify",
+      "timeout": 900
+    },
+    {
+      "name": "Estimator tests",
+      "command": "npm --prefix estimator test",
+      "timeout": 300
+    },
+    {
+      "name": "Build estimator",
+      "command": "npm --prefix estimator run build",
+      "timeout": 120
+    }
+  ]
+}

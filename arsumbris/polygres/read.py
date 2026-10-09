@@ -2,6 +2,7 @@
 """Bounded read-only Polygres queries for the native Ars Umbris tool."""
 
 import importlib.util
+from datetime import datetime
 import json
 import os
 from pathlib import Path
@@ -109,8 +110,12 @@ def read(conn, request):
         conn.execute("set transaction read only")
         if action == "corpora":
             rows = conn.execute("select corpus_id,document_count,page_count,price_count,ingested_at from document_corpora order by ingested_at desc,corpus_id limit 51").fetchall()
-            return {"action": action, "corpora": [dict(zip(("corpus", "documents", "pages", "verified_prices", "ingested_at"), r)) for r in rows[:50]],
-                    "has_more": len(rows) > 50}
+            corpora = []
+            for corpus, documents, pages, prices, ingested_at in rows[:50]:
+                corpora.append({"corpus": corpus, "documents": documents, "pages": pages,
+                                "verified_prices": prices,
+                                "ingested_at": ingested_at.isoformat() if isinstance(ingested_at, datetime) else ingested_at})
+            return {"action": action, "corpora": corpora, "has_more": len(rows) > 50}
 
         corpus_id = request["corpus"]
         record = conn.execute("select corpus_key,prepared_manifest from document_corpora where corpus_id=%s", (corpus_id,)).fetchone()

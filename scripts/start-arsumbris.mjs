@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { spawn } from 'node:child_process'
+import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { options, requireRuntime, requireWorkspace } from './arsumbris-runtime.mjs'
 
@@ -14,6 +15,7 @@ try {
   if (software && service !== 'host') throw new Error('--software-rendering applies only to host')
   const root = requireRuntime(runtimeRoot)
   const entry = requireWorkspace(workspace)
+  const learningPython = join(entry, '.keller-local/learning/python/bin/python')
   const target = {
     engine: { binary: join(root, 'au-engine/target/release/au'), args: ['daemon', 'start', entry], cwd: entry },
     mcp: { binary: process.execPath, args: [join(root, 'au-mcp/src/cli.ts'), 'start', entry], cwd: entry },
@@ -25,7 +27,7 @@ try {
     SHELL: process.env.SHELL, USER: process.env.USER, TERM: process.env.TERM,
     ...(service === 'host' || service === 'mcp' ? {
       POLYGRES_DIRECT_URL: process.env.POLYGRES_DIRECT_URL,
-      KELLER_PYTHON: process.env.KELLER_PYTHON ?? join(entry, '.keller-local/arsumbris/python/bin/python'),
+      KELLER_PYTHON: process.env.KELLER_PYTHON ?? (existsSync(learningPython) ? learningPython : join(entry, '.keller-local/arsumbris/python/bin/python')),
     } : {}),
     ...(service === 'host' ? { AU_ENTRY: entry } : {}),
   }
