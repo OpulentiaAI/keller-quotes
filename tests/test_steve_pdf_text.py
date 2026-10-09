@@ -79,6 +79,109 @@ class PdfTextTest(unittest.TestCase):
         self.assertFalse(result['has_more'])
         self.assertIn('OCR or visual review', result['extraction_note'])
 
+    def retained_fixture(self):
+        home = self.root / 'home'
+        home.mkdir(mode=0o700)
+        root = home
+        for name in ('.local', 'share', 'keller-quotes', 'intake'):
+            root = root / name
+            root.mkdir(mode=0o700)
+        bundle = root / '00000000-0000-0000-0000-000000000001'
+        bundle.mkdir(mode=0o700)
+        attachment = bundle / 'attachment-0.bin'
+        attachment.write_bytes(self.data)
+        attachment.chmod(0o400)
+        bundle.chmod(0o500)
+        self.addCleanup(lambda: bundle.chmod(0o700))
+        request = {'action': 'pdf_text', 'source_set': 'intake', 'page': 1,
+                   'locator': f'keller-intake:{bundle.name}/attachment-0.bin',
+                   'expected_pdf_sha256': self.sha}
+        return home, root, bundle, attachment, request
+
+    def test_retained_attachment_text_uses_exact_locator_and_hash_without_archive_copy(self):
+        home, root, _, _, request = self.retained_fixture()
+        self.path.unlink()
+        with patch.dict(os.environ, {'HOME': str(home)}):
+            result = reader.read({'intake': str(root)}, reader.validate(request))
+            self.assertIn('length 100 mm', result['content'])
+            self.assertEqual(result['citation']['locator'], request['locator'])
+            self.assertEqual(result['citation']['pdf_sha256'], self.sha)
+            page_two = reader.read({'intake': str(root)}, reader.validate({**request, 'page': 2}))
+            self.assertIn('Deburr all edges', page_two['content'])
+            with patch.object(reader, 'pdf_command') as command, self.assertRaisesRegex(reader.InvalidRequest, 'PDF hash mismatch'):
+                reader.read({'intake': str(root)}, reader.validate({**request, 'expected_pdf_sha256': '0' * 64}))
+            command.assert_not_called()
+
+    def test_retained_selection_cannot_list_read_originals_or_omit_hash_binding(self):
+        home, root, _, _, request = self.retained_fixture()
+        for changes in ({'locator': None}, {'locator': '/etc/passwd'},
+                        {'locator': request['locator'].replace('attachment-0.bin', 'original-request.json')},
+                        {'locator': request['locator'].replace('attachment-0.bin', 'attachment-20.bin')},
+                        {'locator': request['locator'].replace('attachment-0.bin', '../attachment-0.bin')},
+                        {'path': 'drawing.pdf'}, {'expected_pdf_sha256': None},
+                        {'action': 'list'}, {'action': 'read'}, {'source_set': 'pdfs'}):
+            with self.subTest(changes=changes), self.assertRaises(reader.InvalidRequest):
+                reader.validate({**request, **changes})
+        missing = {k: v for k, v in request.items() if k != 'expected_pdf_sha256'}
+        with self.assertRaisesRegex(reader.InvalidRequest, 'requires expected_pdf_sha256'):
+            reader.validate(missing)
+        with patch.dict(os.environ, {'HOME': str(home)}):
+            with self.assertRaisesRegex(reader.InvalidRequest, 'not configured'):
+                reader.read({}, reader.validate(request))
+            with self.assertRaisesRegex(reader.InvalidRequest, "owner's retained intake root"):
+                reader.read({'intake': str(self.root)}, reader.validate(request))
+            first = reader.read({'intake': str(root)}, reader.validate({**request, 'limit': 10}))
+            remainder = reader.read({'intake': str(root)}, reader.validate({**request,
+                'offset': first['next_offset'], 'expected_text_sha256': first['text_sha256']}))
+            self.assertIn('length 100 mm', first['content'] + remainder['content'])
+
+    def test_retained_storage_enforces_private_immutable_owner_and_single_link(self):
+        home, root, bundle, attachment, request = self.retained_fixture()
+        with patch.dict(os.environ, {'HOME': str(home)}):
+            for path, bad_mode, valid_mode in ((root.parent, 0o755, 0o700), (root, 0o755, 0o700),
+                    (bundle, 0o700, 0o500), (attachment, 0o600, 0o400), (attachment, 0o440, 0o400)):
+                path.chmod(bad_mode)
+                try:
+                    with self.subTest(path=path.name, mode=bad_mode), self.assertRaisesRegex(reader.InvalidRequest, 'private immutable'):
+                        reader.read({'intake': str(root)}, reader.validate(request))
+                finally:
+                    path.chmod(valid_mode)
+            with patch.object(reader.os, 'getuid', return_value=os.getuid() + 1):
+                with self.assertRaisesRegex(reader.InvalidRequest, 'private immutable'):
+                    reader.read({'intake': str(root)}, reader.validate(request))
+            alias = self.root / 'hardlink'
+            os.link(attachment, alias)
+            with self.assertRaisesRegex(reader.InvalidRequest, 'private immutable'):
+                reader.read({'intake': str(root)}, reader.validate(request))
+            alias.unlink()
+
+    def test_retained_symlink_components_are_rejected(self):
+        home, root, bundle, attachment, request = self.retained_fixture()
+        with patch.dict(os.environ, {'HOME': str(home)}):
+            for target in (attachment, bundle, root.parent):
+                parent_mode = target.parent.stat().st_mode & 0o777
+                target_mode = target.stat().st_mode & 0o777
+                directory = target.is_dir()
+                target.parent.chmod(0o700)
+                if directory:
+                    target.chmod(0o700)
+                moved = self.root / 'moved'
+                target.rename(moved)
+                moved.chmod(target_mode)
+                target.symlink_to(moved, target_is_directory=moved.is_dir())
+                target.parent.chmod(parent_mode)
+                try:
+                    with self.subTest(target=target.name), self.assertRaises((reader.InvalidRequest, OSError)):
+                        reader.read({'intake': str(root)}, reader.validate(request))
+                finally:
+                    target.parent.chmod(0o700)
+                    target.unlink()
+                    if directory:
+                        moved.chmod(0o700)
+                    moved.rename(target)
+                    target.chmod(target_mode)
+                    target.parent.chmod(parent_mode)
+
     def test_explicit_selection_limits_and_owner_confinement(self):
         bad = [{'page': None}, {'page': 0}, {'page': True}, {'page': 10001}, {'page': 2},
                {'offset': 1}, {'offset': -1}, {'limit': 4097}, {'limit': True},
@@ -195,6 +298,21 @@ console.log(JSON.stringify(await createPlugin({workspace: process.cwd()}).invoke
         request = json.loads(path.read_text())
         drawing = next(a for a in request['intake']['attachments'] if a['id'] == 'drawing')
         self.assertEqual(drawing['sha256'], evidence['citation']['pdf_sha256'])
+        retained_selection = {'action': 'pdf_text', 'source_set': 'intake', 'locator': drawing['locator'],
+                              'page': 1, 'expected_pdf_sha256': drawing['sha256']}
+        def read_retained():
+            response = subprocess.run(['node', '--input-type=module', '-e', script, json.dumps(retained_selection)],
+                cwd=ROOT, env={**os.environ, 'HOME': str(native.home), 'KELLER_PYTHON': sys.executable,
+                               'KELLER_SOURCE_CONFIG': str(config)}, text=True, capture_output=True, check=True, timeout=20)
+            return json.loads(response.stdout)
+        self.assertTrue(read_retained().get('isError'))
+        config.write_text(json.dumps({**self.bindings, 'intake': str(path.parent.parent)}))
+        self.path.unlink()
+        recovered = read_retained()
+        self.assertFalse(recovered.get('isError'), recovered)
+        self.assertEqual(recovered['content']['content'], evidence['content'])
+        self.assertEqual(recovered['content']['text_sha256'], evidence['text_sha256'])
+        self.assertEqual(recovered['content']['citation']['locator'], drawing['locator'])
         quoted = native.invoke(request, corpus=None, no_database=True)
         self.assertFalse(quoted.get('isError'), quoted)
         content = quoted['content']
@@ -208,6 +326,7 @@ console.log(JSON.stringify(await createPlugin({workspace: process.cwd()}).invoke
         drawing_bytes.chmod(0o600)
         drawing_bytes.write_bytes(pdf_bytes(['SYNTHETIC changed length 200 mm']))
         drawing_bytes.chmod(0o400)
+        self.assertTrue(read_retained().get('isError'))
         self.assertTrue(native.invoke(request, corpus=None, no_database=True).get('isError'))
 
 

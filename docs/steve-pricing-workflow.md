@@ -52,6 +52,8 @@ An explicit material/revision/finish/UOM/scope conflict blocks adoption of that 
 
 For a deliberately selected owner-bound PDF, `keller_sources` action `pdf_text` returns bounded text from an explicit one-based `page`, with PDF and extracted-page hashes. Follow character offsets with both hashes pinned; use the PDF hash for later pages. See the [host dependency, limits and request contract](arsumbris-workspace.md#read-a-selected-pdf-page-without-mistaking-text-for-geometry). No external service receives the file.
 
+For an already captured attachment, use the explicitly owner-configured `intake` source set, its exact `keller-intake:` attachment `locator` instead of a path, and its retained SHA256 as `expected_pdf_sha256` on every read. The reader opens the immutable `.bin` copy, not a guessed original/archive filename. No intake listing or original-request reads are exposed. Preserve the returned locator/hash/page in the review; reading does not authorize changing a retained request in place.
+
 Extracted material, finish, tolerance or route notes can inform **separately reviewed** engineering facts; the reader does not infer their applicability or populate a costing worksheet. Reconcile the measured PDF hash with the retained attachment and preserve page references. `no_extractable_text` needs OCR/visual review, not a zero-complexity assumption. Embedded text can also omit symbols/dimensions or have incorrect reading order. Never interpret `text_extracted` as verified geometry, released revision, complete specifications or current cost. Frozen evaluation source access/cutoffs remain unchanged.
 
 ## COST, SELL and estimating time

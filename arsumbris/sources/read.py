@@ -18,6 +18,7 @@ from types import SimpleNamespace
 SETS = {
     "fabritrak": frozenset((".dbf", ".fpt", ".dbc", ".dct")),
     "pdfs": frozenset((".pdf", ".json", ".txt", ".md", ".csv")),
+    "intake": frozenset(),
     "transcripts": frozenset((".json", ".txt", ".md", ".csv")),
     "manufacturing-audit": frozenset((".json", ".txt", ".md", ".csv")),
 }
@@ -72,6 +73,13 @@ class InvalidRequest(ValueError):
     pass
 
 
+def intake_components(locator):
+    match = re.fullmatch(r"keller-intake:([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/(attachment-(?:[0-9]|1[0-9])\.bin)", locator) if isinstance(locator, str) else None
+    if not match:
+        raise InvalidRequest("exact retained intake attachment locator required")
+    return list(match.groups())
+
+
 def integer(value, name, default, maximum, minimum=0):
     if value is None:
         return default
@@ -103,7 +111,7 @@ def validate(request):
         "sets": {"action"},
         "list": {"action", "source_set", "path", "offset", "limit"},
         "read": {"action", "source_set", "path", "offset", "limit", "encoding"},
-        "pdf_text": {"action", "source_set", "path", "page", "offset", "limit", "expected_pdf_sha256", "expected_text_sha256"},
+        "pdf_text": {"action", "source_set", "path", "locator", "page", "offset", "limit", "expected_pdf_sha256", "expected_text_sha256"},
         "dbf_schema": {"action", "source_set", "path"},
         "dbf_catalog": {"action", "source_set", "path", "query", "offset", "limit", "expected_dbf_sha256"},
         "dbf_rows": {"action", "source_set", "path", "quote_no", "record_id", "quotletter", "item",
@@ -116,7 +124,16 @@ def validate(request):
         return request
     if request.get("source_set") not in SETS:
         raise InvalidRequest("unknown source set")
-    components = parts(request.get("path", ""), action != "list")
+    if request["source_set"] == "intake":
+        if action != "pdf_text" or "path" in request:
+            raise InvalidRequest("intake supports only pdf_text by retained attachment locator")
+        components = intake_components(request.get("locator"))
+        if "expected_pdf_sha256" not in request:
+            raise InvalidRequest("retained attachment requires expected_pdf_sha256")
+    else:
+        if "locator" in request:
+            raise InvalidRequest("locator is only supported for retained intake PDF text")
+        components = parts(request.get("path", ""), action != "list")
     if action in ("read", "dbf_schema", "dbf_rows", "dbf_catalog"):
         if Path(components[-1]).suffix.lower() not in SETS[request["source_set"]]:
             raise InvalidRequest("source file type not approved")
@@ -124,8 +141,8 @@ def validate(request):
                                      Path(components[-1]).suffix.lower() != ".dbf"):
         raise InvalidRequest("DBF action requires a fabritrak .dbf file")
     if action == "pdf_text":
-        if request["source_set"] != "pdfs" or Path(components[-1]).suffix.lower() != ".pdf":
-            raise InvalidRequest("pdf_text requires an owner-bound pdfs .pdf file")
+        if request["source_set"] != "intake" and (request["source_set"] != "pdfs" or Path(components[-1]).suffix.lower() != ".pdf"):
+            raise InvalidRequest("pdf_text requires an owner-bound PDF or retained intake attachment")
         if request.get("page") is None:
             raise InvalidRequest("explicit one-based page required")
         page = integer(request["page"], "page", 1, 10000, 1)
@@ -236,8 +253,41 @@ def open_source(root, components, directory=False):
 
 
 def citation(request):
-    return {"source_set": request["source_set"], "path": request.get("path", ""),
+    location = {"locator": request["locator"]} if request["source_set"] == "intake" else {"path": request.get("path", "")}
+    return {"source_set": request["source_set"], **location,
             "verification": "owner-bound local source; content hash not checked"}
+
+
+def open_intake_source(root, locator):
+    home = Path.home()
+    if Path(root) != home / ".local/share/keller-quotes/intake":
+        raise InvalidRequest("intake binding must be the owner's retained intake root")
+    if not home.is_absolute() or home.resolve() != home:
+        raise InvalidRequest("private intake storage unavailable")
+    bundle, attachment = intake_components(locator)
+    flags = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_DIRECTORY
+    directory = os.open(home, flags)
+    try:
+        for index, component in enumerate((".local", "share", "keller-quotes", "intake", bundle)):
+            following = os.open(component, flags, dir_fd=directory)
+            os.close(directory)
+            directory = following
+            metadata = os.fstat(directory)
+            mask = 0o277 if index == 4 else 0o077 if index >= 2 else 0
+            if metadata.st_uid != os.getuid() or metadata.st_mode & mask:
+                raise InvalidRequest("private immutable intake storage required")
+        fd = os.open(attachment, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory)
+        try:
+            metadata = os.fstat(fd)
+            if (not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != os.getuid()
+                    or metadata.st_mode & 0o377 or metadata.st_nlink != 1):
+                raise InvalidRequest("private immutable retained attachment required")
+            return fd
+        except BaseException:
+            os.close(fd)
+            raise
+    finally:
+        os.close(directory)
 
 
 def file_state(fd):
@@ -616,7 +666,8 @@ def read(bindings, request):
         raise InvalidRequest("source set is not configured")
     components = parts(request.get("path", ""))
     action = request["action"]
-    fd = open_source(bindings[source_set], components, directory=action == "list")
+    fd = (open_intake_source(bindings[source_set], request["locator"]) if source_set == "intake"
+          else open_source(bindings[source_set], components, directory=action == "list"))
     try:
         if action == "list":
             entries = []
