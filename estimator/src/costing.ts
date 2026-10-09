@@ -86,6 +86,8 @@ export interface CostBreakdown {
   estimated_line_cost: CostRange;
   /** Low margin uses HIGH cost, and vice versa, against displayed line revenue. */
   estimated_line_margin_pct: CostRange | null;
+  /** Exact BASE cost versus displayed revenue; independent of rounded margin reports. */
+  base_margin_target: { requested_pct: number; status: "met" | "below_target" | "not_assessable" } | null;
   warnings: string[];
 }
 
@@ -243,24 +245,28 @@ function costKind(value: unknown, path: string): void {
  * Route total = occurrences * setup_minutes / 60 * setup_rate + process_quantity * run_minutes_per_piece / 60 * run_rate.
  * All ranges are scenario bounds, not probabilities or guarantees. No files are opened.
  */
-export function reconcileCostBasis(value: unknown, quantity: number, asOf: string, flat: FlatCosts, lineRevenue?: number): CostBreakdown {
-  return calculateCostBasis(value, quantity, asOf, flat, lineRevenue).breakdown;
+export function reconcileCostBasis(value: unknown, quantity: number, asOf: string, flat: FlatCosts, lineRevenue?: number, targetMarginPct?: number): CostBreakdown {
+  return calculateCostBasis(value, quantity, asOf, flat, lineRevenue, targetMarginPct).breakdown;
 }
 
-export function deriveCostBasis(value: unknown, quantity: number, asOf: string, lineRevenue?: number): CostBreakdown {
-  return calculateCostBasis(value, quantity, asOf, undefined, lineRevenue).breakdown;
+export function deriveCostBasis(value: unknown, quantity: number, asOf: string, lineRevenue?: number, targetMarginPct?: number): CostBreakdown {
+  return calculateCostBasis(value, quantity, asOf, undefined, lineRevenue, targetMarginPct).breakdown;
+}
+
+function retainedCostFraction(marginPct: number): Fraction {
+  if (!Number.isFinite(marginPct) || marginPct < 0 || marginPct >= 100) throw new Error("cost_basis.margin_pct must be between 0 and 100 (exclusive)");
+  const margin = decimal(marginPct);
+  return fraction(100n * margin.d - margin.n, 100n * margin.d);
 }
 
 /** Apply gross margin to exact BASE line cost, returning half-up 1/10000-dollar unit-price ticks. */
 export function priceCostBasisUnit4(value: unknown, quantity: number, asOf: string, marginPct: number): bigint {
-  if (!Number.isFinite(marginPct) || marginPct < 0 || marginPct >= 100) throw new Error("cost_basis.margin_pct must be between 0 and 100 (exclusive)");
+  const retained = retainedCostFraction(marginPct);
   const { baseLineCost } = calculateCostBasis(value, quantity, asOf);
-  const margin = decimal(marginPct);
-  const retained = fraction(100n * margin.d - margin.n, 100n * margin.d);
   return rounded(div(div(baseLineCost, whole(quantity)), retained), 4);
 }
 
-function calculateCostBasis(value: unknown, quantity: number, asOf: string, flat?: FlatCosts, lineRevenue?: number): { breakdown: CostBreakdown; baseLineCost: Fraction } {
+function calculateCostBasis(value: unknown, quantity: number, asOf: string, flat?: FlatCosts, lineRevenue?: number, targetMarginPct?: number): { breakdown: CostBreakdown; baseLineCost: Fraction } {
   count(quantity, "cost_basis.line_quantity", 10_000_000, 1);
   date(asOf, "cost_basis.quote_date");
   const root = record(value, "cost_basis", ["schema_version", "currency", "order_charges", "components", "routing", "not_applicable", "unresolved_assumptions"]);
@@ -365,21 +371,30 @@ function calculateCostBasis(value: unknown, quantity: number, asOf: string, flat
     }
   }
   let margin: CostRange | null = null;
+  const retained = targetMarginPct === undefined ? undefined : retainedCostFraction(targetMarginPct);
+  const target: CostBreakdown["base_margin_target"] = targetMarginPct === undefined ? null
+    : { requested_pct: targetMarginPct, status: "not_assessable" };
   if (lineRevenue !== undefined) {
     const revenue = number(lineRevenue, "cost_basis.line_revenue", true);
     const marginAt = (cost: Fraction) => mul(div(add(revenue, { n: -cost.n, d: cost.d }), revenue), whole(100));
     margin = displayRange({ low: marginAt(lineCost.high), base: marginAt(lineCost.base), high: marginAt(lineCost.low) }, 2, "cost_basis.estimated_line_margin_pct");
+    if (target && retained) target.status = compare(mul(revenue, retained), lineCost.base) >= 0n ? "met" : "below_target";
   }
   const breakdown: CostBreakdown = {
     assertion_status: "supplied_not_authenticated", scope: "production_line_excluding_freight_tax_and_order_charges",
     rounding: "half_up_flat_unit_4dp_setup_2dp_cost_report_4dp_margin_2dp",
     supplied_basis: value as CostBasis, reconciled_flat: reconciled, components, routing,
     estimated_line_cost: displayRange(lineCost, 4, "cost_basis.estimated_line_cost"), estimated_line_margin_pct: margin,
+    base_margin_target: target,
     warnings: [
       "Worksheet sources, hashes, applicability and estimate approvals are supplied assertions, not authenticated evidence",
       "Historical and approved estimates support prospective review, not guaranteed actual costs or current buy prices",
       "Estimated production-line margin excludes freight, tax and separate order charges; no whole-order margin is claimed",
       "Cost ranges are scenario bounds, not statistical confidence; human approval is still required before customer release",
+      ...(target?.status === "below_target" ? [
+        `Displayed line revenue is below the requested ${target.requested_pct}% gross margin at exact BASE worksheet cost; review pricing even if rounded margin appears on target`,
+      ] : []),
+      ...(target?.status === "not_assessable" ? ["BASE-cost margin target cannot be assessed without positive displayed line revenue"] : []),
     ],
   };
   return { breakdown, baseLineCost: lineCost.base };

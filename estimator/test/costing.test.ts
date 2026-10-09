@@ -85,13 +85,15 @@ describe("prospective cost-basis worksheet", () => {
   });
 
   it.each([
-    { cost: 0.00014, margin: 30, unit: 0.0002, total: 20 },
-    { cost: 0.00004, margin: 25, unit: 0.0001, total: 10 },
-    { cost: 0.01004, margin: 25, unit: 0.0134, total: 1340 },
-    { cost: 1.23454, margin: 75, unit: 4.9382, total: 493820 },
-    { cost: 0.00015, margin: 0, unit: 0.0002, total: 20 },
-    { cost: 0.00014, margin: 0, unit: 0.0001, total: 10 },
-  ])("prices exact worksheet cost $cost before margin and final unit rounding", async ({ cost, margin, unit, total }) => {
+    { cost: 0.00014, margin: 30, unit: 0.0002, total: 20, status: "met" },
+    { cost: 0.00004, margin: 25, unit: 0.0001, total: 10, status: "met" },
+    { cost: 0.01004, margin: 25, unit: 0.0134, total: 1340, status: "met" },
+    { cost: 1.23454, margin: 75, unit: 4.9382, total: 493820, status: "met" },
+    { cost: 0.00015, margin: 0, unit: 0.0002, total: 20, status: "met" },
+    { cost: 0.00014, margin: 0, unit: 0.0001, total: 10, status: "below_target" },
+    { cost: 1.000001, margin: 0, unit: 1, total: 100000, status: "below_target" },
+    { cost: 0.800001, margin: 20, unit: 1, total: 100000, status: "below_target" },
+  ])("prices exact worksheet cost $cost before margin and final unit rounding", async ({ cost, margin, unit, total, status }) => {
     const b = basis();
     b.components = [{ ...b.components[0]!, quantity: 100000, original_units_per_quantity_unit: 1,
       yield_fraction: 1, unit_cost: range(cost) }];
@@ -106,9 +108,45 @@ describe("prospective cost-basis worksheet", () => {
     expect(order.lines[0]!.cost_breakdown!.estimated_line_cost.base).toBeCloseTo(cost * 100000, 4);
     expect(order.lines[0]!.cost_breakdown!.estimated_line_margin_pct!.base)
       .toBeCloseTo((1 - cost * 100000 / total) * 100, 2);
+    expect(order.lines[0]!.cost_breakdown!.base_margin_target).toEqual({ requested_pct: margin, status });
+    expect(order.warnings.some(w => w.includes("below the requested"))).toBe(status === "below_target");
+    expect(renderOrderMarkdown(order)).toContain(status.replaceAll("_", "\\_"));
     expect(order.state).toBe("PRICED_REQUIRES_REVIEW");
     expect(order.requires_human_review).toBe(true);
     expect(order.request).toEqual(req);
+  });
+
+  it("compares exact BASE cost rather than rounded cost or downside scenarios", () => {
+    const b = basis();
+    b.components = [{ ...b.components[0]!, quantity: 1, original_units_per_quantity_unit: 1,
+      yield_fraction: 1, unit_cost: range(1.000001, 1, 2) }];
+    b.routing = [];
+    b.not_applicable = (["outside", "other", "routing"] as const).map(category => ({ category, reason: "Synthetic material-only scope", sources: [source()] }));
+    const result = deriveCostBasis(b, 1, asOf, 1, 0);
+    expect(result.estimated_line_cost.base).toBe(1);
+    expect(result.estimated_line_margin_pct!.base).toBe(0);
+    expect(result.base_margin_target).toEqual({ requested_pct: 0, status: "below_target" });
+    b.components[0]!.unit_cost.base = 1;
+    const exact = deriveCostBasis(b, 1, asOf, 1, 0);
+    expect(exact.base_margin_target!.status).toBe("met");
+    expect(exact.estimated_line_margin_pct!.low).toBe(-100);
+    expect(deriveCostBasis(b, 1, asOf, 1).base_margin_target).toBeNull();
+    expect(deriveCostBasis(b, 1, asOf, undefined, 0).base_margin_target!.status).toBe("not_assessable");
+    for (const invalid of [-1, 100, NaN, Infinity]) expect(() => deriveCostBasis(b, 1, asOf, 1, invalid)).toThrow(/margin_pct/);
+  });
+
+  it("marks a zero displayed extension's target as not assessable without repricing", async () => {
+    const b = basis();
+    b.components = [{ ...b.components[0]!, quantity: 1, original_units_per_quantity_unit: 1,
+      yield_fraction: 1, unit_cost: range(0.0001) }];
+    b.routing = [];
+    b.not_applicable = (["outside", "other", "routing"] as const).map(category => ({ category, reason: "Synthetic material-only scope", sources: [source()] }));
+    const req = request(b, flat(), 1);
+    req.parts[0]!.pricing = { method: "should_cost", cost_basis: b, margin_pct: 25, reason: "Synthetic sub-cent extension" };
+    const order = await buildPricedOrder(reg, req, options);
+    expect(order.lines[0]).toMatchObject({ unit_price: 0.0001, extended_price: 0,
+      cost_breakdown: { estimated_line_margin_pct: null, base_margin_target: { requested_pct: 25, status: "not_assessable" } } });
+    expect(order.warnings.join(" ")).toContain("cannot be assessed");
   });
 
   it("keeps exact routing fractions and sub-cent setup until should-cost sell rounding", async () => {
@@ -128,6 +166,7 @@ describe("prospective cost-basis worksheet", () => {
       cost_basis: b, margin_pct: 25, reason: "Deliberately supplied rounded flat costs" };
     const explicit = await buildPricedOrder(reg, req, options);
     expect(explicit.lines[0]).toMatchObject({ unit_price: 11.8774, extended_price: 35.63 });
+    expect(explicit.lines[0]!.cost_breakdown!.base_margin_target).toEqual({ requested_pct: 25, status: "met" });
   });
 
   it("rejects should-cost invalid margin, expired current support and absent worksheets", () => {

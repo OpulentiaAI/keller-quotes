@@ -288,10 +288,10 @@ export async function buildPricedOrder(reg: QuoteRegister, request: unknown, opt
     const cents = unit4 === null ? null : extend(unit4, part.quantity, `line ${line_id}`);
     const costBreakdown = pricing?.method === "should_cost"
       ? deriveCostBasis(pricing.cost_basis, part.quantity, request.quote_date,
-        cents === null || cents === 0n ? undefined : amount(cents, 2, `line ${line_id}.extended_price`))
+        cents === null || cents === 0n ? undefined : amount(cents, 2, `line ${line_id}.extended_price`), pricing.margin_pct)
       : pricing?.method === "cost_plus" && pricing.cost_basis !== undefined
       ? reconcileCostBasis(pricing.cost_basis, part.quantity, request.quote_date, pricing,
-        cents === null || cents === 0n ? undefined : amount(cents, 2, `line ${line_id}.extended_price`))
+        cents === null || cents === 0n ? undefined : amount(cents, 2, `line ${line_id}.extended_price`), pricing.margin_pct)
       : undefined;
     if (costBreakdown) {
       lineWarnings.push(...costBreakdown.warnings);
@@ -369,6 +369,7 @@ export function renderOrderMarkdown(order: PricedOrder): string {
         `Reconciled flat costs: ${md(JSON.stringify(line.cost_breakdown.reconciled_flat))}  `,
         `Estimated line cost (low/base/high): ${md(JSON.stringify(line.cost_breakdown.estimated_line_cost))}  `,
         `Estimated line margin % (low/base/high, not guaranteed): ${md(JSON.stringify(line.cost_breakdown.estimated_line_margin_pct))}  `,
+        `Exact BASE-cost margin target check (not actual-cost assurance): ${md(JSON.stringify(line.cost_breakdown.base_margin_target))}  `,
         ...line.cost_breakdown.components.map((entry) => `- Component: ${md(JSON.stringify(entry))}`),
         ...line.cost_breakdown.routing.map((entry) => `- Routing: ${md(JSON.stringify(entry))}`),
         `Reporting: ${md(line.cost_breakdown.rounding)}; converted quantities and times shown to six decimal places.`, "",
