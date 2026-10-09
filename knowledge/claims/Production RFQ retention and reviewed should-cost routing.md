@@ -17,6 +17,8 @@ The `Keller Codex` profile injects the depth-zero `keller-orientation` and `kell
 
 - **Keep routing units explicit:** supported per-cycle minutes/seconds/hours or cycles/hour require positive integer `cycles_per_piece`; finished-piece timing rejects that multiplier. Preserve the count, normalized minutes, source/rate assumptions and separate setup/process quantities in review. Inspect pinned formula definitions and variable units before entering semantic inputs; never execute source expressions, infer missing repetitions or use SELL rates as COST rates. See `docs/steve-pricing-workflow.md`.
 
+- **Discover candidates, not automatic costs:** exact-ID `dbf_rows` remains available. When an ID is unknown, `dbf_schema.catalog_lookup` advertises bounded `dbf_catalog` browse/literal search only for MATERIAL, OPERATIO and FORMULA definitions. Preserve source hashes and physical locators; pin the DBF hash on continuations. Candidates are not automatically adopted as stock, routing or rate inputs: review applicability, units, COST/SELL meaning and freshness. See `docs/arsumbris-workspace.md` and the canonical quoting skill.
+
 ## Sources and correction rule
 
 Source-of-truth contracts: `estimator/src/{intake,order,costing}.ts`, `arsumbris/quote/{tool,validate}.ts`, `arsumbris/sources/read.py`, and `docs/pricing-evals-and-orders.md`. Synthetic behavior checks: `estimator/test/intake.test.ts`, `tests/test_arsumbris_quote.py`, `tests/test_arsumbris_sources.py`, and `scripts/test/arsumbris-host-startup.test.mjs`. Passing synthetic regressions proves these interfaces/arithmetic, not real-job quote quality or current supplier availability.
