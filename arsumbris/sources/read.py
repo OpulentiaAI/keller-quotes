@@ -100,6 +100,8 @@ def validate(request):
         "dbf_rows": {"action", "source_set", "path", "quote_no", "record_id", "quotletter", "item",
                      "wo_no", "jobno", "page_no", "seq", "offset", "limit", "expected_dbf_sha256",
                      "memo_fields", "fpt_path", "expected_fpt_sha256", "memo_offset", "memo_limit"},
+        "dbf_operation_costs": {"action", "source_set", "path", "record_id", "record_index",
+                                "expected_dbf_sha256", "expected_record_sha256", "rate_review"},
     }
     if action not in allowed or set(request) - allowed[action]:
         raise InvalidRequest("unsupported action or fields")
@@ -108,12 +110,25 @@ def validate(request):
     if request.get("source_set") not in SETS:
         raise InvalidRequest("unknown source set")
     components = parts(request.get("path", ""), action != "list")
-    if action in ("read", "dbf_schema", "dbf_rows", "dbf_catalog"):
+    if action in ("read", "dbf_schema", "dbf_rows", "dbf_catalog", "dbf_operation_costs"):
         if Path(components[-1]).suffix.lower() not in SETS[request["source_set"]]:
             raise InvalidRequest("source file type not approved")
     if action.startswith("dbf_") and (request["source_set"] != "fabritrak" or
                                      Path(components[-1]).suffix.lower() != ".dbf"):
         raise InvalidRequest("DBF action requires a fabritrak .dbf file")
+    if action == "dbf_operation_costs":
+        if Path(components[-1]).stem.upper() != "OPERATIO":
+            raise InvalidRequest("operation cost translation requires OPERATIO.DBF")
+        validate({"action": "dbf_rows", **{key: request.get(key) for key in
+                  ("source_set", "path", "record_id", "expected_dbf_sha256")}})
+        if "record_index" not in request:
+            raise InvalidRequest("selected physical record_index required")
+        integer(request["record_index"], "record_index", -1, 10000000)
+        if request["record_index"] is None:
+            raise InvalidRequest("selected physical record_index required")
+        if not isinstance(request.get("expected_record_sha256"), str) or not re.fullmatch(r"[0-9a-f]{64}", request["expected_record_sha256"]):
+            raise InvalidRequest("expected_record_sha256 must be a lowercase SHA256")
+        operation_rate_review(request.get("rate_review"))
     if action == "dbf_supplier_costs":
         if Path(components[-1]).stem.upper() != "VENDQUOT":
             raise InvalidRequest("supplier costs require VENDQUOT.DBF")
@@ -181,6 +196,42 @@ def validate(request):
         if request.get("encoding", "utf-8") not in ("utf-8", "latin-1", "base64"):
             raise InvalidRequest("encoding must be utf-8, latin-1 or base64")
     return request
+
+
+def operation_rate_review(value):
+    if not isinstance(value, str) or len(value) > 2400:
+        raise InvalidRequest("rate_review must be bounded JSON text")
+    def unique_fields(pairs):
+        result = {}
+        for key, item in pairs:
+            if key in result:
+                raise InvalidRequest("rate_review contains duplicate fields")
+            result[key] = item
+        return result
+    try:
+        review = json.loads(value, object_pairs_hook=unique_fields)
+    except (ValueError, TypeError):
+        raise InvalidRequest("rate_review must be bounded JSON text") from None
+    required = {"rate_unit", "source_date", "reviewer", "date", "reason", "applicability", "charge_inclusion"}
+    if not isinstance(review, dict) or not required <= set(review) or set(review) - required - {"zero_reason"}:
+        raise InvalidRequest("rate_review requires explicit units, dates, reviewer, reason, applicability and charge_inclusion")
+    for key, text in review.items():
+        maximum = 128 if key == "reviewer" else 512
+        if (not isinstance(text, str) or not text.strip() or text != text.strip() or len(text) > maximum
+                or any(ord(c) < 32 or 127 <= ord(c) <= 159 for c in text)):
+            raise InvalidRequest("rate_review fields must be bounded nonblank text without controls")
+    if review["rate_unit"] != "USD/hour" or review["applicability"] not in ("supported", "assumed"):
+        raise InvalidRequest("reviewed COST rates require explicit USD/hour and supported or assumed applicability")
+    for key in ("source_date", "date"):
+        try:
+            if not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", review[key]):
+                raise ValueError()
+            datetime.strptime(review[key], "%Y-%m-%d")
+        except ValueError:
+            raise InvalidRequest("rate_review dates must be valid YYYY-MM-DD") from None
+    if review["source_date"] > review["date"]:
+        raise InvalidRequest("rate_review source_date cannot follow estimate approval date")
+    return review
 
 
 def supplier_cost_review(value):
@@ -572,6 +623,74 @@ def dbf_rows(fd, table, request, memo=None):
     return response
 
 
+def operation_costs(fd, table, request):
+    fields = {field.name.upper(): field for field in table.fields}
+    required = {"OPER_ID": "C", "NAME": "C", "SU_COST": "N", "RUN_COST": "N"}
+    if (any(name not in fields or fields[name].type != kind for name, kind in required.items())
+            or any(name in fields for name in ("QUOTE_NO", "ID", "FORM_ID"))):
+        raise InvalidRequest("OPERATIO requires unambiguous character identity and numeric COST fields")
+    if table.sha256 != request["expected_dbf_sha256"]:
+        raise InvalidRequest("DBF hash mismatch; reread and review selected operation")
+    index = request["record_index"]
+    if index >= table.header.numrecords:
+        raise InvalidRequest("selected operation record_index is outside the DBF")
+    byte_offset = table.header.headerlen + index * table.header.recordlen
+    raw = os.pread(fd, table.header.recordlen, byte_offset)
+    record_hash = hashlib.sha256(raw).hexdigest()
+    if len(raw) != table.header.recordlen or record_hash != request["expected_record_sha256"]:
+        raise InvalidRequest("selected operation record hash mismatch")
+    if raw[:1] != b" ":
+        raise InvalidRequest("selected operation is deleted or malformed")
+    values, _ = record_values(table, raw)
+    if values[fields["OPER_ID"].name] != request["record_id"]:
+        raise InvalidRequest("selected physical operation does not match record_id")
+    review = operation_rate_review(request["rate_review"])
+    rates, sources, evidence = {}, [], {}
+    for role, name in (("setup_rate", "SU_COST"), ("run_rate", "RUN_COST")):
+        field = fields[name]
+        original = values[field.name]
+        if not original:
+            raise InvalidRequest("blank COST field is unknown, not zero; no SELL-rate substitution")
+        value = Decimal(original)
+        if value < 0 or value > 1e9 or len(original.partition(".")[2].rstrip("0")) > 6:
+            raise InvalidRequest("COST field must be nonnegative, <= 1e9 and exact to six decimal places")
+        numeric = float(value)
+        if Decimal(str(numeric)) != value:
+            raise InvalidRequest("COST field cannot be represented without rounding")
+        if value == 0 and "zero_reason" not in review:
+            raise InvalidRequest("zero COST field requires an explicit reviewed zero_reason")
+        locator = (f"fabritrak:{quote(request['path'], safe='/')}#record_index={index}"
+                   f"&record_sha256={record_hash}&field={field.name}")
+        if len(locator) > 2048:
+            raise InvalidRequest("operation source locator exceeds worksheet limit")
+        rates[role] = {"rate_kind": "cost", "unit": review["rate_unit"],
+                       "values": {key: numeric for key in ("low", "base", "high")}}
+        sources.append({"source_class": "cost_record", "sha256": table.sha256, "locator": locator,
+                        "source_date": review["source_date"], "status": "approved_estimate",
+                        "applicability": review["applicability"],
+                        "basis": f"Selected OPERATIO {request['record_id']} ({values[fields['NAME'].name]}), "
+                                 f"{field.name} original value {original}; "
+                                 f"record byte offset {byte_offset}, length {table.header.recordlen}; "
+                                 "rate unit and estimating applicability supplied by reviewer, not inferred from DBF",
+                        "approval": {key: review[key] for key in ("reviewer", "date", "reason")}})
+        evidence[role] = {"field": field.name, "type": field.type, "original_value": original,
+                          "decimal_count": field.decimal_count,
+                          "record_byte_offset": field.offset, "field_bytes": field.length}
+    unchanged(fd, table)
+    return {"action": "dbf_operation_costs", "citation": dbf_citation(table, request),
+            "selection": {"record_id": request["record_id"], "name": values[fields["NAME"].name],
+                          "record_index": index, "record_byte_offset": byte_offset,
+                          "record_bytes": table.header.recordlen, "record_sha256": record_hash},
+            "field_evidence": evidence, "rate_review": review,
+            "worksheet_inputs": {**rates, "sources": sources, "charge_inclusion": review["charge_inclusion"],
+                                 **({"zero_reason": review["zero_reason"]} if "zero_reason" in review else {})},
+            "selection_note": "Partial routing inputs only. No operation selection, timing/formula execution, "
+                              "quantity allocation, current-price claim or customer authorization. Equal low/base/high "
+                              "rates copy one reviewed catalog value, not a calibrated uncertainty range. "
+                              "Review identity and approval are supplied assertions, not authenticated approvals.",
+            "warning": WARNING}
+
+
 def supplier_costs(fd, table, request):
     fields = {field.name.upper(): field for field in table.fields}
     tier = request["price_break"]
@@ -732,6 +851,8 @@ def read(bindings, request):
         table = dbf_table(fd)
         if action == "dbf_schema":
             return dbf_schema(table, request)
+        if action == "dbf_operation_costs":
+            return operation_costs(fd, table, request)
         if action == "dbf_supplier_costs":
             return supplier_costs(fd, table, request)
         if "memo_fields" not in request:
