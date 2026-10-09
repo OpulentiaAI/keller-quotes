@@ -19,16 +19,35 @@ afterEach(() => {
   rmSync(home, { recursive: true, force: true });
   if (oldHome === undefined) delete process.env.HOME; else process.env.HOME = oldHome;
 });
-function capture() {
+function capture(requestPath = fixture) {
   expect(homedir()).toBe(home);
   const uploads = ["drawing", "worksheet"].map(id => {
     const path = join(home, `${id}.txt`); writeFileSync(path, `SYNTHETIC ${id}; not production evidence`);
     return { id, path, media_type: "text/plain" };
   });
-  const result = retainIntake(fixture, uploads, "Synthetic operator", assertOrderRequest);
+  const result = retainIntake(requestPath, uploads, "Synthetic operator", assertOrderRequest);
   captured.push(result.directory);
   assertOrderRequest(result.request);
   return { ...result, request: result.request as unknown as OrderRequest };
+}
+
+function worksheet(request: OrderRequest) {
+  const pricing = request.parts[0]!.pricing;
+  if (pricing?.method !== "should_cost") throw new Error("synthetic fixture requires should_cost");
+  return pricing.cost_basis;
+}
+const groups = ["components", "routing", "not_applicable"] as const;
+function externalRequest(): OrderRequest {
+  const request = JSON.parse(readFileSync(fixture, "utf8")) as OrderRequest;
+  delete request.parts[0]!.source_evidence;
+  delete request.parts[0]!.geometry;
+  const basis = worksheet(request);
+  for (const item of [...basis.components, ...basis.routing]) delete item.engineering_fact_ids;
+  for (const group of groups) for (const item of basis[group]) for (const source of item.sources) {
+    source.locator = "synthetic-external:reviewed-estimate#row=1";
+    source.sha256 = createHash("sha256").update("SYNTHETIC external estimate").digest("hex");
+  }
+  return request;
 }
 
 describe("retained RFQ engineering intake and no-register production costing", () => {
@@ -43,6 +62,11 @@ describe("retained RFQ engineering intake and no-register production costing", (
     expect(order.total).toBe(120);
     expect(order.lines[0]!.cost_breakdown!.estimated_line_cost.base).toBe(90);
     expect(order.lines[0]!.cost_breakdown!.estimated_line_margin_pct!.base).toBe(25);
+    expect(order.lines[0]!.cost_breakdown!.supplied_basis).toEqual(worksheet(request));
+    const attachment = request.intake!.attachments.find(a => a.id === "worksheet")!;
+    for (const group of groups) for (const item of worksheet(request)[group]) {
+      expect(item.sources[0]).toMatchObject({ sha256: attachment.sha256, locator: attachment.locator });
+    }
     expect(order.lines[0]!.analogs).toEqual([]);
     expect(order.request).toEqual(request);
     expect(order.lines[0]!.part.geometry).toEqual(request.parts[0]!.geometry);
@@ -62,6 +86,59 @@ describe("retained RFQ engineering intake and no-register production costing", (
     expect(order.state).toBe("BLOCKED");
     expect(order.total).toBeNull();
     expect(order.blockers.join(" ")).toContain("explicit engineering conflict: finished_length");
+  });
+
+  it.each(groups)("rejects unretained cost locators in %s even with valid-looking hashes", group => {
+    const request = externalRequest();
+    const source = worksheet(request)[group][0]!.sources[0]!;
+    for (const locator of ["upload:worksheet", "keller-intake:00000000-0000-0000-0000-000000000000/attachment-0.bin"]) {
+      source.locator = locator;
+      expect(() => assertOrderRequest(request)).toThrow(/unresolved upload|does not bind retained attachment/);
+    }
+  });
+
+  it.each(groups)("checks every retained source in %s, not only the engineering-linked one", group => {
+    const { request } = capture();
+    const sources = worksheet(request)[group][0]!.sources;
+    const source = structuredClone(sources[0]!);
+    sources.push(source);
+    source.sha256 = "0".repeat(64);
+    expect(() => assertOrderRequest(request)).toThrow(/does not bind retained attachment/);
+    source.sha256 = sources[0]!.sha256;
+    source.locator = source.locator.replace("attachment-1.bin", "attachment-19.bin");
+    expect(() => assertOrderRequest(request)).toThrow(/does not bind retained attachment/);
+    source.locator = request.intake!.original_request.locator;
+    source.sha256 = request.intake!.original_request.sha256;
+    expect(() => assertOrderRequest(request)).toThrow(/does not bind retained attachment/);
+  });
+
+  it("rejects a forged retained cost reference already present before capture", () => {
+    const request = JSON.parse(readFileSync(fixture, "utf8")) as OrderRequest;
+    const sources = worksheet(request).not_applicable[0]!.sources;
+    sources.push({ ...sources[0]!, sha256: "0".repeat(64),
+      locator: "keller-intake:00000000-0000-0000-0000-000000000000/attachment-0.bin" });
+    const path = join(home, "forged.json"); writeFileSync(path, JSON.stringify(request));
+    expect(() => capture(path)).toThrow(/does not bind retained attachment/);
+  });
+
+  it("rejects unresolved engineering uploads without pretending the placeholder is evidence", () => {
+    const request = externalRequest();
+    request.parts[0]!.source_evidence = [{ id: "pending", sha256: "0".repeat(64), locator: "upload:drawing" }];
+    expect(() => assertOrderRequest(request)).toThrow(/unresolved upload/);
+  });
+
+  it("preserves external approved estimates without claiming retained-byte verification", async () => {
+    const request = externalRequest();
+    expect(() => assertOrderRequest(request)).not.toThrow();
+    const order = await buildPricedOrder(new QuoteRegister([]), request, { registerSha256: null });
+    expect(order.total).toBe(120);
+    expect(order.lines[0]!.cost_breakdown!.assertion_status).toBe("supplied_not_authenticated");
+    expect(order.lines[0]!.cost_breakdown!.supplied_basis).toEqual(worksheet(request));
+    expect(order.requires_human_review).toBe(true);
+    const path = join(home, "external.json"); writeFileSync(path, JSON.stringify(request));
+    const retained = capture(path);
+    expect(() => verifyRetainedIntake(retained.request)).not.toThrow();
+    expect(worksheet(retained.request)).toEqual(worksheet(request));
   });
 
   it("rejects changed original input, forged hashes, unknown worksheet facts and symlink escapes", () => {
