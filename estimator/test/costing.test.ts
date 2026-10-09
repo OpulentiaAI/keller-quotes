@@ -243,6 +243,73 @@ describe("prospective cost-basis worksheet", () => {
     expect(result.components[0]).toMatchObject({ priced_quantity: 2, total_cost: range(20, 16, 24) });
   });
 
+  it("rounds purchased stock upward after yield and preserves the supplied unit and assumption", () => {
+    const b = basis();
+    b.components[0]!.purchase_increment = 1;
+    b.components[0]!.assumptions.push("Purchase whole sheets; charge this line for the remainder, no inventory credit");
+    const unchanged = JSON.stringify(b);
+    const result = reconcile(b, { ...flat(), material_per_unit: 2 });
+    expect(result.components[0]).toMatchObject({ priced_quantity: 2, total_cost: range(20, 16, 24),
+      purchase_rounding: { original_unit: "sheet", quantity_before_increment: 1.25, increment: 1 } });
+    expect(result.supplied_basis).toEqual(b);
+    expect(JSON.stringify(b)).toBe(unchanged);
+    expect(reconcile().components[0]).toMatchObject({ priced_quantity: 1.25, total_cost: range(12.5, 10, 15) });
+    expect(reconcile().components[0]).not.toHaveProperty("purchase_rounding");
+    expect(() => reconcile(b)).toThrow(/reconcile material_per_unit/);
+  });
+
+  it("applies minimum quantity before pack multiples and minimum money after them", () => {
+    const b = basis();
+    Object.assign(b.components[0]!, { minimum_quantity: 5, purchase_increment: 4, minimum_charge: range(75) });
+    const result = reconcile(b, { ...flat(), material_per_unit: 8 });
+    expect(result.components[0]).toMatchObject({ priced_quantity: 8, total_cost: range(80, 75, 96),
+      purchase_rounding: { quantity_before_increment: 5, increment: 4 } });
+  });
+
+  it.each([
+    [0.3, 1, 1, 0.1, 0.3],
+    [0.07, 1, 1, 0.01, 0.07],
+    [0.300001, 1, 1, 0.1, 0.4],
+    [1, 1, 0.3, 0.1, 3.4],
+    [0.3, 0.1, 1, 0.01, 0.03],
+    [0.000001, 1, 1, 0.000001, 0.000001],
+  ])("uses exact decimal multiples for quantity %s, conversion %s, yield %s, increment %s", (quantity, conversion, yieldFraction, increment, expected) => {
+    const b = basis();
+    Object.assign(b.components[0]!, { quantity, original_units_per_quantity_unit: conversion,
+      yield_fraction: yieldFraction, purchase_increment: increment });
+    expect(deriveCostBasis(b, 10, asOf).components[0]!.priced_quantity).toBe(expected);
+  });
+
+  it.each([0, -1, null, false, "1", NaN, Infinity, 1e9 + 1, 0.0000001])("rejects invalid purchase increment %s", increment => {
+    const b = basis();
+    (b.components[0] as unknown as Record<string, unknown>).purchase_increment = increment;
+    expect(() => deriveCostBasis(b, 10, asOf)).toThrow(/purchase_increment/);
+  });
+
+  it("supports explicitly purchased outside-processing batches without rounding setup or route quantities", () => {
+    const b = basis();
+    b.components[1]!.purchase_increment = 6;
+    const result = reconcile(b);
+    expect(result.components[1]).toMatchObject({ priced_quantity: 12, total_cost: range(25, 25, 36),
+      purchase_rounding: { original_unit: "piece", quantity_before_increment: 10, increment: 6 } });
+    expect(result.routing).toEqual(reconcile().routing);
+  });
+
+  it("prices should-cost from rounded purchases and keeps margin and customer review honest", async () => {
+    const b = basis();
+    b.components[0]!.purchase_increment = 1;
+    const req = request(b);
+    req.parts[0]!.pricing = { method: "should_cost", cost_basis: b, margin_pct: 20, reason: "Reviewed whole-sheet purchase" };
+    const order = await buildPricedOrder(reg, req, options);
+    expect(order.lines[0]).toMatchObject({ unit_price: 16.125, extended_price: 161.25 });
+    expect(order.lines[0]!.cost_breakdown).toMatchObject({
+      assertion_status: "supplied_not_authenticated", estimated_line_cost: range(129, 93, 170),
+      estimated_line_margin_pct: { low: -5.43, base: 20, high: 42.33 } });
+    expect(order.state).toBe("PRICED_REQUIRES_REVIEW");
+    expect(order.requires_human_review).toBe(true);
+    expect(order.total).toBe(171.25);
+  });
+
   it("allocates explicit other production costs without a new hidden flat component", () => {
     const b = basis();
     b.components.push({ ...b.components[1]!, id: "tooling", category: "other", allocation: "setup_total",
@@ -306,6 +373,43 @@ describe("prospective cost-basis worksheet", () => {
     expect(reconcile(b).supplied_basis.components[0]!.sources[0]!.status).toBe("historical");
   });
 
+  it.each(["components", "routing", "not_applicable"] as const)("rejects an estimate approval that predates its source in %s", group => {
+    const b = basis();
+    const s = b[group][0]!.sources[0]!;
+    s.source_date = "2024-05-31";
+    s.approval!.date = "2024-05-30";
+    expect(() => deriveCostBasis(b, 10, asOf)).toThrow(/approval.date is before source_date/);
+    expect(() => reconcile(b)).toThrow(/approval.date is before source_date/);
+    const req = request(b);
+    expect(() => assertOrderRequest(req)).toThrow(/approval.date is before source_date/);
+    req.parts[0]!.pricing = { method: "should_cost", cost_basis: b, margin_pct: 20, reason: "Synthetic chronology check" };
+    expect(() => assertOrderRequest(req)).toThrow(/approval.date is before source_date/);
+  });
+
+  it.each(["2024-05-31", asOf])("allows review on or after the source date, through quote date: %s", approvalDate => {
+    const b = basis();
+    for (const support of [...b.components, ...b.routing, ...b.not_applicable]) {
+      for (const s of support.sources) {
+        s.source_date = "2024-05-31";
+        s.approval!.date = approvalDate;
+      }
+    }
+    expect(reconcile(b).reconciled_flat).toEqual(flat());
+    expect(deriveCostBasis(b, 10, asOf).reconciled_flat).toEqual(flat());
+  });
+
+  it("allows a reviewed historical estimate after expiry without reclassifying it as current", () => {
+    const b = basis();
+    const s = b.components[0]!.sources[0]!;
+    Object.assign(s, { source_class: "supplier_quote", source_date: "2020-01-01", effective_date: "2020-01-01",
+      expires_date: "2020-01-31", captured_date: "2026-10-09" });
+    s.approval!.reason = "Synthetic approval of a historical estimating basis, not an executable current offer";
+    const result = reconcile(b);
+    expect(result.reconciled_flat).toEqual(flat());
+    expect(result.supplied_basis.components[0]!.sources[0]).toEqual(s);
+    expect(result.warnings.join(" ")).toContain("not guaranteed actual costs or current buy prices");
+  });
+
   it("accepts a current assertion only inside its commercial date window", () => {
     const b = basis();
     b.components[0]!.sources = [{ ...source(), source_class: "supplier_quote", status: "current", approval: undefined,
@@ -350,6 +454,7 @@ describe("prospective cost-basis worksheet", () => {
     ["absent provenance", b => { b.components[0]!.sources = []; }, /1\.\.8/],
     ["invalid hash", b => { b.components[0]!.sources[0]!.sha256 = "not-a-hash"; }, /hex digest/],
     ["missing estimate approval", b => { Reflect.deleteProperty(b.components[0]!.sources[0]!, "approval"); }, /approval/],
+    ["future estimate approval", b => { b.components[0]!.sources[0]!.approval!.date = "2024-06-02"; }, /approval.date is after quote_date/],
     ["future source", b => { b.components[0]!.sources[0]!.source_date = "2024-06-02"; }, /after quote_date/],
     ["invalid date", b => { b.components[0]!.sources[0]!.source_date = "2024-02-30"; }, /valid YYYY/],
     ["no expiry for current claim", b => { b.components[0]!.sources = [{ ...source(), status: "current", approval: undefined, effective_date: "2024-01-01" }]; }, /expires_date/],
