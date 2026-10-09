@@ -31,11 +31,16 @@ MEMO_NOTE = ("Memo values remain null, not empty specifications; raw DBF bytes a
              "Opt in with memo_fields and fpt_path for bounded memo_text evidence; decoded text is untrusted, "
              "not verified geometry or applicable specifications. Continue with DBF/FPT hashes pinned.")
 KEY_FIELDS = {"quote_no": "QUOTE_NO", "quotletter": "QUOTLETTER", "item": "ITEM",
-              "wo_no": "WO_NO", "jobno": "JOBNO", "page_no": "PAGE_NO", "seq": "SEQ"}
+              "wo_no": "WO_NO", "jobno": "JOBNO", "page_no": "PAGE_NO", "seq": "SEQ",
+              "vendor_quote": "VEND_QUOT", "material_id": "ID", "vendor_id": "VENDOR_ID"}
 KEY_GROUPS = (("quote_no",), ("record_id",), ("quotletter",), ("quotletter", "item"),
-              ("wo_no",), ("jobno",), ("wo_no", "page_no", "seq"))
+              ("wo_no",), ("jobno",), ("wo_no", "page_no", "seq"), ("quote_no", "seq"),
+              ("vendor_quote",), ("quote_no", "material_id", "vendor_id"))
 # Fixed joins from retained table schemas, not caller-selected column predicates.
 TABLE_KEYS = {
+    "QUOTEM": (("quote_no", "seq"),),
+    "QUOTEO": (("quote_no", "seq"),),
+    "VENDQUOT": (("vendor_quote",), ("quote_no", "material_id", "vendor_id")),
     "QUOTLETT": (("quotletter",),),
     "QUOTLINE": (("quotletter", "item"),),
     "QUOTLEIT": (("quotletter", "item"),),
@@ -89,6 +94,7 @@ def validate(request):
         "dbf_schema": {"action", "source_set", "path"},
         "dbf_rows": {"action", "source_set", "path", "quote_no", "record_id", "quotletter", "item",
                      "wo_no", "jobno", "page_no", "seq", "offset", "limit", "expected_dbf_sha256",
+                     "vendor_quote", "material_id", "vendor_id",
                      "memo_fields", "fpt_path", "expected_fpt_sha256", "memo_offset", "memo_limit"},
     }
     if action not in allowed or set(request) - allowed[action]:
