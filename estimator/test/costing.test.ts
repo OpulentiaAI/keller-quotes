@@ -73,6 +73,26 @@ describe("prospective cost-basis worksheet", () => {
     expect(JSON.stringify(req)).toBe(unchanged);
   });
 
+  it("keeps a source-supported should-cost proposal visible when its extension rounds to zero", async () => {
+    const b = basis();
+    b.components = [{ ...b.components[0]!, quantity: 1, original_units_per_quantity_unit: 1, yield_fraction: 1,
+      unit_cost: range(0.0001), minimum_charge: range(0) }];
+    b.routing = [];
+    b.not_applicable = (["routing", "outside", "other"] as const).map(category => ({
+      category, reason: "Synthetic scope exclusion", sources: [source()],
+    }));
+    const req = request(undefined, flat(), 1);
+    req.parts[0]!.pricing = { method: "should_cost", cost_basis: b, margin_pct: 0, reason: "Synthetic supported estimate" };
+    const order = await buildPricedOrder(reg, req, options);
+    expect(order.lines[0]).toMatchObject({ unit_price: 0.0001, extended_price: 0, proposal_status: "NUMERIC_PROVISIONAL" });
+    expect(order.lines[0]!.cost_breakdown!.supplied_basis).toEqual(b);
+    expect(order.lines[0]!.cost_breakdown!.estimated_line_cost.base).toBe(0.0001);
+    expect(order.lines[0]!.cost_breakdown!.estimated_line_margin_pct).toBeNull();
+    expect(order.state).toBe("BLOCKED");
+    expect(order.total).toBeNull();
+    expect(order.blockers.join(" ")).toContain("zero-cent");
+  });
+
   it("rejects mixed should-cost overrides, unsupported benchmark sources and missing scope", () => {
     const req = request();
     req.parts[0]!.pricing = { method: "should_cost", cost_basis: basis(), margin_pct: 20, reason: "Synthetic" };
