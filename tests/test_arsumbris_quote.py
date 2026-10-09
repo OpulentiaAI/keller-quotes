@@ -253,6 +253,10 @@ print(json.dumps({'sha256': hashlib.sha256(data).hexdigest(), 'rows': """ + str(
         self.assertNotIn(b"EXCLUDED", filtered.read_bytes())
         self.assertIn(b"1.23456", filtered.read_bytes())
         self.assertIn(b"1.11111", filtered.read_bytes())
+        self.assertNotIn(b"description", filtered.read_bytes())
+        self.assertNotIn(b"L-A", filtered.read_bytes())
+        self.assertNotIn("evidence", content["order"]["lines"][0]["analogs"][0])
+        self.assertIn("evidence", full["order"]["lines"][0]["analogs"][0])
         self.assertEqual(content["corpus_sha256"], hashlib.sha256(filtered.read_bytes()).hexdigest())
         self.assertEqual(content["order"]["provenance"]["register_sha256"], content["corpus_sha256"])
         self.assertEqual(json.loads((folder / "output/review.json").read_text())["source_rows"], 2)
@@ -262,6 +266,11 @@ print(json.dumps({'sha256': hashlib.sha256(data).hexdigest(), 'rows': """ + str(
         self.assertEqual(second["corpus_sha256"], content["corpus_sha256"])
         self.assertEqual(second["order"]["lines"][0]["unit_price"], content["order"]["lines"][0]["unit_price"])
         self.assertEqual(second["order"]["lines"][0]["analogs"], content["order"]["lines"][0]["analogs"])
+
+        export([forbidden, {**allowed, "description": "unfrozen engineering", "customer": "unfrozen name", "quote_letter": "unfrozen letter"}, second_break])
+        isolated = self.invoke(request, internal=binding)["content"]
+        self.assertEqual(isolated["corpus_sha256"], content["corpus_sha256"])
+        self.assertEqual(isolated["order"]["lines"], content["order"]["lines"])
 
         scope["eligible_prices"] = []
         empty = self.invoke(request, internal=write_scope())["content"]

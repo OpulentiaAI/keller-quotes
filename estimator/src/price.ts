@@ -1,5 +1,6 @@
 import type { Candidate, PricePoint } from "./types.js";
 import { normalizeCustomer } from "./register.js";
+import { candidateKey } from "./evidence.js";
 
 const DAY = 86_400_000;
 
@@ -93,8 +94,9 @@ export function price(
     const p = interpolateAtQty(c.breaks, targetQty);
     if (p === null) continue;
     let w = c.score * recencyWeight(c.row.quote_date, now);
-    const jevP = opts.jevProbabilities?.[c.row.quote_no];
-    if (jevP !== undefined) w *= 0.25 + jevP;
+    const jevP = opts.jevProbabilities?.[candidateKey(c)];
+    if (jevP !== undefined && Number.isFinite(jevP) && jevP >= 0 && jevP <= 1) w *= 0.25 + jevP;
+    // Legacy weighting retained, not verified-success evidence or a new pricing policy.
     if (c.row.status === "won") w *= 1.25;
     if (opts.customerId ? c.row.customer_id === opts.customerId :
       opts.customer && c.row.customer && normalizeCustomer(c.row.customer) === normalizeCustomer(opts.customer)) w *= 1.2;
@@ -120,6 +122,8 @@ export function price(
       quote_date: c.row.quote_date,
       status: c.row.status,
       weight: w,
+      candidate_key: candidateKey(c),
+      used_for_unit_price: false,
     });
   }
   if (!points.length) {
@@ -131,6 +135,7 @@ export function price(
   if (opts.strategy === "latest" || points.length === 1) {
     const latest = [...points].sort((a, b) => b.quote_date.localeCompare(a.quote_date))[0]!;
     unit = latest.unit_price;
+    latest.used_for_unit_price = true;
     method = "latest";
   } else if (opts.strategy === "curve_fit" && regression.length >= 3) {
     // pooled log-log regression, weighted
@@ -162,6 +167,12 @@ export function price(
   } else {
     unit = weightedQuantile(points.map((p) => ({ v: p.unit_price, w: p.weight })), 0.5);
     method = "median_won";
+  }
+
+  // In weighted quantiles every positive-weight point participates in the decision,
+  // even when its value is not the selected quantile. Regression uses the same weights.
+  if (method !== "latest" && unit !== null) {
+    for (const point of points) point.used_for_unit_price = point.weight > 0;
   }
 
   const low = weightedQuantile(points.map((p) => ({ v: p.unit_price, w: p.weight })), 0.25);

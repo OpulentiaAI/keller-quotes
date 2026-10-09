@@ -6,16 +6,30 @@ fields:
   source_set?: [fabritrak, pdfs, transcripts, manufacturing-audit]
   #: Relative directory or file path within the source set; empty or omitted means root for list.
   path?: String
-  #: Directory-entry offset for list, byte offset for read, or physical record offset for dbf_rows.
+  #: Directory-entry offset for list, byte offset for read, or zero-based physical record index for dbf_rows. A bounded miss is not corpus-wide absence; follow next_offset with the same key and hash.
   offset?: Number{>=0 & integer}
   #: Maximum entries for list (50), bytes for read (4096), or matching rows for dbf_rows (5).
   limit?: Number{>=1 & integer}
   #: For read: utf-8, latin-1 or base64. Text offsets and continuations are byte offsets.
   encoding?: [utf-8, latin-1, base64]
-  #: Exact quote number to filter a DBF with a QUOTE_NO column; supply exactly one of quote_no or record_id for dbf_rows.
+  #: Exact QUOTE_NO; legacy schema-gated filter. Choose one complete key form listed by dbf_schema.exact_filters, never mix forms. Keys are case-sensitive trimmed stored strings.
   quote_no?: String
-  #: Exact catalog record identifier in a DBF with one of ID, FORM_ID, OPER_ID; alternative to quote_no, never a caller-selected column.
+  #: Exact catalog identifier in one unambiguous ID, FORM_ID or OPER_ID character column; legacy alternative to quote_no.
   record_id?: String
+  #: Exact QUOTLETTER alone for QUOTLETT, or with item for QUOTLINE/QUOTLEIT.
+  quotletter?: String
+  #: Exact character ITEM including leading zeros, required with quotletter for QUOTLINE/QUOTLEIT.
+  item?: String
+  #: Exact WO_NO for WOHEAD/WOJOBS/WOSEQ/WOCOLL/WOSHIP/SOLOTS/WOBOM/WOBILL; optionally with page_no and seq only for WOSEQ/WOCOLL.
+  wo_no?: String
+  #: Exact JOBNO for SOMAST/SOLOTS/WOJOBS/WOBOM, an alternative key form (not combined with wo_no).
+  jobno?: String
+  #: Exact trimmed PAGE_NO numeric-field text, required together with wo_no and seq for the operation composite key. No numeric coercion.
+  page_no?: String
+  #: Exact character SEQ including leading zeros, required with wo_no and page_no for WOSEQ/WOCOLL.
+  seq?: String
+  #: Optional lowercase SHA256 from a prior DBF citation; dbf_rows fails closed if the file changed between continuation requests.
+  expected_dbf_sha256?: String
 meta:
   - type: plugin-runtime-meta::au-mcp-sdk
     entry: ./arsumbris/sources/tool.ts
@@ -23,4 +37,4 @@ meta:
   - type: tool-access-meta::au-mcp-sdk
     broker: none
   - type: tool-presentation-meta::au-mcp-sdk
-    description: "Read-only, owner-bound Keller private source sets: inventory, directory listing, bounded source-file bytes and exact-quote or exact-catalog-ID FabriTRAK DBF rows/schema. No arbitrary paths, predicates, SQL, or writes. Citations identify source set and relative path; historical vendor prices and estimated times are not verified current costs."
+    description: "Operator-only, read-only, owner-bound Keller private source sets: inventory, bounded bytes and stdlib DBF rows/schema with approved exact keys. No arbitrary paths, columns, predicates, SQL, writes, or archive access for blinded workers. DBFs are capped at 512 MiB; row pages scan at most 20000 physical records and 16 MiB, returning at most 5 matches. DBF citations include a measured file SHA256 (not external-catalog authentication); rows include zero-based physical index, byte offset, length and SHA256. Deleted rows are excluded and malformed scanned records fail closed. Memo/binary decoding is deferred: null values mean unresolved, not empty; labeled base64 bytes are pointers/raw evidence, not memo text. A bounded filter miss is not corpus-wide absence. Historical estimates may support human-reviewed prospective pricing, not guaranteed actual/current costs or automatic customer release."

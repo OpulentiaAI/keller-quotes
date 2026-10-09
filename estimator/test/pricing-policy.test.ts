@@ -324,9 +324,9 @@ describe("quantity relevance and range warnings", () => {
     expect(result.lines[0]!.warnings.some((w) => w.includes("provisional human-review fallback"))).toBe(false);
   });
 
-  it("does not fall back to an unscreened priced candidate beyond the screening budget", async () => {
+  it("does not fall back beyond the screening budget when screening is unavailable", async () => {
     const register = new QuoteRegister([
-      row({ quote_no: "unpriced", part_no: "SYN-1", description: "BRACKET", quantity: 10, unit_price: 0 }),
+      row({ quote_no: "unpriced", part_no: "SYN-1", description: "BRACKET", quantity: 10, unit_price: 20 }),
       row({ quote_no: "unscreened", part_no: "SYN-2", description: "BRACKET", quantity: 10, unit_price: 25 }),
     ]);
     const jev = {
@@ -334,7 +334,7 @@ describe("quantity relevance and range warnings", () => {
       rankAnalogs: async () => ({ rankedIds: ["unpriced", "unscreened"], probabilities: {}, source: "jev" as const }),
       screenCandidate: async (_part: unknown, c: Candidate) => {
         expect(c.row.quote_no).toBe("unpriced");
-        return "quarantine" as const;
+        return "unavailable" as const;
       },
       chooseStrategy: async (_part: unknown, candidates: Candidate[]) => {
         expect(candidates).toEqual([]);

@@ -29,6 +29,29 @@ function row(partial: Partial<QuoteRow>): QuoteRow {
 }
 
 describe("priced orders", () => {
+  it("rejects asset paths as drawing numbers even for operator-priced lines", async () => {
+    for (const pricing of [base().parts[0]!.pricing, { method: "cost_plus", material_per_unit: 1,
+      labor_per_unit: 0, outside_per_unit: 0, setup_total: 0, margin_pct: 20, reason: "synthetic" }]) {
+      await expect(buildPricedOrder(reg, { ...base(), parts: [{ ...base().parts[0], pricing,
+        drawing_no: "uploads/drawing.pdf" }] }, opts)).rejects.toThrow(/drawing number/);
+      const order = await buildPricedOrder(reg, { ...base(), parts: [{ ...base().parts[0], pricing,
+        drawing_no: "DWG-1", drawing_revision: "A", revision: "B", drawing_ref: "uploads/drawing.pdf" }] }, opts);
+      expect(order.lines[0]!.part).toMatchObject({ drawing_no: "DWG-1", drawing_revision: "A", revision: "B" });
+    }
+  });
+
+  it("preserves non-admitted specification evidence in operator order holds", async () => {
+    const source = new QuoteRegister([row({ quote_no: "Q", part_no: "P-1", rev: "A",
+      quote_date: "2020-01-01", quantity: 3, unit_price: 2 })]);
+    const order = await buildPricedOrder(source, { ...base(), parts: [{ line_id: "1", part_no: "P-1",
+      quantity: 3, revision: "B" }] }, opts);
+    expect(order.state).toBe("BLOCKED");
+    expect(order.lines[0]!.analogs).toEqual([]);
+    expect(order.lines[0]!.evidence_candidates).toHaveLength(1);
+    expect(order.lines[0]!.evidence_candidates![0]!.screening.status).toBe("incompatible");
+    expect(order.lines[0]!.evidence_candidates![0]!.identity.quote_no).toBe("Q");
+  });
+
   it("reconciles multiple lines from displayed unit prices with HALF-UP cents and explicit zero charges", async () => {
     const request = {
       ...base(), parts: [base().parts[0],

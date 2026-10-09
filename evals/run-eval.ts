@@ -71,7 +71,7 @@ for (const c of allCases) {
   ids.add(c.id);
 }
 const cases = sample === null ? allCases.slice(0, limit) : selectCases(allCases, sample, seed);
-const relevantFiles = ["estimator/src/estimate.ts", "estimator/src/retrieve.ts", "estimator/src/price.ts",
+const relevantFiles = ["estimator/src/estimate.ts", "estimator/src/evidence.ts", "estimator/src/retrieve.ts", "estimator/src/price.ts",
   "estimator/src/register.ts", "estimator/src/jev.ts", "estimator/src/types.ts", "estimator/package-lock.json",
   "evals/run-eval.ts", "evals/metrics.ts", "evals/selection.ts"];
 const codeHash = createHash("sha256");

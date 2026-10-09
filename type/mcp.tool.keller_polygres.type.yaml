@@ -10,13 +10,19 @@ fields:
   part_no?: String
   #: Exact quote number to narrow search or prices.
   quote_no?: String
-  #: Optional document kind for search.
+  #: Operator-only opt-in for prices: bounded rev/drawing_no/rfq_no/comment projection with origin inherited_register_metadata_not_pdf_verified. Omit or false preserves the exact default prices response; unavailable in existing blinded scopes.
+  include_specification?: Boolean
+  #: Character offset into each inherited field (0..1000000, default 0); only with include_specification=true. Repeat the same prices filter/row offset and compare raw_csv_sha256 for continuations.
+  specification_offset?: Number{>=0 & integer}
+  #: Maximum characters per inherited field (1..1000, default 512); only with include_specification=true. Empty/missing metadata is not proof of absence or compatibility.
+  specification_limit?: Number{>=1 & integer}
+  #: Optional document kind for search. Omit to discover all retained kinds; a quote-filtered miss is not corpus-wide absence.
   kind?: [quote, invoice, packing_slip, supplier_po, certificate, other, unknown]
   #: Exact source_path from a search result; required for page.
   source_path?: String
   #: 1-based page number within the source PDF, required for page.
   page_number?: Number{>=1 & integer}
-  #: Result count for search/prices (default 20, maximum 50), or characters for page (default 4000, maximum 4000).
+  #: Result count for search/prices (default 20, maximum 50; include_specification=true uses default/max 5), or characters for page (default/max 4000).
   limit?: Number{>=1 & integer}
   #: Result offset for search/prices, or character offset within a page (default 0).
   offset?: Number{>=0 & integer}
@@ -27,4 +33,4 @@ meta:
   - type: tool-access-meta::au-mcp-sdk
     broker: none
   - type: tool-presentation-meta::au-mcp-sdk
-    description: "Read-only Keller Polygres evidence. Discover corpus IDs with corpora, counts and ingested_at snapshot timestamps; pass an explicit corpus for page-text search, verified customer-PDF prices by exact part/quote, or a cited source_path/page_number. Ingestion time identifies a snapshot and is not quote chronology. For prices/search, limit is 1..50 rows (default 20), offset is 0..100000; for page, limit is 1..4000 characters (default 4000), offset is 0..1000000, and page_number is 1..100000. Paginate with next_offset; an empty filtered page may still have more results. Search is not numeric authority; prices have unknown outcome and never merge with internal calculation quotes. Bounded output; no SQL or data mutation."
+    description: "Read-only Keller Polygres evidence. Discover corpus IDs with corpora, counts and ingested_at snapshot timestamps; pass an explicit corpus for page-text search, verified customer-PDF prices by exact part/quote, or a cited source_path/page_number. Ingestion time identifies a snapshot and is not quote chronology. For prices/search, limit is 1..50 rows (default 20), offset is 0..100000; for page, limit is 1..4000 characters (default 4000), offset is 0..1000000, and page_number is 1..100000. Paginate with next_offset; an empty filtered page may still have more results. Search is not numeric authority; a quote-filtered search only includes price-linked documents and a miss is not corpus-wide absence. Prices have unknown outcome and never merge with internal calculation quotes. Optional include_specification=true adds inherited register rev/drawing_no/rfq_no/comment, field continuations and CSV-row/hash evidence, not PDF-verified requirements. Its related-document page_lookup starts discovery at page 1, not a claimed specification origin; use page_count and next_offset to inspect continuation pages. Opt-in prices are limited to 5 rows and 1000 characters per field (default 512); default prices remain unchanged for strict blinded scopes. Historical applicability and customer release require human approval. Bounded output; no SQL or data mutation."

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Bounded read-only Polygres queries for the native Ars Umbris tool."""
 
+import hashlib
 import importlib.util
 import json
 import os
@@ -18,6 +19,8 @@ CORPUS_ID = re.compile(r"[0-9a-f]{64}\Z")
 KINDS = frozenset(("quote", "invoice", "packing_slip", "supplier_po", "certificate", "other", "unknown"))
 PRICE_FIELDS = ("quote_no", "item_no", "quantity", "unit_price", "extended_price", "quote_date", "letter_date",
                 "part_no", "customer_id", "source_price_field", "price_basis", "status")
+SPECIFICATION_FIELDS = ("rev", "drawing_no", "rfq_no", "comment")
+SPECIFICATION_ORIGIN = "inherited_register_metadata_not_pdf_verified"
 
 
 class InvalidRequest(ValueError):
@@ -47,7 +50,8 @@ def validate(request):
     allowed = {
         "corpora": {"action"},
         "search": {"action", "corpus", "query", "quote_no", "kind", "limit", "offset"},
-        "prices": {"action", "corpus", "part_no", "quote_no", "limit", "offset"},
+        "prices": {"action", "corpus", "part_no", "quote_no", "limit", "offset",
+                   "include_specification", "specification_offset", "specification_limit"},
         "page": {"action", "corpus", "source_path", "page_number", "limit", "offset"},
     }
     if set(request) - allowed[action]:
@@ -60,8 +64,17 @@ def validate(request):
         nonempty(request.get("query"), "query", 200)
         if request.get("kind") is not None and request["kind"] not in KINDS:
             raise InvalidRequest("unknown document kind")
-    if action == "prices" and not (request.get("part_no") or request.get("quote_no")):
-        raise InvalidRequest("prices requires an exact part_no or quote_no")
+    if action == "prices":
+        if not (request.get("part_no") or request.get("quote_no")):
+            raise InvalidRequest("prices requires an exact part_no or quote_no")
+        if "include_specification" in request and type(request["include_specification"]) is not bool:
+            raise InvalidRequest("include_specification must be a boolean")
+        if request.get("include_specification", False):
+            integer(request.get("limit"), "limit", 5, 5, 1)
+            integer(request.get("specification_offset"), "specification_offset", 0, 1000000)
+            integer(request.get("specification_limit"), "specification_limit", 512, 1000, 1)
+        elif "specification_offset" in request or "specification_limit" in request:
+            raise InvalidRequest("specification bounds require include_specification=true")
     if action in ("prices", "search"):
         for field in ("part_no", "quote_no"):
             if field in request:
@@ -103,6 +116,33 @@ def connect():
     return conn
 
 
+def specification_projection(row, result, request):
+    """Keep inherited metadata distinct from numeric PDF proof and preserve blanks."""
+    offset = integer(request.get("specification_offset"), "specification_offset", 0, 1000000)
+    limit = integer(request.get("specification_limit"), "specification_limit", 512, 1000, 1)
+    fields = {}
+    for field in SPECIFICATION_FIELDS:
+        value = row.get(field)
+        if value is not None and (not isinstance(value, str) or len(value) > 1000000):
+            raise InvalidRequest("invalid or oversized inherited specification metadata")
+        text = value[offset:offset + limit] if value is not None else None
+        following = offset + len(text or "")
+        more = value is not None and following < len(value)
+        fields[field] = {"text": text, "status": "unavailable" if value is None else "empty" if not value else "present",
+                         "offset": offset, "character_count": len(value) if value is not None else None,
+                         "has_more": more, "next_offset": following if more else None}
+    return {"origin": SPECIFICATION_ORIGIN, "fields": fields,
+            "csv_row_number": result[0], "raw_csv_sha256": hashlib.sha256(result[1].encode("utf-8")).hexdigest(),
+            "related_document": {"source_path": result[12], "pdf_sha256": result[13],
+                                 "relationship": "associated_price_document_not_specification_proof",
+                                 "page_lookup": {"action": "page", "corpus": request["corpus"],
+                                                 "source_path": result[12], "page_number": 1}},
+            "note": "Inherited fields may describe another revision/event; human applicability review required. "
+                    "No PDF page is asserted as their origin. Use page_lookup for discovery, then page_count and "
+                    "page next_offset for bounded continuations. For field continuations repeat the same prices "
+                    "filter and row offset with specification_offset; compare raw_csv_sha256. Blanks are not proof of absence."}
+
+
 def read(conn, request):
     action = request["action"]
     with conn.transaction():
@@ -138,7 +178,10 @@ def read(conn, request):
                     "next_offset": offset + limit if len(rows) > limit else None}
         if action == "prices":
             evidence = evidence_module()
-            limit, offset = request.get("limit", 20), request.get("offset", 0)
+            include_specification = request.get("include_specification", False)
+            limit = integer(request.get("limit"), "limit", 5 if include_specification else 20,
+                            5 if include_specification else 50, 1)
+            offset = integer(request.get("offset"), "offset", 0, 100000)
             rows = conn.execute(evidence.PRICE_SELECT + " where v.corpus_key=%s "
                 "and (%s::text is null or v.part_no=%s) and (%s::text is null or v.quote_no=%s) "
                 "order by v.quote_no,v.quantity,v.item_no limit %s offset %s",
@@ -147,8 +190,11 @@ def read(conn, request):
             results = []
             for result in rows[:limit]:
                 row = evidence.checked_price(result, prepared["csv_columns"])
-                results.append({"row": {field: row[field] for field in PRICE_FIELDS}, "source_path": result[12],
-                                "pdf_sha256": result[13], "transcript_sha256": result[14]})
+                item = {"row": {field: row[field] for field in PRICE_FIELDS}, "source_path": result[12],
+                        "pdf_sha256": result[13], "transcript_sha256": result[14]}
+                if include_specification:
+                    item["specification"] = specification_projection(row, result, request)
+                results.append(item)
             return {"action": action, "corpus": corpus_id, "basis": "verified issued customer quotation PDF",
                     "outcome": "unknown", "prices": results, "has_more": len(rows) > limit,
                     "next_offset": offset + limit if len(rows) > limit else None}

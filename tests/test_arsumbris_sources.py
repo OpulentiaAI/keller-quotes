@@ -116,8 +116,6 @@ class SourceToolTest(unittest.TestCase):
             self.call("list", source_set="transcripts", limit=51)
 
     def test_dbf_schema_and_exact_quote_paging(self):
-        if not self._dbf_available():
-            self.skipTest("dbfread not installed in test interpreter")
         schema = self.call("dbf_schema", source_set="fabritrak", path="QUOTE.DBF")
         self.assertEqual([f["name"] for f in schema["fields"]], ["QUOTE_NO", "PRICE1", "COMMENT"])
         page = self.call("dbf_rows", source_set="fabritrak", path="QUOTE.DBF", quote_no="Q100", limit=1)
@@ -133,8 +131,6 @@ class SourceToolTest(unittest.TestCase):
                 self.call("dbf_rows", source_set="fabritrak", path="QUOTE.DBF", **fields)
 
     def test_catalog_exact_id_and_filter_exclusivity(self):
-        if not self._dbf_available():
-            self.skipTest("dbfread not installed in test interpreter")
         for name, field in (("MATERIAL.DBF", "ID"), ("FORMULA.DBF", "FORM_ID"), ("OPERATIO.DBF", "OPER_ID")):
             with self.subTest(name=name):
                 first = self.call("dbf_rows", source_set="fabritrak", path=name, record_id="Q100", limit=1)
@@ -152,14 +148,6 @@ class SourceToolTest(unittest.TestCase):
             self.call("dbf_rows", source_set="fabritrak", path="UNKEYED.DBF", record_id="Q100")
         with self.assertRaises(reader.InvalidRequest):
             self.call("dbf_rows", source_set="fabritrak", path="MATERIAL.DBF", quote_no="Q100")
-
-    @staticmethod
-    def _dbf_available():
-        try:
-            import dbfread  # noqa: F401
-            return True
-        except ImportError:
-            return False
 
     def test_native_child_environment_redacts_credentials(self):
         worker = self.base / "worker"

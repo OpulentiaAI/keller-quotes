@@ -6,7 +6,8 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { test } from 'node:test'
 import { exchange, openAudit, parseArgs } from '../call-arsumbris-tool.mjs'
-import { loadEvaluationScope, sameDecimal } from '../mcp-evaluation-scope.mjs'
+import { loadEvaluationScope, sameDecimal, projectScopedOrder } from '../mcp-evaluation-scope.mjs'
+import { scopedRegister } from '../../estimator/src/scoped-register.mjs'
 
 const root = resolve(import.meta.dirname, '../..')
 const cli = join(root, 'scripts/call-arsumbris-tool.mjs')
@@ -307,6 +308,10 @@ test('quote identity, reviewer, date, parts and charges are exact, but proposals
     { request: JSON.stringify({ ...submitted, parts: [{ ...submitted.parts[0], quantity: 4 }] }) },
     { request: JSON.stringify({ ...submitted, charges: { shipping: 9, tax: 0 } }) },
     { request: JSON.stringify({ ...submitted, additional_charges: [{ label: 'fee', amount: 1 }] }) },
+    ...['revision', 'drawing_no', 'drawing_revision', 'material', 'finish', 'description', 'drawing_ref'].map(key => ({
+      request: JSON.stringify({ ...submitted, parts: [{ ...submitted.parts[0], [key]: 'unfrozen' }] }),
+    })),
+    { request: JSON.stringify({ ...submitted, parts: [{ ...submitted.parts[0], pricing: { method: 'cost_plus', cost_basis: {} } }] }) },
   ]) {
     const result = await call(guard, 'keller_quote', { ...inputs, ...changed }, () => { calls++; return envelope(makeDraft('BLOCKED', [])) })
     assert.equal(result.result, null)
@@ -336,6 +341,7 @@ test('quote identity, reviewer, date, parts and charges are exact, but proposals
     draft => { draft.review.customer_release_authorized = true },
     draft => { draft.order.request.quote_date = '2026-01-01' },
     draft => { draft.order.request.parts[0].part_no = 'OTHER' },
+    draft => { draft.order.lines[0].part.revision = 'unfrozen' },
     draft => { draft.order.charges.shipping = 99 },
     draft => { draft.order.provenance.as_of = '2026-01-01' },
   ]) {
@@ -343,6 +349,62 @@ test('quote identity, reviewer, date, parts and charges are exact, but proposals
     mutate(draft)
     assert.equal((await call(guard, 'keller_quote', inputs, () => envelope(draft))).result, null)
   }
+})
+
+test('real scoped order retains dispositions but never exposes unfrozen rich evidence', async t => {
+  const f = fixture(t), guard = f.guard()
+  const { reviewer, ...submitted } = structuredClone(request)
+  const csv = join(f.privateDir, 'register.csv'), requestPath = join(f.privateDir, 'request.json')
+  const output = join(f.privateDir, 'order')
+  const record = { quote_no: row.quote_no, item_no: row.item_no, quote_date: row.quote_date,
+    letter_date: row.letter_date, date_stamp: '', part_no: row.part_no, customer_id: row.customer_id,
+    customer: 'Synthetic', status: 'unknown', quantity: row.quantity, unit_price: row.unit_price,
+    extended_price: row.extended_price, price_basis: 'customer_quote_pdf', quote_letter: 'LETTER',
+    source_document: row.source_path, source_document_sha256: pdf, source_transcript_sha256: transcript,
+    source_price_field: 'PRICE' }
+  writeFileSync(csv, Object.keys(record).join(',') + '\n' + Object.values(record).join(',') + '\n', { mode: 0o600 })
+  const scopedCsv = join(f.privateDir, 'scoped.csv')
+  scopedRegister(f.path, guard.sha256, root, sha, submitted, reviewer, csv,
+    createHash('sha256').update(readFileSync(csv)).digest('hex'), scopedCsv)
+  assert.doesNotMatch(readFileSync(scopedCsv, 'utf8'), /Synthetic|LETTER/)
+  writeFileSync(requestPath, JSON.stringify(submitted), { mode: 0o600 })
+  const built = spawnSync(process.execPath, [join(root, 'estimator/node_modules/tsx/dist/cli.mjs'),
+    join(root, 'estimator/src/order-cli.ts'), requestPath, '--register', scopedCsv, '--out', output],
+    { cwd: root, encoding: 'utf8' })
+  assert.equal(built.status, 0, built.stderr)
+  const operatorOrder = JSON.parse(readFileSync(join(output, 'order.json'), 'utf8'))
+  assert.ok(operatorOrder.lines[0].analogs[0].evidence)
+  const order = projectScopedOrder(operatorOrder)
+  const input = { corpus: sha, reviewer, request: JSON.stringify(submitted) }
+  const draft = { state: order.state, corpus_id: sha, corpus_sha256: order.provenance.register_sha256,
+    request_sha256: order.provenance.request_sha256, reviewer, evaluation_scope_sha256: guard.sha256,
+    source_rows: 1, order, requires_human_review: true, review: {
+      state: order.state, corpus_id: sha, corpus_sha256: order.provenance.register_sha256,
+      request_sha256: order.provenance.request_sha256, reviewer, evaluation_scope_sha256: guard.sha256,
+      source_rows: 1, status: 'PENDING_NAMED_HUMAN_REVIEW', requires_human_review: true, customer_release_authorized: false,
+    } }
+  assert.equal(order.lines[0].proposal_status, 'NUMERIC_PROVISIONAL')
+  assert.equal(order.lines[0].analogs[0].evidence, undefined)
+  const result = await call(guard, 'keller_quote', input, () => envelope(draft))
+  assert.ok(result.result, JSON.stringify(result))
+  for (const modify of [
+    x => { x.order.lines[0].proposal_status = 'APPROVED' },
+    x => { x.order.lines[0].evidence_status = 'CURRENT_ACTUAL_COST' },
+    x => { x.order.lines[0].analogs[0].evidence = operatorOrder.lines[0].analogs[0].evidence },
+    x => { x.order.lines[0].evidence_candidates = [] },
+    x => { x.order.lines[0].analogs[0].description = 'unfrozen specifications' },
+    x => { x.order.lines[0].analogs[0].quote_letter = 'unfrozen letter' },
+    x => { x.order.lines[0].part.revision = 'unfrozen revision' },
+    x => { x.order.request.notes = 'unexpected request mutation' },
+  ]) {
+    const changed = structuredClone(draft)
+    modify(changed)
+    assert.equal((await call(guard, 'keller_quote', input, () => envelope(changed))).result, null)
+  }
+  const auxiliary = structuredClone(operatorOrder)
+  auxiliary.lines[0].evidence_candidates = [operatorOrder.lines[0].analogs[0].evidence]
+  assert.equal(projectScopedOrder(auxiliary).lines[0].evidence_candidates, undefined)
+  assert.equal(auxiliary.lines[0].evidence_candidates.length, 1)
 })
 
 test('malformed and alternate MCP content channels never enter scoped audit', async t => {

@@ -2,7 +2,7 @@ extends: mcp.tool::au-mcp-sdk
 fields:
   #: Explicit public ID of the verified historical PDF-price corpus, 64 lowercase hex characters; never infer latest.
   corpus: String
-  #: JSON string matching the estimator OrderRequest contract. Operator unit_price/cost_plus inputs require a reason; finite historical/operator line prices are returned as provisional proposals with evidence status and uncertainties, pending human review; missing charges or prices keep the draft BLOCKED.
+  #: JSON string matching the estimator OrderRequest contract. Preserve supplied identities and stable line IDs; unit_price/cost_plus require a reason. Preserve finite proposals separately from adoption and commercial readiness; explicit conflicts block transfer, unknown current costs block supported margin claims, not historical comparison. Use pricing.cost_basis only as defined by the source API. Missing charges/prices keep arithmetic BLOCKED.
   request: String
   #: Name of the human estimator assigned to review this internal draft; naming a reviewer does not approve or release it.
   reviewer: String
@@ -17,4 +17,4 @@ meta:
   - type: tool-access-meta::au-mcp-sdk
     broker: none
   - type: tool-presentation-meta::au-mcp-sdk
-    description: "Draft an INTERNAL offline Keller order from a JSON OrderRequest against an explicit, verified customer-PDF price corpus. Persists private order.json/order.md and returns opaque artifact refs, state, blockers, provenance, and per-line provisional proposal/evidence status; assigns a named human reviewer. Historical quotes are nominal, outcomes unknown, and not current costs. Provisional line prices remain pending human review. Never approves or releases a customer quote."
+    description: "Draft an INTERNAL offline Keller order from a JSON OrderRequest against an explicit customer-PDF corpus, with a named human reviewer. Intake all lines, draft once, inspect contributors, then use one deduplicated exact evidence phase with bounded continuations for named critical gaps. Preserves private order.json/order.md, artifact refs, state, blockers, provenance and provisional proposal/evidence status. Recorded historical prices are not authenticated outcomes or current costs. Supported estimates need not await paid/closed-job ledgers. Numeric proposal, adopted amount and commercial readiness are distinct; complete arithmetic is not approval. Independent challenge and human review precede any customer release. Never approves or sends a quote."

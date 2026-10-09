@@ -156,6 +156,20 @@ function requestMatches(value, scope) {
       !value.charges || Object.keys(value.charges).some(key => !['shipping', 'tax'].includes(key)) ||
       !['shipping', 'tax'].every(key => sameDecimal(value.charges[key], scope.request.charges[key])) ||
       (value.additional_charges !== undefined && (!Array.isArray(value.additional_charges) || value.additional_charges.length))) throw new Error('Evaluation quote request mismatch')
+  for (const part of value.parts) {
+    object(part, ['line_id', 'part_no', 'quantity', 'pricing'])
+    if (part.pricing !== undefined) object(part.pricing, ['method', 'unit_price', 'material_per_unit', 'labor_per_unit', 'outside_per_unit', 'setup_total', 'margin_pct', 'reason'])
+  }
+}
+
+// Schema-1 scopes freeze price rows, not rich engineering packets or worksheets.
+export function projectScopedOrder(order) {
+  const projected = structuredClone(order)
+  for (const line of projected.lines) {
+    delete line.evidence_candidates
+    for (const analog of line.analogs) delete analog.evidence
+  }
+  return projected
 }
 
 export function beforeScopedCall(name, input, guard) {
@@ -245,10 +259,18 @@ export function afterScopedCall(name, input, result, guard) {
         !['BLOCKED', 'PRICED_REQUIRES_REVIEW'].includes(payload.state) || payload.order.state !== payload.state ||
         !['BLOCKED', 'PRICED_REQUIRES_REVIEW'].includes(payload.review?.state)) throw new Error('Guarded quote mismatch')
     requestMatches(payload.order.request, scope)
+    if (createHash('sha256').update(JSON.stringify(payload.order.request)).digest('hex') !== submittedSha) throw new Error('Guarded quote request bytes mismatch')
     for (const [i, line] of payload.order.lines.entries()) {
-      object(line, ['line_id', 'part', 'unit_price', 'extended_price', 'pricing_source', 'pricing_reason', 'confidence', 'analogs', 'warnings'])
+      object(line, ['line_id', 'part', 'unit_price', 'extended_price', 'pricing_source', 'pricing_reason', 'confidence', 'analogs', 'warnings',
+        'proposal_status', 'evidence_status', 'next_action', 'uncertainties'])
+      if (line.proposal_status !== undefined && !['NUMERIC_PROVISIONAL', 'MISSING'].includes(line.proposal_status) ||
+          line.evidence_status !== undefined && !['VERIFIED_CUSTOMER_PDF', 'HISTORICAL_INTERNAL_CALCULATION', 'MIXED_HISTORICAL', 'OPERATOR_INPUT', 'PRESENT_BUT_NO_USABLE_PRICE', 'NONE'].includes(line.evidence_status) ||
+          line.next_action !== undefined && (typeof line.next_action !== 'string' || line.next_action.length > 4096) ||
+          line.uncertainties !== undefined && (!Array.isArray(line.uncertainties) || line.uncertainties.length > 50 ||
+            line.uncertainties.some(value => typeof value !== 'string' || value.length > 4096))) throw new Error('Invalid quote disposition')
       if (line?.line_id !== scope.request.parts[i].line_id || line.part?.part_no !== scope.request.parts[i].part_no ||
           line.part?.quantity !== scope.request.parts[i].quantity || !Array.isArray(line.analogs)) throw new Error('Guarded quote line mismatch')
+      fields(line.part, ['part_no', 'quantity'])
       for (const analog of line.analogs) {
         object(analog, ['quote_no', 'quote_date', 'date_stamp', 'rev', 'customer', 'part_no', 'description', 'status', 'score', 'jev_probability', 'price_evidence', 'quote_letter', 'letter_date'])
         object(analog.price_evidence, ['price_basis', 'source_document', 'source_document_sha256', 'source_transcript_sha256', 'source_price_field'])
@@ -257,6 +279,8 @@ export function afterScopedCall(name, input, result, guard) {
             row.status === analog.status && analog.price_evidence?.price_basis === 'customer_quote_pdf' &&
             analog.price_evidence.source_document === row.source_path && analog.price_evidence.source_document_sha256 === row.pdf_sha256 &&
             analog.price_evidence.source_transcript_sha256 === row.transcript_sha256 && analog.price_evidence.source_price_field === row.source_price_field)) throw new Error('Ineligible quote analog')
+        if (['rev', 'customer', 'description'].some(key => analog[key] !== undefined && analog[key] !== '') ||
+            analog.quote_letter !== undefined && analog.quote_letter !== analog.price_evidence.source_document) throw new Error('Unfrozen analog metadata')
       }
     }
     if (!['shipping', 'tax'].every(key => sameDecimal(payload.order.charges?.[key], scope.request.charges[key])) ||

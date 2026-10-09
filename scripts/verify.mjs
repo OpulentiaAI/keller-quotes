@@ -91,6 +91,7 @@ const main = () => {
   run('python', ['-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_document_register.py', '-v'], repo, 'document register tests');
   run('python', ['-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_generate_document_eval.py', '-v'], repo, 'document evaluation generator tests');
   run('python', ['-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_arsumbris*.py', '-v'], repo, 'Ars Umbris workspace and tool tests');
+  run('python', ['-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_steve_*.py', '-v'], repo, 'Steve retained-source evidence tests');
   run('python', ['-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_blinded*.py', '-v'], repo, 'blinded MCP workflow grader tests');
   run('python', ['-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_mcp_trajectory.py', '-v'], repo, 'sealed MCP trajectory tests');
   run('python', ['-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_restore_keller_evidence.py', '-v'], repo, 'private evidence restore tests');
