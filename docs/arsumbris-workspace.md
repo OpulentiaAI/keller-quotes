@@ -94,6 +94,10 @@ The intake route permits only `pdf_text`: no listing, arbitrary byte reads, orig
 
 `no_extractable_text` means OCR or visual review is needed; it does not distinguish blank, scanned, outlined or illegible content. Text extraction does not perform OCR, resolve overlapping dimensions, interpret CAD, execute document instructions, authenticate revision/applicability or calculate costs. Even `text_extracted` may miss symbols or have wrong reading order. Carry the PDF hash/page into retained evidence and separately reviewed engineering facts; retain unknowns/conflicts. These operator source reads do not expand blinded-worker allowlists or admit target quote PDFs.
 
+### Reviewed supplier cost inputs
+
+`dbf_supplier_costs` reads one deliberately selected VENDQUOT physical record and one QTY/PRICE pair. Supply exact `vendor_quote`, `record_index`, both DBF/record hashes, `price_break` 1..8 and bounded JSON `supplier_review`. The review explicitly provides USD COST/original-unit meaning, quantity applicability, setup occurrences, minimum/setup relationship, source date and named estimating approval. It emits partial primary component inputs plus any separate setup component, with raw values and provenance; deleted/voided/unknown-status rows, unknown amounts and placeholder quantities fail closed. All sources remain supplied `approved_estimate` assertions, including unexpired offers. It neither selects applicable records nor validates current availability. See [supplier review and allocation contract](steve-pricing-workflow.md#selected-supplier-offer-to-cost-inputs) before use.
+
 ### Discover manufacturing catalog candidates without prior IDs
 
 `dbf_schema.catalog_lookup` advertises `dbf_catalog` only for the approved MATERIAL, OPERATIO and FORMULA definition shapes. Use it to discover candidate IDs for a new RFQ, not to select an applicable cost automatically. Synthetic request shape:

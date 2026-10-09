@@ -3,6 +3,7 @@
 
 import base64
 from datetime import datetime
+from decimal import Decimal
 import hashlib
 import json
 import os
@@ -14,6 +15,7 @@ import subprocess
 import sys
 import tempfile
 from types import SimpleNamespace
+from urllib.parse import quote
 
 SETS = {
     "fabritrak": frozenset((".dbf", ".fpt", ".dbc", ".dct")),
@@ -114,6 +116,8 @@ def validate(request):
         "pdf_text": {"action", "source_set", "path", "locator", "page", "offset", "limit", "expected_pdf_sha256", "expected_text_sha256"},
         "dbf_schema": {"action", "source_set", "path"},
         "dbf_catalog": {"action", "source_set", "path", "query", "offset", "limit", "expected_dbf_sha256"},
+        "dbf_supplier_costs": {"action", "source_set", "path", "vendor_quote", "record_index", "price_break",
+                               "expected_dbf_sha256", "expected_record_sha256", "supplier_review"},
         "dbf_rows": {"action", "source_set", "path", "quote_no", "record_id", "quotletter", "item",
                      "wo_no", "jobno", "page_no", "seq", "offset", "limit", "expected_dbf_sha256",
                      "memo_fields", "fpt_path", "expected_fpt_sha256", "memo_offset", "memo_limit"},
@@ -155,6 +159,21 @@ def validate(request):
             raise InvalidRequest("PDF page/text continuation requires expected_pdf_sha256")
         if offset > 0 and "expected_text_sha256" not in request:
             raise InvalidRequest("PDF text continuation requires expected_text_sha256")
+    if action == "dbf_supplier_costs":
+        if Path(components[-1]).stem.upper() != "VENDQUOT":
+            raise InvalidRequest("supplier costs require VENDQUOT.DBF")
+        for key, maximum, minimum in (("record_index", 10000000, 0), ("price_break", 8, 1)):
+            if request.get(key) is None:
+                raise InvalidRequest(f"explicit {key} required")
+            integer(request[key], key, -1, maximum, minimum)
+        identity = request.get("vendor_quote")
+        if (not isinstance(identity, str) or not identity.strip() or identity != identity.strip()
+                or len(identity) > 32 or any(ord(c) < 32 or 127 <= ord(c) <= 159 for c in identity)):
+            raise InvalidRequest("exact vendor_quote required")
+        for key in ("expected_dbf_sha256", "expected_record_sha256"):
+            if not isinstance(request.get(key), str) or not re.fullmatch(r"[0-9a-f]{64}", request[key]):
+                raise InvalidRequest(f"{key} must be a lowercase SHA256")
+        supplier_cost_review(request.get("supplier_review"))
     if action == "dbf_rows":
         keys = set(request) & (set(KEY_FIELDS) | {"record_id"})
         if keys not in [set(group) for group in KEY_GROUPS]:
@@ -207,6 +226,50 @@ def validate(request):
         if request.get("encoding", "utf-8") not in ("utf-8", "latin-1", "base64"):
             raise InvalidRequest("encoding must be utf-8, latin-1 or base64")
     return request
+
+
+def supplier_cost_review(value):
+    if not isinstance(value, str) or len(value) > 2800:
+        raise InvalidRequest("supplier_review must be bounded JSON text")
+    def unique_fields(pairs):
+        result = {}
+        for key, item in pairs:
+            if key in result:
+                raise InvalidRequest("supplier_review contains duplicate fields")
+            result[key] = item
+        return result
+    try:
+        review = json.loads(value, object_pairs_hook=unique_fields)
+    except (ValueError, TypeError):
+        raise InvalidRequest("supplier_review must be bounded JSON text") from None
+    required = {"currency", "price_basis", "original_unit", "quantity_basis", "minimum_scope", "setup_occurrences",
+                "source_date", "reviewer", "date", "reason", "applicability", "charge_inclusion"}
+    if not isinstance(review, dict) or not required <= set(review) or set(review) - required - {"zero_reason"}:
+        raise InvalidRequest("supplier_review requires explicit units, quantity/charge scope, dates and named review")
+    for key, text in review.items():
+        if key == "setup_occurrences":
+            if text is None:
+                raise InvalidRequest("explicit setup_occurrences required")
+            integer(text, key, -1, 1000000, 1)
+            continue
+        maximum = 128 if key in ("reviewer", "original_unit") else 512
+        if (not isinstance(text, str) or not text.strip() or text != text.strip() or len(text) > maximum
+                or any(ord(c) < 32 or 127 <= ord(c) <= 159 for c in text)):
+            raise InvalidRequest("supplier_review text must be bounded nonblank text without controls")
+    if (review["currency"] != "USD" or review["price_basis"] != "cost_per_original_unit"
+            or review["applicability"] not in ("supported", "assumed")
+            or review["minimum_scope"] not in ("excluding_setup", "including_setup")):
+        raise InvalidRequest("supplier review requires USD COST/unit, supported/assumed applicability and explicit minimum scope")
+    for key in ("source_date", "date"):
+        try:
+            if not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", review[key]):
+                raise ValueError()
+            datetime.strptime(review[key], "%Y-%m-%d")
+        except ValueError:
+            raise InvalidRequest("supplier_review dates must be valid YYYY-MM-DD") from None
+    if review["source_date"] > review["date"]:
+        raise InvalidRequest("supplier_review source_date cannot follow estimate approval date")
+    return review
 
 
 def configuration():
@@ -657,6 +720,115 @@ def pdf_text(fd, request):
             "extraction_note": PDF_NOTE, "warning": WARNING}
 
 
+def supplier_costs(fd, table, request):
+    fields = {field.name.upper(): field for field in table.fields}
+    tier = request["price_break"]
+    quantity_field, price_field = f"QTY{tier}", f"PRICE{tier}"
+    required = {"VEND_QUOT": "C", "VENDOR_ID": "C", "ID": "C", "QUOTE_NO": "C", "VOIDED": "L",
+                "DATE_STAMP": "D", "GOOD_UNTIL": "D", quantity_field: "N", price_field: "N",
+                "MINIMUM": "N", "SU_CHARGE": "N"}
+    if any(name not in fields or fields[name].type != kind for name, kind in required.items()):
+        raise InvalidRequest("VENDQUOT requires supplier identity, selected numeric break/charges and date/void fields")
+    if table.sha256 != request["expected_dbf_sha256"]:
+        raise InvalidRequest("DBF hash mismatch; reread and review supplier offer")
+    index = request["record_index"]
+    if index >= table.header.numrecords:
+        raise InvalidRequest("selected supplier record_index is outside the DBF")
+    byte_offset = table.header.headerlen + index * table.header.recordlen
+    raw = os.pread(fd, table.header.recordlen, byte_offset)
+    record_hash = hashlib.sha256(raw).hexdigest()
+    if len(raw) != table.header.recordlen or record_hash != request["expected_record_sha256"]:
+        raise InvalidRequest("selected supplier record hash mismatch")
+    if raw[:1] != b" ":
+        raise InvalidRequest("selected supplier offer is deleted or malformed")
+    values, _ = record_values(table, raw)
+    if values[fields["VEND_QUOT"].name] != request["vendor_quote"]:
+        raise InvalidRequest("selected supplier record does not match vendor_quote")
+    if any(not values[fields[name].name] for name in ("VENDOR_ID", "ID")):
+        raise InvalidRequest("supplier and item identity must be present")
+    if values[fields["VOIDED"].name].upper() not in ("F", "N"):
+        raise InvalidRequest("voided or unknown-status offer cannot supply costing inputs")
+    review = supplier_cost_review(request["supplier_review"])
+    amounts, evidence, sources = {}, {}, []
+    expiry_field = fields["GOOD_UNTIL"]
+    expiry_raw = values[expiry_field.name]
+    expiry = (datetime.strptime(expiry_raw, "%Y%m%d").date().isoformat()
+              if expiry_raw not in ("", "00000000") else None)
+    evidence["GOOD_UNTIL"] = {"field": expiry_field.name, "original_value": expiry_raw,
+                              "record_byte_offset": expiry_field.offset, "field_bytes": expiry_field.length,
+                              "normalized_date": expiry}
+    validity = (f"Supplier GOOD_UNTIL {expiry}; "
+                f"{'before' if expiry < review['date'] else 'not before'} review date {review['date']}"
+                if expiry else "Supplier GOOD_UNTIL is unknown; blank/zero date is not unlimited validity")
+    for name in (quantity_field, price_field, "MINIMUM", "SU_CHARGE"):
+        field = fields[name]
+        original = values[field.name]
+        if not original:
+            raise InvalidRequest("blank supplier amount is unknown, not zero")
+        value = Decimal(original)
+        if value < 0 or value > 1e9 or len(original.partition(".")[2].rstrip("0")) > 6:
+            raise InvalidRequest("supplier amounts must be nonnegative, <= 1e9 and exact to six decimal places")
+        if Decimal(str(float(value))) != value:
+            raise InvalidRequest("supplier amount cannot be represented without rounding")
+        if name == quantity_field and value <= 0:
+            raise InvalidRequest("selected supplier quantity break must be positive, not a placeholder")
+        if name == price_field and value == 0 and "zero_reason" not in review:
+            raise InvalidRequest("zero supplier price requires explicit reviewed zero_reason")
+        amounts[name] = value
+        evidence[name] = {"field": field.name, "original_value": original, "decimal_count": field.decimal_count,
+                          "record_byte_offset": field.offset, "field_bytes": field.length}
+        locator = (f"fabritrak:{quote(request['path'], safe='/')}#record_index={index}"
+                   f"&record_sha256={record_hash}&field={field.name}")
+        if len(locator) > 2048:
+            raise InvalidRequest("supplier source locator exceeds worksheet limit")
+        sources.append({"source_class": "supplier_quote", "sha256": table.sha256, "locator": locator,
+                        "source_date": review["source_date"], "status": "approved_estimate",
+                        **({"expires_date": expiry} if expiry else {}),
+                        "applicability": review["applicability"],
+                        "basis": f"Selected VENDQUOT {request['vendor_quote']}, break {tier}, {name} original {original}; "
+                                 f"record byte offset {byte_offset}, length {table.header.recordlen}; "
+                                 f"GOOD_UNTIL original {expiry_raw!r}, field offset {expiry_field.offset}, width {expiry_field.length}; "
+                                 "currency, cost unit, source date and commercial applicability supplied by reviewer",
+                        "approval": {key: review[key] for key in ("reviewer", "date", "reason")}})
+    minimum = amounts["MINIMUM"]
+    if review["minimum_scope"] == "including_setup":
+        minimum = max(Decimal(0), minimum - amounts["SU_CHARGE"] * review["setup_occurrences"])
+    def cost_range(value):
+        numeric = float(value)
+        if Decimal(str(numeric)) != value:
+            raise InvalidRequest("derived supplier minimum cannot be represented without rounding")
+        return {key: numeric for key in ("low", "base", "high")}
+    support = {"sources": sources, "charge_inclusion": review["charge_inclusion"],
+               "assumptions": [review["quantity_basis"], f"Supplier minimum {review['minimum_scope']}; "
+                               f"setup occurrences {review['setup_occurrences']}; no inferred tier or inventory allocation",
+                               f"{validity}; reviewed estimate only, not current-price authority"]}
+    component = {**support, "rate_kind": "cost", "original_unit": review["original_unit"],
+                 "unit_cost": cost_range(amounts[price_field]), "minimum_charge": cost_range(minimum),
+                 **({"zero_reason": review["zero_reason"]} if "zero_reason" in review else {})}
+    setup = None
+    if amounts["SU_CHARGE"] > 0:
+        setup = {**support, "category": "other", "allocation": "setup_total", "rate_kind": "cost",
+                 "original_unit": "supplier_setup", "quantity_unit": "supplier_setup",
+                 "quantity": review["setup_occurrences"], "original_units_per_quantity_unit": 1,
+                 "yield_fraction": 1, "minimum_quantity": 0, "unit_cost": cost_range(amounts["SU_CHARGE"]),
+                 "minimum_charge": cost_range(Decimal(0))}
+    unchanged(fd, table)
+    return {"action": "dbf_supplier_costs", "citation": dbf_citation(table, request),
+            "selection": {"vendor_quote": request["vendor_quote"], "price_break": tier,
+                          "record_index": index, "record_byte_offset": byte_offset,
+                          "record_bytes": table.header.recordlen, "record_sha256": record_hash},
+            "record_values": values, "field_evidence": evidence, "supplier_review": review,
+            "memo_note": MEMO_NOTE,
+            "worksheet_inputs": {"component": component, "setup_component": setup},
+            "selection_note": "Partial inputs: supply reviewed primary quantity/conversion/yield/allocation and unique component IDs. "
+                              "Include setup_component when present, once in the reviewed scope; do not omit or double-charge it. "
+                              "No offer/tier selection, quantity-break applicability, currency/unit inference or current-cost claim. "
+                              "DATE_STAMP is first-entry date, not proof of supplier issue date; GOOD_UNTIL is retained as source expiry when known. "
+                              "Equal low/base/high values copy a reviewed price, not calibrated uncertainty. "
+                              "Review identity and approval are supplied assertions, not authenticated release authorization.",
+            "warning": WARNING}
+
+
 def read(bindings, request):
     if request["action"] == "sets":
         return {"action": "sets", "source_sets": [{"id": name, "configured": name in bindings,
@@ -711,6 +883,8 @@ def read(bindings, request):
         table = dbf_table(fd)
         if action == "dbf_schema":
             return dbf_schema(table, request)
+        if action == "dbf_supplier_costs":
+            return supplier_costs(fd, table, request)
         if "memo_fields" not in request:
             return dbf_rows(fd, table, request)
         try:

@@ -325,6 +325,40 @@ describe("prospective cost-basis worksheet", () => {
     expect(() => reconcile(b)).toThrow(/current claim.*expired/);
   });
 
+  it.each(["components", "routing", "not_applicable"] as const)("identifies out-of-window sources in %s without changing costing", async group => {
+    for (const status of ["historical", "approved_estimate"] as const) {
+      for (const dates of [
+        { effective_date: "2020-01-01", expires_date: "2024-05-31", expected: "expired on 2024-05-31" },
+        { effective_date: "2024-06-02", expires_date: "2025-01-01", expected: "not effective until 2024-06-02" },
+        { effective_date: asOf, expires_date: asOf, expected: null },
+        { effective_date: "2020-01-01", expires_date: "2025-01-01", expected: null },
+        { effective_date: undefined, expires_date: undefined, expected: null },
+      ]) {
+        const b = basis();
+        const s = b[group][0]!.sources[0]!;
+        Object.assign(s, { status, effective_date: dates.effective_date, expires_date: dates.expires_date });
+        if (status === "historical") delete s.approval;
+        const baseline = deriveCostBasis(basis(), 10, asOf);
+        const result = deriveCostBasis(b, 10, asOf);
+        expect(result.reconciled_flat).toEqual(baseline.reconciled_flat);
+        expect(result.estimated_line_cost).toEqual(baseline.estimated_line_cost);
+        expect(result.supplied_basis).toEqual(b);
+        const expected = dates.expected ? [`Source validity: cost_basis.${group}[0].sources[0] ${dates.expected}; quote_date ${asOf}; retained as ${status}, not current-cost authority`] : [];
+        expect(result.warnings.filter(w => w.startsWith("Source validity:"))).toEqual(expected);
+        expect(reconcile(b).warnings).toEqual(result.warnings);
+        for (const method of ["cost_plus", "should_cost"] as const) {
+          const req = request(b);
+          if (method === "should_cost") req.parts[0]!.pricing = { method, cost_basis: b, margin_pct: 20, reason: "Synthetic source validity review" };
+          const order = await buildPricedOrder(reg, req, options);
+          expect(order).toMatchObject({ state: "PRICED_REQUIRES_REVIEW", total: 161.88 });
+          expect(order.lines[0]).toMatchObject({ unit_price: 15.1875, extended_price: 151.88 });
+          expect(order.lines[0]!.warnings.filter(w => w.startsWith("Source validity:"))).toEqual(expected);
+          if (dates.expected) expect(renderOrderMarkdown(order)).toContain(dates.expected.replaceAll("-", "\\-"));
+        }
+      }
+    }
+  });
+
   it("allows an explicit sourced zero for an included operation, but never defaults blank values to zero", () => {
     const b = basis();
     b.routing[0]!.setup_occurrences = 0;

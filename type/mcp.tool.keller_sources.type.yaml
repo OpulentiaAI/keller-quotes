@@ -1,7 +1,7 @@
 extends: mcp.tool::au-mcp-sdk
 fields:
   #: Discover source sets, list one directory, read bounded bytes, extract one PDF page's text, or inspect/filter a FabriTRAK DBF.
-  action: [sets, list, read, pdf_text, dbf_schema, dbf_rows, dbf_catalog]
+  action: [sets, list, read, pdf_text, dbf_schema, dbf_rows, dbf_catalog, dbf_supplier_costs]
   #: Owner-bound source set; required except for sets.
   source_set?: [fabritrak, pdfs, intake, transcripts, manufacturing-audit]
   #: Relative directory or file path within the source set; empty or omitted means root for list.
@@ -40,6 +40,16 @@ fields:
   seq?: String
   #: Lowercase SHA256 from a prior DBF citation; DBF rows/catalog fail closed on mismatch. Required for dbf_catalog when offset > 0.
   expected_dbf_sha256?: String
+  #: dbf_supplier_costs only. Exact selected VEND_QUOT identity, not automatic vendor selection.
+  vendor_quote?: String
+  #: dbf_supplier_costs only. Explicit zero-based physical record index from a prior dbf_rows citation; no first-match fallback.
+  record_index?: Number{>=0 & integer}
+  #: dbf_supplier_costs only. Lowercase SHA256 of that physical record; DBF hash is also mandatory.
+  expected_record_sha256?: String
+  #: dbf_supplier_costs only. Explicit QTYn/PRICEn pair 1..8, not automatic tier selection.
+  price_break?: Number{>=1 & <=8 & integer}
+  #: dbf_supplier_costs only. JSON text <=2800 characters with currency=USD, price_basis=cost_per_original_unit, original_unit, quantity_basis, minimum_scope=excluding_setup|including_setup, integer setup_occurrences (1..1000000), source_date, reviewer, date, reason, applicability=supported|assumed, charge_inclusion; optional zero_reason for zero price. Dates YYYY-MM-DD with source_date<=date. Produces partial component and mandatory nonzero setup inputs as approved_estimate assertions, never current-price or release authority. Review minimum/setup scope and selected tier applicability; preserve original five-place prices, dates and void status.
+  supplier_review?: String
   #: dbf_rows only: up to four explicitly selected memo field names. Default remains unresolved null, not empty text.
   memo_fields?: String[]
   #: dbf_rows only with memo_fields: same-directory, same-stem FPT relative path; owner-root and no-symlink confinement apply.
