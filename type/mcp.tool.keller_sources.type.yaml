@@ -1,7 +1,7 @@
 extends: mcp.tool::au-mcp-sdk
 fields:
-  #: Discover source sets, read bounded bytes/DBF records, or translate one explicitly selected and reviewed OPERATIO record into partial COST-rate worksheet inputs.
-  action: [sets, list, read, dbf_schema, dbf_rows, dbf_catalog, dbf_operation_costs]
+  #: Discover source sets, read bounded bytes/DBF records, or translate selected reviewed operation and supplier COST inputs.
+  action: [sets, list, read, dbf_schema, dbf_rows, dbf_catalog, dbf_operation_costs, dbf_supplier_costs]
   #: Owner-bound source set; required except for sets.
   source_set?: [fabritrak, pdfs, transcripts, manufacturing-audit]
   #: Relative directory or file path within the source set; empty or omitted means root for list.
@@ -32,11 +32,17 @@ fields:
   seq?: String
   #: Lowercase SHA256 from a prior DBF citation; fail closed on mismatch. Optional for dbf_rows, required for dbf_catalog when offset > 0 and mandatory for dbf_operation_costs.
   expected_dbf_sha256?: String
-  #: dbf_operation_costs only: exact zero-based physical OPERATIO record selected from dbf_rows, never a first-match or automatic choice. Both file and record hashes are required.
+  #: dbf_operation_costs/dbf_supplier_costs: explicitly selected zero-based physical record. Both DBF and record hashes required.
   record_index?: Number{>=0 & integer}
   expected_record_sha256?: String
   #: dbf_operation_costs only: JSON with rate_unit (USD/hour), source_date, reviewer, date, reason, applicability (supported/assumed), charge_inclusion and optional zero_reason. Explicit review of operation applicability, installed COST-rate meaning/units and inclusions is required; these are supplied approval assertions, not authentication. Returns partial CostRouting setup_rate/run_rate/sources inputs using only SU_COST/RUN_COST; no timing, SELL fallback, formula execution or current-price claim. Merge with separately supported routing times/quantities and preserve their sources.
   rate_review?: String
+  #: dbf_supplier_costs only. Exact selected VEND_QUOT identity, not automatic vendor selection.
+  vendor_quote?: String
+  #: dbf_supplier_costs only. Explicit QTYn/PRICEn pair 1..8, not automatic tier selection.
+  price_break?: Number{>=1 & <=8 & integer}
+  #: dbf_supplier_costs only. JSON text <=2800 characters with currency=USD, price_basis=cost_per_original_unit, original_unit, quantity_basis, minimum_scope=excluding_setup|including_setup, integer setup_occurrences (1..1000000), source_date, reviewer, date, reason, applicability=supported|assumed, charge_inclusion; optional zero_reason for zero price. Dates YYYY-MM-DD with source_date<=date. Produces partial component and mandatory nonzero setup inputs as approved_estimate assertions, never current-price or release authority. Review minimum/setup scope and selected tier applicability; preserve original five-place prices, dates and void status.
+  supplier_review?: String
   #: dbf_rows only: up to four explicitly selected memo field names. Default remains unresolved null, not empty text.
   memo_fields?: String[]
   #: dbf_rows only with memo_fields: same-directory, same-stem FPT relative path; owner-root and no-symlink confinement apply.
