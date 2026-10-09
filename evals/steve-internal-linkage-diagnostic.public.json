@@ -1,0 +1,111 @@
+{
+  "schema_version": 1,
+  "population": "208 development-tagged cases; separate internal-register metadata audit; not an evaluation arm",
+  "input_sha256": {
+    "cases": "12414d36a0f2d721d86d74dea61a66673c043931668f7573ece4f27553445311",
+    "internal_register": "6ed19d0cf550f3e65f420b676bbc4354c8dfaf05912d1f5f4edefb4bc8b24cfe",
+    "development_diagnostic": "d8badace6227784d57bf7f89a0b03e2b3e448caf0970f7481de3898f813ba8cf"
+  },
+  "original_source_sha256": {
+    "QUOTEM": "dcd1afd8e7d79253ebb98f572e8da129e39f54d81d0a3399d09c622df6623b2b",
+    "QUOTOPER": "d79e19b3c537f1207e58e98fca527a256643192e03bbaa932cfb520eac17d51c",
+    "QUOTCAD": "1e2f59d4938ae817895226255de487ca6e5e05d2f6ff440ea3819ed455132549"
+  },
+  "all_cohort_source_quotes_excluded_from_linked_candidates": true,
+  "script_sha256": "508752e39af6c6f50d2d998672b97df3b06689c3591e4dab684534e09b6af8a0",
+  "all_case_denominator": 250,
+  "inspected_development_cases": 208,
+  "other_cases_not_drilled_into": 42,
+  "internal_register_rows": 179608,
+  "internal_quote_item_groups": 40111,
+  "development_cases_with": {
+    "exact_groups_including_excluded_source": 208,
+    "exact_groups_outside_source": 7,
+    "same_customer_groups_outside_source": 3,
+    "same_customer_groups_passing_recorded_dates": 3
+  },
+  "cases_with_nonblank_candidate_fields": {
+    "rev": 3,
+    "drawing_no": 0,
+    "material": 0,
+    "comment": 3
+  },
+  "recorded_date_candidate_group_count": 4,
+  "distinct_candidate_quotes": 4,
+  "candidate_quotes_with_multiple_internal_items": 0,
+  "original_manufacturing_component_presence": {
+    "QUOTEM": {
+      "active_rows_for_candidate_quotes": 3,
+      "deleted_rows_for_candidate_quotes": 0,
+      "development_cases_with_active_rows": 2,
+      "cases_with_any_positive_field": {
+        "PART_L": 0,
+        "PART_W": 0,
+        "STOCK_L": 2,
+        "STOCK_W": 2,
+        "THICKNESS": 2,
+        "WGHT_PIECE": 2
+      },
+      "cases_with_any_nonblank_field": {
+        "ID": 2
+      }
+    },
+    "QUOTOPER": {
+      "active_rows_for_candidate_quotes": 36,
+      "deleted_rows_for_candidate_quotes": 0,
+      "development_cases_with_active_rows": 3,
+      "cases_with_any_positive_field": {
+        "RUNTIME": 0,
+        "RUN_V1": 3,
+        "RUN_V10": 0,
+        "RUN_V2": 0,
+        "RUN_V3": 0,
+        "RUN_V4": 0,
+        "RUN_V5": 0,
+        "RUN_V6": 0,
+        "RUN_V7": 0,
+        "RUN_V8": 0,
+        "RUN_V9": 0,
+        "SUTIME": 0,
+        "SU_V1": 3,
+        "SU_V10": 0,
+        "SU_V2": 0,
+        "SU_V3": 0,
+        "SU_V4": 0,
+        "SU_V5": 0,
+        "SU_V6": 0,
+        "SU_V7": 0,
+        "SU_V8": 0,
+        "SU_V9": 0
+      },
+      "cases_with_any_nonblank_field": {
+        "OPER_ID": 3,
+        "RU_FORM_ID": 3,
+        "SU_FORM_ID": 3
+      }
+    },
+    "QUOTCAD": {
+      "active_rows_for_candidate_quotes": 0,
+      "deleted_rows_for_candidate_quotes": 0,
+      "development_cases_with_active_rows": 0,
+      "cases_with_any_positive_field": {},
+      "cases_with_any_nonblank_field": {}
+    }
+  },
+  "prices_extracted_or_compared": false,
+  "new_pricing_execution": false,
+  "frozen_scope_or_policy_changed": false,
+  "provider_requests": 0,
+  "manufacturing_compatibility": "unknown",
+  "original_version_availability": "unproven",
+  "current_cost_accuracy": null,
+  "realized_margin_accuracy": null,
+  "verification": {
+    "byte_identical_private_replay": true,
+    "wrong_hash_or_missing_source_rejected": true,
+    "nonprivate_output_and_overwrite_rejected": true,
+    "optimized_python_rejected": true,
+    "independent_inventory_based_record_counts_match": true,
+    "private_case_artifact_sha256": "7cfda2e0f6d5dcc3be44d308be1f69f218711ecaae8e3c9eb31d0e4e9c136a83"
+  }
+}
