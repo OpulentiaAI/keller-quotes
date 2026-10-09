@@ -1,6 +1,6 @@
 import { createGateway } from "@ai-sdk/gateway";
 import { experimental_evaluate } from "ai";
-import type { Candidate, JevVerdict, PartRequest, RequestCustomer } from "./types.js";
+import type { Candidate, CandidateEvidencePacket, JevVerdict, PartRequest, RequestCustomer } from "./types.js";
 import { candidateKey, evidencePacket, hasEngineeringConflict, hasUsableBreak } from "./evidence.js";
 
 const JEV_MODEL_ID = "typesafe-ai/jev" as const;
@@ -114,6 +114,7 @@ export class JevClient {
   /** Picks a bounded canonical strategy; never calculates prices in the service. */
   async chooseStrategy(
     part: PartRequest, candidates: Candidate[], customer: RequestCustomer = {},
+    screenings?: ReadonlyMap<string, CandidateEvidencePacket["screening"]>,
   ): Promise<"latest" | "median_won" | "curve_fit" | "conservative"> {
     const fallback = "median_won";
     if (!this.model || candidates.length === 0) return fallback;
@@ -121,20 +122,20 @@ export class JevClient {
       const res = await experimental_evaluate({
         model: this.model,
         state: {
-          task: `${EVIDENCE_RULES} Choose a strategy using only admitted comparisons, their dates, quantity support and recorded price spread. Unknown/unverified won labels are not proof of verified-success preference. Legacy strategy names do not imply verified outcomes.`,
+          task: `${EVIDENCE_RULES} Choose a strategy using only supplied comparisons, their dates, quantity support and recorded price spread. Preserve each screening verdict: a rejected or quarantined provisional fallback is for human review, not an admitted analog. Unknown/unverified won labels are not proof of verified-success preference. Legacy strategy names do not imply verified outcomes.`,
           requested_part: describePart(part, customer),
           analog_count: candidates.length,
-          analogs: candidates.slice(0, 12).map((c) => JSON.stringify(evidencePacket(part, c, customer, { status: "admitted", reason: "ADMITTED" }))),
+          analogs: candidates.slice(0, 12).map((c) => JSON.stringify(evidencePacket(part, c, customer, screenings?.get(candidateKey(c))))),
           analogs_truncated: candidates.length > 12,
         },
         questions: {
           strategy: {
             type: "choice", instructions: "Pricing strategy (calculated deterministically)",
             criteria: {
-              latest: "Use the most recent admitted quote's price curve.",
+              latest: "Use the most recent supplied quote's price curve.",
               median_won: "Legacy weighted median of interpolated historical prices; recorded status weight is unverified.",
-              curve_fit: "Log-log regression across admitted qty/price breaks.",
-              conservative: "Upper-quartile comparison price when admitted evidence is thin; not a remedy for explicit incompatibility.",
+              curve_fit: "Log-log regression across supplied qty/price breaks.",
+              conservative: "Upper-quartile comparison price when supplied evidence is thin; not a remedy for explicit incompatibility.",
             },
           },
         },

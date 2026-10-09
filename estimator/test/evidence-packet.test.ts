@@ -275,7 +275,8 @@ describe("optional Jev evidence-only handoff", () => {
     const client = new JevClient("synthetic-test-key");
     const c = candidate({ price_evidence: pdf, status: "unknown", unit_cost: null });
     expect(await client.screenCandidate(part, c, { customer_id: "SYN-C1" })).toBe("admit");
-    expect(await client.chooseStrategy(part, [c], { customer_id: "SYN-C1" })).toBe("latest");
+    expect(await client.chooseStrategy(part, [c], { customer_id: "SYN-C1" },
+      new Map([[candidateKey(c), { status: "admitted", reason: "ADMITTED" }]]))).toBe("latest");
     const state = vi.mocked(experimental_evaluate).mock.calls[1]![0].state;
     expect(state).toMatchObject({ requested_part: { customer_id: "SYN-C1" } });
     const analogs = (state as { analogs: string[] }).analogs;
@@ -283,6 +284,28 @@ describe("optional Jev evidence-only handoff", () => {
       source: { price_basis: "customer_quote_pdf" }, outcome: { actual_cost: "unknown" },
       quantity_support: { kind: "exact" }, screening: { status: "admitted" },
     });
+  });
+
+  it.each([
+    [0.1, "rejected", "REJECTED"], [0.5, "quarantined", "QUARANTINED"],
+  ] as const)("preserves probability %s screening through the provisional strategy handoff", async (probability, status, reason) => {
+    vi.mocked(experimental_evaluate)
+      .mockResolvedValueOnce({ answers: { best_analog: { type: "choice", choice: "c0" } } } as never)
+      .mockResolvedValueOnce({ answers: { is_analog: { type: "boolean", probability } } } as never)
+      .mockResolvedValueOnce({ answers: { strategy: { type: "choice", choice: "latest" } } } as never);
+    const line = (await estimate(new QuoteRegister([row()]), { parts: [part] },
+      { jev: new JevClient("synthetic-test-key") })).lines[0]!;
+    expect(line.unit_price).toBe(12.3457);
+    expect(line.analogs[0]!.evidence!.screening).toEqual({ status, reason });
+    const state = vi.mocked(experimental_evaluate).mock.calls[2]![0].state as { analogs: string[] };
+    expect(JSON.parse(state.analogs[0]!).screening).toEqual({ status, reason });
+  });
+
+  it("does not invent admission when a direct strategy call supplies no screening verdict", async () => {
+    vi.mocked(experimental_evaluate).mockResolvedValue({ answers: { strategy: { type: "choice", choice: "latest" } } } as never);
+    await new JevClient("synthetic-test-key").chooseStrategy(part, [candidate()]);
+    const state = vi.mocked(experimental_evaluate).mock.calls[0]![0].state as { analogs: string[] };
+    expect(JSON.parse(state.analogs[0]!).screening).toEqual({ status: "not_screened", reason: "NOT_SCREENED" });
   });
 
   it("retains deterministic rank/strategy fallback but marks unavailable screening rather than admitting it", async () => {

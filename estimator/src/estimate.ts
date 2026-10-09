@@ -219,7 +219,8 @@ async function estimatePart(
     );
   }
 
-  const strategy = await jev.chooseStrategy(part, candidates, req);
+  const strategy = await jev.chooseStrategy(part, candidates, req,
+    new Map(candidates.map((c) => [candidateKey(c), packet(c).screening])));
   const priced = price(part.quantity, candidates, {
     strategy,
     jevProbabilities: verdict.probabilities,
