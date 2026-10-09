@@ -602,6 +602,16 @@ def supplier_costs(fd, table, request):
         raise InvalidRequest("voided or unknown-status offer cannot supply costing inputs")
     review = supplier_cost_review(request["supplier_review"])
     amounts, evidence, sources = {}, {}, []
+    expiry_field = fields["GOOD_UNTIL"]
+    expiry_raw = values[expiry_field.name]
+    expiry = (datetime.strptime(expiry_raw, "%Y%m%d").date().isoformat()
+              if expiry_raw not in ("", "00000000") else None)
+    evidence["GOOD_UNTIL"] = {"field": expiry_field.name, "original_value": expiry_raw,
+                              "record_byte_offset": expiry_field.offset, "field_bytes": expiry_field.length,
+                              "normalized_date": expiry}
+    validity = (f"Supplier GOOD_UNTIL {expiry}; "
+                f"{'before' if expiry < review['date'] else 'not before'} review date {review['date']}"
+                if expiry else "Supplier GOOD_UNTIL is unknown; blank/zero date is not unlimited validity")
     for name in (quantity_field, price_field, "MINIMUM", "SU_CHARGE"):
         field = fields[name]
         original = values[field.name]
@@ -625,9 +635,11 @@ def supplier_costs(fd, table, request):
             raise InvalidRequest("supplier source locator exceeds worksheet limit")
         sources.append({"source_class": "supplier_quote", "sha256": table.sha256, "locator": locator,
                         "source_date": review["source_date"], "status": "approved_estimate",
+                        **({"expires_date": expiry} if expiry else {}),
                         "applicability": review["applicability"],
                         "basis": f"Selected VENDQUOT {request['vendor_quote']}, break {tier}, {name} original {original}; "
                                  f"record byte offset {byte_offset}, length {table.header.recordlen}; "
+                                 f"GOOD_UNTIL original {expiry_raw!r}, field offset {expiry_field.offset}, width {expiry_field.length}; "
                                  "currency, cost unit, source date and commercial applicability supplied by reviewer",
                         "approval": {key: review[key] for key in ("reviewer", "date", "reason")}})
     minimum = amounts["MINIMUM"]
@@ -640,7 +652,8 @@ def supplier_costs(fd, table, request):
         return {key: numeric for key in ("low", "base", "high")}
     support = {"sources": sources, "charge_inclusion": review["charge_inclusion"],
                "assumptions": [review["quantity_basis"], f"Supplier minimum {review['minimum_scope']}; "
-                               f"setup occurrences {review['setup_occurrences']}; no inferred tier or inventory allocation"]}
+                               f"setup occurrences {review['setup_occurrences']}; no inferred tier or inventory allocation",
+                               f"{validity}; reviewed estimate only, not current-price authority"]}
     component = {**support, "rate_kind": "cost", "original_unit": review["original_unit"],
                  "unit_cost": cost_range(amounts[price_field]), "minimum_charge": cost_range(minimum),
                  **({"zero_reason": review["zero_reason"]} if "zero_reason" in review else {})}
@@ -662,7 +675,7 @@ def supplier_costs(fd, table, request):
             "selection_note": "Partial inputs: supply reviewed primary quantity/conversion/yield/allocation and unique component IDs. "
                               "Include setup_component when present, once in the reviewed scope; do not omit or double-charge it. "
                               "No offer/tier selection, quantity-break applicability, currency/unit inference or current-cost claim. "
-                              "DATE_STAMP is first-entry date, not proof of supplier issue date; expiry remains raw evidence. "
+                              "DATE_STAMP is first-entry date, not proof of supplier issue date; GOOD_UNTIL is retained as source expiry when known. "
                               "Equal low/base/high values copy a reviewed price, not calibrated uncertainty. "
                               "Review identity and approval are supplied assertions, not authenticated release authorization.",
             "warning": WARNING}

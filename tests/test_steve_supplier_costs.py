@@ -94,6 +94,7 @@ console.log(JSON.stringify(await createPlugin({workspace: process.cwd()}).invoke
             self.assertEqual(source['sha256'], self.request()['expected_dbf_sha256'])
             self.assertIn(self.request()['expected_record_sha256'], source['locator'])
             self.assertEqual(source['status'], 'approved_estimate')
+            self.assertEqual(source['expires_date'], '2020-02-01')
             self.assertEqual(source['approval']['reviewer'], self.review['reviewer'])
         self.assertEqual(self.call(self.request(index=0))['worksheet_inputs']['component']['unit_cost']['base'], 8.76543)
         for tier, quantity, price in [(1, 1, 9.99999), (8, 1000, 2.00001)]:
@@ -180,6 +181,48 @@ console.log(JSON.stringify(await createPlugin({workspace: process.cwd()}).invoke
             self.call()
         self.write_table(fields=[(name.lower(), kind, length) for name, kind, length in FIELDS])
         self.assertEqual(self.call()['field_evidence']['PRICE2']['field'], 'price2')
+        self.assertEqual(self.call()['field_evidence']['GOOD_UNTIL']['field'], 'good_until')
+
+    def test_expiry_survives_primary_and_setup_without_becoming_current_authority(self):
+        for raw, normalized, timing in [('20200201', '2020-02-01', 'before'),
+                                        ('20240229', '2024-02-29', 'before'),
+                                        ('20240531', '2024-05-31', 'not before'),
+                                        ('20281201', '2028-12-01', 'not before')]:
+            with self.subTest(expiry=raw):
+                self.write_table({'GOOD_UNTIL': raw})
+                result = self.call()
+                evidence = result['field_evidence']['GOOD_UNTIL']
+                self.assertEqual(evidence['original_value'], raw)
+                self.assertEqual(evidence['normalized_date'], normalized)
+                self.assertEqual(evidence['field_bytes'], 8)
+                for component in result['worksheet_inputs'].values():
+                    self.assertIn(f'Supplier GOOD_UNTIL {normalized}; {timing} review date 2024-05-31; '
+                                  'reviewed estimate only, not current-price authority', component['assumptions'])
+                    for source in component['sources']:
+                        self.assertEqual(source['expires_date'], normalized)
+                        self.assertEqual(source['source_date'], self.review['source_date'])
+                        self.assertNotIn('effective_date', source)
+                        self.assertEqual(source['status'], 'approved_estimate')
+                        self.assertEqual(source['approval']['date'], self.review['date'])
+                        self.assertIn(f"GOOD_UNTIL original '{raw}', field offset {evidence['record_byte_offset']}, width 8", source['basis'])
+                self.assertEqual(result['worksheet_inputs']['component']['unit_cost']['base'], 4.12345)
+                self.assertEqual(result['worksheet_inputs']['component']['minimum_charge']['base'], 80)
+                self.assertEqual(result['worksheet_inputs']['setup_component']['unit_cost']['base'], 15)
+
+    def test_unknown_expiry_is_not_unlimited_or_an_invented_date(self):
+        for raw in ['', '00000000']:
+            with self.subTest(raw=raw):
+                self.write_table({'GOOD_UNTIL': raw})
+                result = self.call()
+                self.assertEqual(result['field_evidence']['GOOD_UNTIL']['original_value'], raw)
+                self.assertIsNone(result['field_evidence']['GOOD_UNTIL']['normalized_date'])
+                for component in result['worksheet_inputs'].values():
+                    self.assertIn('Supplier GOOD_UNTIL is unknown; blank/zero date is not unlimited validity; '
+                                  'reviewed estimate only, not current-price authority', component['assumptions'])
+                    for source in component['sources']:
+                        self.assertNotIn('expires_date', source)
+                        self.assertEqual(source['status'], 'approved_estimate')
+                        self.assertIn(f'GOOD_UNTIL original {raw!r}', source['basis'])
 
     def test_native_supplier_costs_reach_retained_margin_quote_with_setup_and_minimum(self):
         for scope, expected_cost, expected_total in [('excluding_setup', 145, 193.33), ('including_setup', 130, 173.33)]:
@@ -222,6 +265,14 @@ console.log(JSON.stringify(await createPlugin({workspace: process.cwd()}).invoke
                 self.assertEqual(line['cost_breakdown']['estimated_line_margin_pct']['base'], 25)
                 self.assertEqual(line['cost_breakdown']['components'][0]['priced_quantity'], 10)
                 self.assertEqual(line['cost_breakdown']['supplied_basis']['components'][1]['sources'], inputs['setup_component']['sources'])
+                for component in line['cost_breakdown']['supplied_basis']['components'][:2]:
+                    for item in component['sources']:
+                        if item['source_class'] == 'supplier_quote':
+                            self.assertEqual(item['expires_date'], '2020-02-01')
+                            self.assertEqual(item['status'], 'approved_estimate')
+                    self.assertIn('before review date', ' '.join(component['assumptions']))
+                self.assertIn(r'GOOD\_UNTIL', content['markdown'])
+                self.assertIn(r'2020\-02\-01', content['markdown'])
                 self.assertEqual(content['order']['request'], retained)
                 self.assertEqual(content['review']['request_sha256'], content['order']['provenance']['request_sha256'])
                 self.assertFalse(content['review']['customer_release_authorized'])
