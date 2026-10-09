@@ -11,6 +11,60 @@ import { fileURLToPath } from 'node:url';
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const job = join(repo, 'scripts/keller-local.mjs');
 
+test('costed inbox requests use the complete order path, preserve holds, and recover receipts', t => {
+  const scratch = mkdtempSync(join(tmpdir(), 'keller-order-inbox-'));
+  t.after(() => rmSync(scratch, { recursive: true, force: true }));
+  const workspace = join(scratch, 'queue');
+  const register = join(scratch, 'quotes.csv');
+  writeFileSync(register, 'quote_no,item_no,quote_date,part_no,description,customer_id,status,quantity,unit_price\nQ1,,2024-01-01,OTHER,PLATE,C1,open,10,999\n');
+  const run = () => {
+    const result = spawnSync(process.execPath, [job, 'cycle', '--workspace', workspace, '--register', register],
+      { cwd: repo, encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr);
+    return JSON.parse(result.stdout);
+  };
+  run();
+  const order = { order_id: 'RFQ-SYNTHETIC', quote_date: '2026-01-01', customer: 'Synthetic',
+    parts: [{ line_id: 'L1', part_no: 'NEW-PART', quantity: 100, pricing: {
+      method: 'cost_plus', material_per_unit: 4, labor_per_unit: 2, outside_per_unit: 1,
+      setup_total: 100, margin_pct: 20, reason: 'Synthetic supported inputs, review required',
+    } }], charges: { shipping: 50, tax: 0 } };
+  const input = JSON.stringify(order);
+  const registerSha = createHash('sha256').update(readFileSync(register)).digest('hex');
+  const inputSha = createHash('sha256').update(input).digest('hex');
+  const key = createHash('sha256').update(`keller-order-job-v1\n${inputSha}\n${registerSha}`).digest('hex');
+  writeFileSync(join(workspace, 'inbox', 'costed.json'), input);
+  assert.deepEqual(run().drafted, ['costed.json']);
+  const draftPath = join(workspace, 'drafts', `${key}.json`);
+  const draftBytes = readFileSync(draftPath, 'utf8');
+  const draft = JSON.parse(draftBytes);
+  assert.equal(draft.total, 1050);
+  assert.equal(draft.lines[0].unit_price, 10);
+  assert.equal(draft.lines[0].pricing_source, 'cost_build_up');
+  assert.equal(draft.state, 'PRICED_REQUIRES_REVIEW');
+  assert.equal(draft.requires_human_review, true);
+  assert.deepEqual(draft.request, order);
+  assert.deepEqual(run().duplicate, ['costed.json']);
+  const receipt = join(workspace, 'receipts', `${key}.json`);
+  unlinkSync(receipt);
+  assert.deepEqual(run().drafted, ['costed.json']);
+  assert.equal(readFileSync(draftPath, 'utf8'), draftBytes);
+  assert.equal(JSON.parse(readFileSync(receipt)).state, 'DRAFT_REQUIRES_MANUAL_REVIEW');
+
+  const blocked = { ...order, order_id: 'MISSING-FREIGHT', charges: { tax: 0 } };
+  writeFileSync(join(workspace, 'inbox', 'blocked.json'), JSON.stringify(blocked));
+  assert.deepEqual(run().drafted, ['blocked.json']);
+  const drafts = readdirSync(join(workspace, 'drafts')).map(file => JSON.parse(readFileSync(join(workspace, 'drafts', file))));
+  const held = drafts.find(value => value.order_id === 'MISSING-FREIGHT');
+  assert.equal(held.state, 'BLOCKED');
+  assert.equal(held.total, null);
+  assert.ok(held.blockers.length > 0);
+
+  writeFileSync(join(workspace, 'inbox', 'incomplete-costed.json'), JSON.stringify({ parts: order.parts }));
+  assert.deepEqual(run().held, ['incomplete-costed.json']);
+  assert.deepEqual(run().held, ['incomplete-costed.json']);
+});
+
 test('onboard, draft, retry after a missing receipt, deduplicate, and hold bad input', (t) => {
   const scratch = mkdtempSync(join(tmpdir(), 'keller-local-test-'));
   t.after(() => rmSync(scratch, { recursive: true, force: true }));

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { createHash, randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { hostname } from 'node:os';
@@ -20,7 +20,16 @@ const workspace = resolve(value('--workspace', join(repo, '.keller-local')));
 const fixture = resolve(value('--fixture', join(repo, 'estimator/examples/request.json')));
 const runner = join(repo, 'estimator/node_modules/tsx/dist/cli.mjs');
 const cli = join(repo, 'estimator/src/cli.ts');
+const orderCli = join(repo, 'estimator/src/order-cli.ts');
 const sha = (bytes) => createHash('sha256').update(bytes).digest('hex');
+const isOrder = (request) => request && typeof request === 'object' &&
+  (['order_id', 'quote_date', 'charges', 'additional_charges'].some(key => Object.hasOwn(request, key)) ||
+   Array.isArray(request.parts) && request.parts.some(part => part &&
+     (Object.hasOwn(part, 'pricing') || Object.hasOwn(part, 'line_id'))));
+const jobVersion = (bytes) => {
+  try { return isOrder(JSON.parse(bytes.toString('utf8'))) ? 'keller-order-job-v1' : 'keller-job-v1'; }
+  catch { return 'keller-job-v1'; }
+};
 const writeAtomic = (path, data) => {
   const tmp = `${path}.${process.pid}.${Math.random().toString(16).slice(2)}.tmp`;
   writeFileSync(tmp, data, { flag: 'wx' });
@@ -29,6 +38,28 @@ const writeAtomic = (path, data) => {
 const estimate = (request) => {
   const env = { ...process.env };
   delete env.AI_GATEWAY_API_KEY;
+  let parsed;
+  try { parsed = JSON.parse(readFileSync(request, 'utf8')); }
+  catch (error) { throw new Error(`invalid request: ${error.message}`); }
+  if (isOrder(parsed)) {
+    const scratch = mkdtempSync(join(dir('claims'), 'order-build-'));
+    try {
+      const out = join(scratch, 'result');
+      const result = spawnSync(process.execPath, [runner, orderCli, request, '--register', register, '--out', out], {
+        cwd: repo, env, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024,
+      });
+      if (result.error) throw result.error;
+      if (![0, 3].includes(result.status)) {
+        const message = (result.stderr || `order builder exit ${result.status}`).trim();
+        throw new Error(message.replace(/^invalid order:/, 'invalid request:'));
+      }
+      const order = JSON.parse(readFileSync(join(out, 'order.json'), 'utf8'));
+      if (order.state !== (result.status === 3 ? 'BLOCKED' : 'PRICED_REQUIRES_REVIEW')) {
+        throw new Error('order builder state/exit mismatch');
+      }
+      return order;
+    } finally { rmSync(scratch, { recursive: true, force: true }); }
+  }
   const result = spawnSync(process.execPath, [runner, cli, request, '--offline', '--register', register], {
     cwd: repo, env, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024,
   });
@@ -89,7 +120,12 @@ const verifyDraft = (key, inputSha, registerSha, bytes, draftPath, proofPath, re
     proof.draft_sha256 !== sha(draftBytes)) throw new Error('draft proof mismatch');
   const request = JSON.parse(bytes.toString('utf8'));
   const draft = JSON.parse(draftBytes.toString('utf8'));
-  if (JSON.stringify(draft.request) !== JSON.stringify(request) || draft.jev !== 'disabled' ||
+  const offline = isOrder(request)
+    ? draft.schema_version === 1 && draft.provenance?.mode === 'offline' &&
+      draft.provenance.register_sha256 === registerSha && draft.requires_human_review === true &&
+      ['BLOCKED', 'PRICED_REQUIRES_REVIEW'].includes(draft.state)
+    : draft.jev === 'disabled';
+  if (JSON.stringify(draft.request) !== JSON.stringify(request) || !offline ||
     !Array.isArray(draft.lines) || draft.lines.length !== request.parts?.length) {
     throw new Error('draft request or offline output mismatch');
   }
@@ -116,7 +152,7 @@ try {
 
   if (command === 'onboard') {
     const quote = estimate(fixture);
-    if (quote.lines.length === 0 || quote.lines.some((line) => line.unit_price === null)) {
+    if (quote.state === 'BLOCKED' || quote.lines.length === 0 || quote.lines.some((line) => line.unit_price === null)) {
       throw new Error('local fixture did not produce a fully priced draft');
     }
     console.log(JSON.stringify({ local: 'LOCAL_READY', fixture_lines: quote.lines.length,
@@ -134,7 +170,7 @@ try {
       const input = join(dir('inbox'), file.name);
       const bytes = readFileSync(input);
       const inputSha = sha(bytes);
-      const key = sha(`keller-job-v1\n${inputSha}\n${registerSha}`);
+      const key = sha(`${jobVersion(bytes)}\n${inputSha}\n${registerSha}`);
       const draft = join(dir('drafts'), `${key}.json`);
       const proof = join(dir('proofs'), `${key}.json`);
       const receipt = join(dir('receipts'), `${key}.json`);

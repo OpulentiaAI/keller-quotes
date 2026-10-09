@@ -15,7 +15,9 @@ Start with [[start here]], [the Ars Umbris workspace guide](docs/arsumbris-works
 
 For pinned code checkpoints, typed findings and authenticated recovery of retained private sources and evaluation evidence, use [Git-linked work and evidence access](docs/git-evidence-access.md). Git tracks the recovery/checksum registry; private archive contents stay outside the checkout and blinded worker context.
 
-The `Keller Codex` profile has bounded read-only Polygres and private-source tools plus `keller_quote` for an offline internal order draft. Its structured order, Markdown, and review output remains private; the tool does not approve or send a quote, and it does not establish the ≥90% completed-quoting goal.
+The `Keller Codex` profile has bounded read-only Polygres and authorized operator source tools plus `keller_quote` for an offline internal draft. Use [Steve's evidence-first pricing workflow](docs/steve-pricing-workflow.md): complete intake, draft once, inspect contributors, resolve deduplicated exact retained evidence, build supported costs/assumptions/ranges, distinguish COST from SELL rates, apply target gross margin, independently challenge, then obtain human review. Preserve numeric proposals separately from adopted amounts and commercial readiness. Unknown current cost is not zero; missing paid/closed-job ledgers does not block a supported prospective estimate. Outputs remain private; the tool never approves or sends a quote.
+
+For operator-only measurement, see [observed-price diagnostics](docs/observed-price-diagnostic.md). Recorded-price agreement, supported estimated margin, comparable competitiveness, realized outcome and greater-than-95% all-eligible completion are different claims, not demonstrated by complete arithmetic alone. The authenticated archive inventories 123,081 paths including 39,975 original PDFs, not completed jobs ([aggregate registry and hashes](artifacts/keller-operator-evidence-2026-10-07.json)). Existing worker allowlists and target isolation remain unchanged.
 
 ## How to extend this
 
@@ -52,18 +54,18 @@ Quoting history extracted from the client's live **Metalsoft FabriTRAK** (Visual
 ## Caveats / unpopulated fields
 
 - The original export's `status` is only `won` or `open`. The lost-quote outcome table `QUOTEHN.DBF` is empty, so neither losses nor win rates can be established from this snapshot alone. `won_date` is the posted-history date, not a verified customer acceptance date. Document-derived registers keep the outcome `unknown`.
-- `material` is sparse — populated only where a quote-letter line carries it (`QUOTLEIT.MATERIAL`); most quotes keep material/finish info in the free-text `comment` (e.g. ".048 S.S 304 BRUSHED PVC").
+- A blank `material` column is not absent material/finish evidence: inspect provenance-labeled comments, retained quote continuations and manufacturing tables for the specific field. Do not treat lexical overlap as engineering equivalence.
 - `item_no`/`assembly_no`/`to_quote` relate multi-part assemblies and re-quotes (`TO_QUOTE='0000000'` = original, otherwise the earlier quote it re-quotes).
 - `date_stamp` is the record's last-touch date; `quote_date` (`ORG_DATE`) is the original quote date — they differ where quotes were revised.
 - `customer` is resolved via `QUOTLETT.CNAME` for the 365 customer ids that ever got a letter; the remainder keep `customer_id` only.
 - Memo (`COMMENT`) fields are included verbatim with original CRLFs.
-- Vendor-side quote requests (`VENDQUOT.DBF`, 12,779 rows) and quote ops/tooling detail (`QUOTOPER`, `QUOTTOO`, `QUOTQA`, `QUOTEH/M/O` markup matrices, `QUOTCAD`) were extracted in the zip but are not part of this flat export — ask if you want those too.
+- Vendor-side quote requests (`VENDQUOT`) and operations/material/outside-work/tooling detail are retained but not fully represented in this flat export. Use the [field-to-source map](docs/steve-pricing-workflow.md#find-the-missing-field-in-the-extract) for bounded authorized retrieval before requesting missing price-critical inputs; historical presence does not establish current validity.
 
 ## Estimator
 
 The frozen CSV remains unchanged. For local PDF transcription and a separate, document-verified customer-price register, see [document evidence](docs/document-evidence.md). Quote letters, supplier POs, invoices, and internal calculations are different evidence classes; only independently reconciled customer quote letters enter that derived register. Neither a printed quote nor a reconciled historical price establishes current manufacturing cost or authorizes customer delivery.
 
-`estimator/` is a TypeScript pipeline that turns a pricing request (parts + materials + drawing refs) into a priced quote draft by retrieving historical analogs from this register, ranking/screening them with TypeSafe Jev (`typesafe-ai/jev` via Vercel AI Gateway, deterministic fallback without a key), and interpolating qty/price breaks.
+`estimator/` retrieves historical analogs, screens eligible evidence and deterministically interpolates quantity/price breaks. The normal `keller_quote`/order path is offline; worker prompt changes do not improve its arithmetic by themselves. Optional TypeSafe Jev (`typesafe-ai/jev` via the existing Vercel AI Gateway) can rank/screen/select strategies only in separately authorized experiments; it is not a live material-price or cost engine.
 
 For a cross-platform offline onboarding check and safe request inbox → draft/receipt cycle, see [the 15-minute operator guide](docs/local-automation.md). This does not automatically send customer quotes or connect a request producer.
 

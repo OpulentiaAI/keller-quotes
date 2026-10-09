@@ -1,12 +1,14 @@
 import { createHash } from "node:crypto";
+import { reconcileCostBasis, type CostBasis, type CostBreakdown } from "./costing.js";
 import { estimate } from "./estimate.js";
+import { drawingNumber } from "./evidence.js";
 import { JevClient } from "./jev.js";
 import type { QuoteRegister } from "./register.js";
 import type { EvidenceStatus, LineEstimate, PartRequest, ProposalStatus } from "./types.js";
 
 export type OrderPricing =
   | { method: "unit_price"; unit_price: number; reason: string }
-  | { method: "cost_plus"; material_per_unit: number; labor_per_unit: number; outside_per_unit: number; setup_total: number; margin_pct: number; reason: string };
+  | { method: "cost_plus"; material_per_unit: number; labor_per_unit: number; outside_per_unit: number; setup_total: number; margin_pct: number; reason: string; cost_basis?: CostBasis };
 
 export interface OrderLineRequest extends PartRequest {
   line_id: string;
@@ -32,8 +34,10 @@ export interface PricedOrderLine {
   extended_price: number | null;
   pricing_source: "historical_analog" | "explicit_unit_price" | "cost_build_up" | "unpriced";
   pricing_reason: string;
+  cost_breakdown?: CostBreakdown;
   confidence: number | null;
   analogs: LineEstimate["analogs"];
+  evidence_candidates?: LineEstimate["evidence_candidates"];
   warnings: string[];
   proposal_status: ProposalStatus;
   evidence_status: EvidenceStatus;
@@ -132,27 +136,34 @@ export function assertOrderRequest(request: unknown): asserts request is OrderRe
   const ids = new Set<string>();
   for (const [i, item] of req.parts.entries()) {
     const path = `request.parts[${i}]`;
-    const part = object(item, path, ["line_id", "part_no", "description", "quantity", "material", "finish", "drawing_ref", "notes", "pricing"]);
+    const part = object(item, path, ["line_id", "part_no", "description", "quantity", "material", "finish", "revision", "drawing_no", "drawing_revision", "drawing_ref", "notes", "pricing"]);
     text(part.line_id, `${path}.line_id`, true);
     if (ids.has(part.line_id as string)) throw new Error(`duplicate line_id: ${part.line_id}`);
     ids.add(part.line_id as string);
-    for (const key of ["part_no", "description", "material", "finish", "drawing_ref", "notes"]) text(part[key], `${path}.${key}`);
+    for (const key of ["part_no", "description", "material", "finish", "revision", "drawing_no", "drawing_revision", "drawing_ref", "notes"]) text(part[key], `${path}.${key}`);
+    if (typeof part.drawing_no === "string" && part.drawing_no.trim() && !drawingNumber(part.drawing_no)) {
+      throw new Error(`${path}.drawing_no must be a drawing number, not an asset path`);
+    }
     if (!(typeof part.part_no === "string" && part.part_no.trim()) &&
       !(typeof part.description === "string" && part.description.trim())) throw new Error(`${path} needs part_no or description`);
     if (!Number.isSafeInteger(part.quantity) || (part.quantity as number) <= 0) throw new Error(`${path}.quantity must be a positive safe integer`);
     if (part.pricing !== undefined) {
-      const pricing = object(part.pricing, `${path}.pricing`, ["method", "unit_price", "material_per_unit", "labor_per_unit", "outside_per_unit", "setup_total", "margin_pct", "reason"]);
+      const pricing = object(part.pricing, `${path}.pricing`, ["method", "unit_price", "material_per_unit", "labor_per_unit", "outside_per_unit", "setup_total", "margin_pct", "reason", "cost_basis"]);
       text(pricing.reason, `${path}.pricing.reason`, true);
       if (pricing.method === "unit_price") {
         if (Object.keys(pricing).some((key) => !["method", "unit_price", "reason"].includes(key))) throw new Error(`${path}.pricing has invalid unit_price fields`);
         scaled(pricing.unit_price, `${path}.pricing.unit_price`, 4, true);
       } else if (pricing.method === "cost_plus") {
-        if (Object.keys(pricing).some((key) => !["method", "material_per_unit", "labor_per_unit", "outside_per_unit", "setup_total", "margin_pct", "reason"].includes(key))) throw new Error(`${path}.pricing has invalid cost_plus fields`);
+        if (Object.keys(pricing).some((key) => !["method", "material_per_unit", "labor_per_unit", "outside_per_unit", "setup_total", "margin_pct", "reason", "cost_basis"].includes(key))) throw new Error(`${path}.pricing has invalid cost_plus fields`);
         for (const key of ["material_per_unit", "labor_per_unit", "outside_per_unit"] as const) scaled(pricing[key], `${path}.pricing.${key}`, 4);
         scaled(pricing.setup_total, `${path}.pricing.setup_total`, 2);
         if (typeof pricing.margin_pct !== "number" || !Number.isFinite(pricing.margin_pct) || pricing.margin_pct < 0 || pricing.margin_pct >= 100) {
           throw new Error(`${path}.pricing.margin_pct must be finite and between 0 and 100 (exclusive)`);
         }
+        if (pricing.cost_basis !== undefined) reconcileCostBasis(pricing.cost_basis, part.quantity as number, req.quote_date, {
+          material_per_unit: pricing.material_per_unit as number, labor_per_unit: pricing.labor_per_unit as number,
+          outside_per_unit: pricing.outside_per_unit as number, setup_total: pricing.setup_total as number,
+        });
       } else throw new Error(`${path}.pricing.method is not supported`);
     }
   }
@@ -187,6 +198,7 @@ export async function buildPricedOrder(reg: QuoteRegister, request: unknown, opt
     let pricing_reason = "No usable historical price; operator pricing required";
     let confidence: number | null = null;
     let analogs: LineEstimate["analogs"] = [];
+    let evidenceCandidates: LineEstimate["evidence_candidates"];
     let lineWarnings: string[] = [];
     let proposal_status: ProposalStatus = "MISSING";
     let evidence_status: EvidenceStatus = "NONE";
@@ -222,6 +234,7 @@ export async function buildPricedOrder(reg: QuoteRegister, request: unknown, opt
       });
       const line = result.lines[0]!;
       analogs = line.analogs;
+      evidenceCandidates = line.evidence_candidates;
       lineWarnings = line.warnings;
       evidence_status = line.evidence_status;
       next_action = line.next_action;
@@ -236,11 +249,22 @@ export async function buildPricedOrder(reg: QuoteRegister, request: unknown, opt
       }
     }
     const cents = unit4 === null ? null : extend(unit4, part.quantity, `line ${line_id}`);
+    const costBreakdown = pricing?.method === "cost_plus" && pricing.cost_basis !== undefined
+      ? reconcileCostBasis(pricing.cost_basis, part.quantity, request.quote_date, pricing,
+        cents === null || cents === 0n ? undefined : amount(cents, 2, `line ${line_id}.extended_price`))
+      : undefined;
+    if (costBreakdown) {
+      lineWarnings.push(...costBreakdown.warnings);
+      uncertainties.push(...costBreakdown.supplied_basis.unresolved_assumptions);
+      next_action = "Human review required before release; verify supplied worksheet sources, scope, cost ranges, exclusions and unresolved assumptions";
+    }
     if (cents !== null) pricedCents = BigInt(safe(pricedCents + cents, "priced_subtotal"));
     else blockers.push(`line ${line_id} is unpriced`);
     warnings.push(...lineWarnings.map((warning) => `line ${line_id}: ${warning}`));
     lines.push({ line_id, part, unit_price: unit4 === null ? null : amount(unit4, 4, `line ${line_id}.unit_price`),
       extended_price: cents === null ? null : amount(cents, 2, `line ${line_id}.extended_price`), pricing_source, pricing_reason,
+      ...(costBreakdown ? { cost_breakdown: costBreakdown } : {}),
+      ...(evidenceCandidates?.length ? { evidence_candidates: evidenceCandidates } : {}),
       confidence, analogs, warnings: lineWarnings, proposal_status, evidence_status, next_action, uncertainties });
   }
   const shipping = request.charges?.shipping ?? null;
@@ -290,6 +314,16 @@ export function renderOrderMarkdown(order: PricedOrder): string {
       `Pricing reason: ${md(line.pricing_reason)}  `,
       `Proposal status: ${md(line.proposal_status)}; evidence status: ${md(line.evidence_status)}  `,
       `Next action: ${md(line.next_action)}  `,
+      ...(line.cost_breakdown ? [
+        "#### Prospective cost worksheet (supplied assertions, not authenticated)", "",
+        `Scope: ${md(line.cost_breakdown.scope)}; no whole-order margin claim.  `,
+        `Reconciled flat costs: ${md(JSON.stringify(line.cost_breakdown.reconciled_flat))}  `,
+        `Estimated line cost (low/base/high): ${md(JSON.stringify(line.cost_breakdown.estimated_line_cost))}  `,
+        `Estimated line margin % (low/base/high, not guaranteed): ${md(JSON.stringify(line.cost_breakdown.estimated_line_margin_pct))}  `,
+        ...line.cost_breakdown.components.map((entry) => `- Component: ${md(JSON.stringify(entry))}`),
+        ...line.cost_breakdown.routing.map((entry) => `- Routing: ${md(JSON.stringify(entry))}`),
+        `Reporting: ${md(line.cost_breakdown.rounding)}; converted quantities and times shown to six decimal places.`, "",
+      ] : []),
       ...line.uncertainties.map((uncertainty) => `- Uncertainty: ${md(uncertainty)}`),
       ...line.warnings.map((warning) => `- Warning: ${md(warning)}`),
       ...line.analogs.map((analog) => `- Analog ${md(analog.quote_no)} (${md(analog.quote_date)}): ${md(analog.part_no)}; ${md(analog.description)}; ${md(analog.customer)}; ${md(analog.status)}; score ${analog.score}; price basis ${md(analog.price_evidence.price_basis)}${analog.price_evidence.price_basis === "customer_quote_pdf"

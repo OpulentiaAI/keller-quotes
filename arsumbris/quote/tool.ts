@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import type { CallableResult, PluginContext, PluginRuntime } from '@arsumbris/au-mcp-sdk'
 import { scopedRegister } from '../../estimator/src/scoped-register.mjs'
-import { beforeScopedCall, loadEvaluationScope } from '../../scripts/mcp-evaluation-scope.mjs'
+import { beforeScopedCall, loadEvaluationScope, projectScopedOrder } from '../../scripts/mcp-evaluation-scope.mjs'
 
 const run = promisify(execFile)
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
@@ -110,7 +110,7 @@ export function createPlugin(_ctx: PluginContext): PluginRuntime {
         if (createHash('sha256').update(readFileSync(registerPath)).digest('hex') !== corpusSha) throw new Error('register changed during pricing')
         const jsonPath = join(out, 'order.json')
         const markdownPath = join(out, 'order.md')
-        const order = JSON.parse(readFileSync(jsonPath, 'utf8')) as {
+        let order = JSON.parse(readFileSync(jsonPath, 'utf8')) as {
           state: string; total: number | null; blockers: string[]; requires_human_review: boolean;
           provenance: { register_sha256: string; request_sha256: string; mode: string };
           lines: { pricing_source: string }[];
@@ -118,6 +118,10 @@ export function createPlugin(_ctx: PluginContext): PluginRuntime {
         if (!['BLOCKED', 'PRICED_REQUIRES_REVIEW'].includes(order.state) || order.requires_human_review !== true ||
             order.provenance.register_sha256 !== corpusSha || order.provenance.mode !== 'offline' ||
             (order.state === 'BLOCKED' && order.total !== null)) throw new Error('invalid draft result')
+        if (scoped) {
+          order = projectScopedOrder(order)
+          writeFileSync(jsonPath, JSON.stringify(order, null, 2) + '\n', { mode: 0o600 })
+        }
         chmodSync(jsonPath, 0o600)
         chmodSync(markdownPath, 0o600)
         const reviewPath = join(out, 'review.json')

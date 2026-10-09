@@ -6,6 +6,8 @@ See the [public-safe aggregate results](mcp-workflow-evaluation-results.md) for 
 
 ## Opt-in blinded evidence scope
 
+Schema-1 scopes freeze only price rows and part/quantity request identities. The scoped register now reconstructs only those frozen fields, using the frozen document locator as its `quote_letter` source label rather than copying a live historical letter. Unfrozen engineering metadata cannot influence retrieval. Additional line selectors and `cost_basis` are denied before execution; rich `evidence`/`evidence_candidates` packets are omitted from scoped artifacts/results but retained in ordinary operator drafts. Use a separately versioned, independently frozen scope to evaluate richer engineering evidence, and do not compare earlier broad-metadata scoped runs as a matched code-only study.
+
 For genuinely blinded historical cases, prepare an owner-private (`0700` directory, `0600` regular file), absolute scope JSON outside Git and run every MCP call, including discovery, through `node scripts/call-arsumbris-tool.mjs --list|--call --evaluation-scope "$PRIVATE_SCOPE" --audit "$PRIVATE_TRACE"`. Reuse the exact scope bytes throughout one attempt. The caller binds each worker-visible response and audit event, including failures, to their SHA-256; preserve the scope hash with the frozen case manifest. A malformed or changed scope fails closed. This is an opt-in guarded **client view of the actual standard MCP backend**, not a separate mock backend or a change to the normal unscoped profile.
 
 Schema version 1 has exactly these fields (dates are valid `YYYY-MM-DD`; `date_stamp` may be `""`):

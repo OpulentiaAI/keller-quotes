@@ -42,7 +42,14 @@ export function scopedRegister(scopePath, scopeSha, publicRoot, corpus, request,
     selected.add(found)
   }
   verify()
-  const csv = [header, ...[...rows.values()].filter(entry => selected.has(entry)).map(entry => entry.values)]
+  // Reconstruct only frozen fields. Use the frozen document locator as a scoped
+  // source label, never a live/unfrozen customer quote-letter assertion.
+  const columns = [...new Set([...Object.keys(guard.scope.eligible_prices[0] ?? fields).map(key => fields[key] ?? key), 'quote_letter'])]
+  const csv = [columns, ...guard.scope.eligible_prices.map(eligible => {
+    const row = Object.fromEntries(Object.entries(eligible).map(([key, value]) => [fields[key] ?? key, String(value)]))
+    row.quote_letter = eligible.source_path
+    return columns.map(key => row[key] ?? '')
+  })]
     .map(values => values.map(value => /[",\r\n]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value).join(',')).join('\n') + '\n'
   writeFileSync(destination, csv, { flag: 'wx', mode: 0o600 })
   const sha256 = createHash('sha256').update(readFileSync(destination)).digest('hex')

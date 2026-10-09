@@ -1,0 +1,278 @@
+import { describe, expect, it } from "vitest";
+import { reconcileCostBasis, type CostBasis, type CostRange, type CostSource, type FlatCosts } from "../src/costing.js";
+import { assertOrderRequest, buildPricedOrder, renderOrderMarkdown, type OrderRequest } from "../src/order.js";
+import { QuoteRegister } from "../src/register.js";
+
+// Entirely synthetic: hashes and locators assert fixture provenance, not real source authenticity.
+const asOf = "2024-06-01";
+const sha = "a".repeat(64);
+const reg = new QuoteRegister([]);
+const options = { registerSha256: sha };
+const range = (base: number, low = base, high = base): CostRange => ({ low, base, high });
+const source = (): CostSource => ({
+  source_class: "operator_estimate", sha256: sha, locator: "synthetic-worksheet:row-1",
+  source_date: "2020-01-01", captured_date: "2024-05-01", status: "approved_estimate",
+  applicability: "assumed", basis: "Synthetic prospective assumptions to be checked before release",
+  approval: { reviewer: "Synthetic reviewer", date: "2024-05-31", reason: "Approved estimate only, not release" },
+});
+const flat = (): FlatCosts => ({ material_per_unit: 1.25, labor_per_unit: 2.4, outside_per_unit: 2.5, setup_total: 60 });
+function basis(): CostBasis {
+  return {
+    schema_version: 1, currency: "USD", order_charges: "excluded",
+    components: [
+      { id: "material", category: "material", allocation: "material_per_unit", rate_kind: "cost",
+        original_unit: "sheet", quantity_unit: "finished_piece", quantity: 10,
+        original_units_per_quantity_unit: 0.1, yield_fraction: 0.8, minimum_quantity: 0,
+        unit_cost: range(10, 8, 12), minimum_charge: range(0), sources: [source()],
+        assumptions: ["80% yield; fractional sheets allocated to this line; no supplier quantity minimum"],
+        charge_inclusion: "Material only, no labor, freight, tax or order charges" },
+      { id: "outside", category: "outside", allocation: "outside_per_unit", rate_kind: "cost",
+        original_unit: "piece", quantity_unit: "finished_piece", quantity: 10,
+        original_units_per_quantity_unit: 1, yield_fraction: 1, minimum_quantity: 0,
+        unit_cost: range(2, 1, 3), minimum_charge: range(25), sources: [source()],
+        assumptions: ["All shipped pieces treated, no outside scrap; one lot minimum inclusive of processing"],
+        charge_inclusion: "Outside treatment including supplier setup; no separate setup or freight" },
+    ],
+    routing: [{ id: "operation", sources: [source()], assumptions: ["Two setups for two releases; process twelve pieces including two scrap pieces"],
+      charge_inclusion: "Loaded labor and machine cost; do not add a second overhead charge; excludes freight and tax",
+      setup_occurrences: 2, setup_time: { unit: "minutes", values: range(30, 20, 40) },
+      run_time: { unit: "minutes_per_piece", values: range(2, 1, 3) }, process_quantity: 12,
+      setup_rate: { rate_kind: "cost", unit: "USD/hour", values: range(60) },
+      run_rate: { rate_kind: "cost", unit: "USD/hour", values: range(60) } }],
+    not_applicable: [{ category: "other", reason: "No additional production scope in this synthetic estimate", sources: [source()] }],
+    unresolved_assumptions: ["Confirm release count before customer approval"],
+  };
+}
+function request(costBasis: CostBasis | undefined = basis(), costs = flat(), quantity = 10): OrderRequest {
+  return {
+    order_id: "SYNTHETIC-ORDER", customer: "Synthetic customer", quote_date: asOf,
+    parts: [{ line_id: "1", description: "Synthetic part", quantity,
+      pricing: { method: "cost_plus", ...costs, margin_pct: 20, reason: "Reviewed prospective worksheet", ...(costBasis ? { cost_basis: costBasis } : {}) } }],
+    charges: { shipping: 7, tax: 0 }, additional_charges: [{ label: "Separate order charge", amount: 3 }],
+  };
+}
+
+function reconcile(b = basis(), costs = flat(), quantity = 10) {
+  return reconcileCostBasis(b, quantity, asOf, costs);
+}
+
+describe("prospective cost-basis worksheet", () => {
+  it("uses repeated setup plus processed quantity, material yield/conversion and outside lot minimum", () => {
+    const result = reconcile();
+    expect(result.reconciled_flat).toEqual(flat());
+    expect(result.components[0]).toMatchObject({ priced_quantity: 1.25, total_cost: range(12.5, 10, 15) });
+    expect(result.components[1]).toMatchObject({ priced_quantity: 10, total_cost: range(25, 25, 30) });
+    expect(result.routing[0]).toMatchObject({ setup_occurrences: 2, process_quantity: 12,
+      setup_minutes: range(30, 20, 40), run_minutes_per_piece: range(2, 1, 3),
+      setup_cost: range(60, 40, 80), run_cost: range(24, 12, 36) });
+    expect(result.estimated_line_cost).toEqual(range(121.5, 87, 161));
+    expect(result.estimated_line_margin_pct).toBeNull();
+  });
+
+  it("allocates shared setup once rather than multiplying by finished pieces or deliveries implicitly", () => {
+    const b = basis();
+    b.routing[0]!.setup_occurrences = 1;
+    b.routing[0]!.assumptions = ["One shared setup across both releases, explicitly approved as an estimate"];
+    expect(reconcile(b, { ...flat(), setup_total: 30 }).routing[0]!.setup_cost).toEqual(range(30, 20, 40));
+    expect(() => reconcile(b)).toThrow(/does not reconcile setup_total/);
+  });
+
+  it("spreads setup over the finished quantity but costs scrap at process quantity", async () => {
+    const b = basis();
+    b.components[0]!.quantity = 20;
+    b.components[1]!.quantity = 20;
+    b.routing[0]!.process_quantity = 24;
+    const costs = { ...flat(), outside_per_unit: 2 };
+    const order = await buildPricedOrder(reg, request(b, costs, 20), options);
+    expect(order.lines[0]).toMatchObject({ unit_price: 10.8125, extended_price: 216.25 });
+    expect(order.lines[0]!.cost_breakdown!.routing[0]).toMatchObject({ setup_cost: range(60, 40, 80), run_cost: range(48, 24, 72) });
+    const noScrap = basis();
+    noScrap.routing[0]!.process_quantity = 10;
+    expect(reconcile(noScrap, { ...flat(), labor_per_unit: 2 }).routing[0]!.run_cost.base).toBe(20);
+  });
+
+  it("converts hours and parts/hour without reversing low/high runtime bounds", () => {
+    const b = basis();
+    b.routing[0]!.setup_time = { unit: "hours", values: range(0.5, 0.25, 1) };
+    b.routing[0]!.run_time = { unit: "pieces_per_hour", values: range(30, 20, 60) };
+    const result = reconcile(b);
+    expect(result.routing[0]!.setup_minutes).toEqual(range(30, 15, 60));
+    expect(result.routing[0]!.run_minutes_per_piece).toEqual(range(2, 1, 3));
+    b.routing[0]!.run_time = { unit: "seconds_per_piece", values: range(120, 60, 180) };
+    expect(reconcile(b).routing[0]!.run_cost).toEqual(range(24, 12, 36));
+  });
+
+  it("applies supplier minimum quantity in the original priced unit before minimum charge", () => {
+    const b = basis();
+    b.components[0]!.minimum_quantity = 2;
+    const result = reconcile(b, { ...flat(), material_per_unit: 2 });
+    expect(result.components[0]).toMatchObject({ priced_quantity: 2, total_cost: range(20, 16, 24) });
+  });
+
+  it("allocates explicit other production costs without a new hidden flat component", () => {
+    const b = basis();
+    b.components.push({ ...b.components[1]!, id: "tooling", category: "other", allocation: "setup_total",
+      quantity: 1, minimum_charge: range(0), unit_cost: range(5),
+      charge_inclusion: "Single production tool, not included in any routing rate or order charge" });
+    b.not_applicable = [];
+    expect(reconcile(b, { ...flat(), setup_total: 65 }).estimated_line_cost).toEqual(range(126.5, 92, 166));
+  });
+
+  it("reconciles exact rational inputs at the existing half-up 4dp-unit/2dp-setup boundaries", () => {
+    const b = basis();
+    b.components = [];
+    b.not_applicable = (["material", "outside", "other"] as const).map(category => ({ category, reason: "Synthetic routing-only scope", sources: [source()] }));
+    b.routing[0]!.setup_occurrences = 1;
+    b.routing[0]!.setup_time.values = range(1.005);
+    b.routing[0]!.run_time.values = range(0.00105);
+    b.routing[0]!.process_quantity = 3;
+    const costs = { material_per_unit: 0, outside_per_unit: 0, labor_per_unit: 0.0011, setup_total: 1.01 };
+    expect(reconcile(b, costs, 3)).toMatchObject({ reconciled_flat: costs, estimated_line_cost: range(1.0082) });
+    expect(() => reconcile(b, { ...costs, setup_total: 1 }, 3)).toThrow(/reconcile setup_total/);
+    expect(() => reconcile(b, { ...costs, labor_per_unit: 0.00105 }, 3)).toThrow(/reconcile labor_per_unit/);
+  });
+
+  it("does not require payment, accepted-order or actual-job evidence for an approved prospective estimate", async () => {
+    const b = basis();
+    b.components[0]!.sources[0]!.expires_date = "2020-02-01";
+    b.components[0]!.sources[0]!.effective_date = "2020-01-01";
+    const order = await buildPricedOrder(reg, request(b), options);
+    expect(order.state).toBe("PRICED_REQUIRES_REVIEW");
+    expect(order.requires_human_review).toBe(true);
+    const line = order.lines[0]!;
+    expect(line).toMatchObject({ unit_price: 15.1875, extended_price: 151.88,
+      proposal_status: "NUMERIC_PROVISIONAL", evidence_status: "OPERATOR_INPUT" });
+    expect(line.cost_breakdown!.supplied_basis).toEqual(b);
+    expect(line.cost_breakdown!.assertion_status).toBe("supplied_not_authenticated");
+    expect(line.cost_breakdown!.estimated_line_margin_pct).toEqual({ low: -6, base: 20, high: 42.72 });
+    expect(line.uncertainties).toContain(b.unresolved_assumptions[0]);
+    expect(line.warnings.join(" ")).toContain("not authenticated evidence");
+    expect(order.total).toBe(161.88); // Shipping 7 and order charge 3, exactly once, not cost totals again.
+    expect(order).not.toHaveProperty("estimated_margin_pct");
+    const markdown = renderOrderMarkdown(order);
+    expect(markdown).toContain("Prospective cost worksheet");
+    expect(markdown).toContain("not guaranteed");
+    expect(markdown).toContain("no whole-order margin claim");
+  });
+
+  it("keeps freight-cost absence explicit even when a shipping sell charge exists or is missing", async () => {
+    const req = request();
+    req.charges!.shipping = null;
+    const order = await buildPricedOrder(reg, req, options);
+    expect(order.total).toBeNull();
+    expect(order.blockers).toContain("shipping is missing");
+    expect(order.lines[0]!.cost_breakdown!.scope).toBe("production_line_excluding_freight_tax_and_order_charges");
+    expect(order.lines[0]!.warnings.join(" ")).toContain("no whole-order margin is claimed");
+  });
+
+  it("supports historical status without pretending the archive is a current offer", () => {
+    const b = basis();
+    b.components[0]!.sources = [{ ...source(), status: "historical", approval: undefined,
+      effective_date: "2020-01-01", expires_date: "2020-01-31" }];
+    expect(reconcile(b).supplied_basis.components[0]!.sources[0]!.status).toBe("historical");
+  });
+
+  it("accepts a current assertion only inside its commercial date window", () => {
+    const b = basis();
+    b.components[0]!.sources = [{ ...source(), source_class: "supplier_quote", status: "current", approval: undefined,
+      source_date: "2024-05-01", effective_date: "2024-05-01", expires_date: asOf }];
+    expect(reconcile(b).reconciled_flat).toEqual(flat());
+    b.components[0]!.sources[0]!.expires_date = "2024-05-31";
+    b.components[0]!.sources[0]!.captured_date = asOf;
+    expect(() => reconcile(b)).toThrow(/current claim.*expired/);
+  });
+
+  it("allows an explicit sourced zero for an included operation, but never defaults blank values to zero", () => {
+    const b = basis();
+    b.routing[0]!.setup_occurrences = 0;
+    expect(() => reconcile(b, { ...flat(), setup_total: 0 })).toThrow(/zero_reason/);
+    b.routing[0]!.zero_reason = "Setup already included in the outside lot charge, per supplied estimate";
+    expect(reconcile(b, { ...flat(), setup_total: 0 }).routing[0]!.setup_cost).toEqual(range(0));
+  });
+
+  const invalid: [string, (b: CostBasis) => void, RegExp][] = [
+    ["setup SELL rate", b => { b.routing[0]!.setup_rate.rate_kind = "sell"; }, /SELL rates/],
+    ["run SELL rate", b => { b.routing[0]!.run_rate.rate_kind = "sell"; }, /SELL rates/],
+    ["component SELL price", b => { b.components[0]!.rate_kind = "sell"; }, /SELL rates/],
+    ["missing cost", b => { Reflect.deleteProperty(b.components[0]!, "unit_cost"); }, /unit_cost/],
+    ["missing setup rate", b => { Reflect.deleteProperty(b.routing[0]!, "setup_rate"); }, /setup_rate/],
+    ["missing range value", b => { Reflect.deleteProperty(b.routing[0]!.run_rate.values, "low"); }, /low/],
+    ["nonfinite cost", b => { b.components[0]!.unit_cost.high = Infinity; }, /finite/],
+    ["NaN cost", b => { b.routing[0]!.run_rate.values.base = NaN; }, /finite/],
+    ["negative cost", b => { b.components[0]!.unit_cost.low = -1; }, /nonnegative/],
+    ["unordered cost range", b => { b.components[0]!.unit_cost.low = 11; }, /low <= base <= high/],
+    ["unordered time range", b => { b.routing[0]!.setup_time.values.high = 1; }, /low <= base <= high/],
+    ["zero yield", b => { b.components[0]!.yield_fraction = 0; }, /positive/],
+    ["yield over one", b => { b.components[0]!.yield_fraction = 1.1; }, /must be <= 1/],
+    ["zero conversion", b => { b.components[0]!.original_units_per_quantity_unit = 0; }, /positive/],
+    ["unsupported precision", b => { b.components[0]!.unit_cost.base = 10.0000001; }, /six decimal places/],
+    ["negative setup count", b => { b.routing[0]!.setup_occurrences = -1; }, /integer/],
+    ["fractional setup count", b => { b.routing[0]!.setup_occurrences = 1.5; }, /integer/],
+    ["unreasonable setup count", b => { b.routing[0]!.setup_occurrences = 10001; }, /integer/],
+    ["unreasonable process quantity", b => { b.routing[0]!.process_quantity = 10000001; }, /integer/],
+    ["zero parts/hour divisor", b => { b.routing[0]!.run_time = { unit: "pieces_per_hour", values: range(0) }; }, /divisor/],
+    ["unknown is not zero", b => { b.not_applicable = []; }, /missing other/],
+    ["conflicting scope", b => { b.components[0]!.sources[0]!.applicability = "conflict"; }, /applicability/],
+    ["absent provenance", b => { b.components[0]!.sources = []; }, /1\.\.8/],
+    ["invalid hash", b => { b.components[0]!.sources[0]!.sha256 = "not-a-hash"; }, /hex digest/],
+    ["missing estimate approval", b => { Reflect.deleteProperty(b.components[0]!.sources[0]!, "approval"); }, /approval/],
+    ["future source", b => { b.components[0]!.sources[0]!.source_date = "2024-06-02"; }, /after quote_date/],
+    ["invalid date", b => { b.components[0]!.sources[0]!.source_date = "2024-02-30"; }, /valid YYYY/],
+    ["no expiry for current claim", b => { b.components[0]!.sources = [{ ...source(), status: "current", approval: undefined, effective_date: "2024-01-01" }]; }, /expires_date/],
+    ["future current window", b => { b.components[0]!.sources = [{ ...source(), status: "current", approval: undefined, effective_date: "2025-01-01", expires_date: "2025-02-01" }]; }, /not effective/],
+    ["duplicate component/route identity", b => { b.routing[0]!.id = b.components[0]!.id; }, /duplicate/],
+    ["contradictory not-applicable", b => { b.not_applicable.push({ category: "material", reason: "Contradicts material entry", sources: [source()] }); }, /contradicts/],
+    ["oversized components", b => { b.components = Array.from({ length: 65 }, () => ({ ...b.components[0]! })); }, /0\.\.64/],
+    ["oversized source list", b => { b.components[0]!.sources = Array.from({ length: 9 }, source); }, /1\.\.8/],
+    ["overlong assertion", b => { b.components[0]!.charge_inclusion = "x".repeat(2049); }, /2048/],
+  ];
+  it.each(invalid)("rejects %s", (_name, mutate, message) => {
+    const b = basis();
+    mutate(b);
+    expect(() => reconcile(b)).toThrow(message);
+    expect(() => assertOrderRequest(request(b))).toThrow();
+  });
+
+  it("rejects extra/nested arbitrary input and cannot silently include order freight", () => {
+    const b = basis();
+    expect(() => reconcileCostBasis({ ...b, order_charges: "included" }, 10, asOf, flat())).toThrow(/excluded/);
+    expect(() => reconcileCostBasis({ ...b, shipping: 7 }, 10, asOf, flat())).toThrow(/not supported/);
+    expect(() => reconcileCostBasis({ ...b, components: [{ ...b.components[0], nested: { nested: b } }] }, 10, asOf, flat())).toThrow(/not supported/);
+    const circular = basis();
+    Reflect.set(circular.components[0]!, "unit_cost", circular);
+    expect(() => reconcile(circular)).toThrow(/not supported/);
+    expect(() => reconcile(b, flat(), 10000001)).toThrow(/line_quantity/);
+  });
+
+  it("rejects flat disagreement rather than replacing the operator price inputs", async () => {
+    for (const key of ["material_per_unit", "labor_per_unit", "outside_per_unit", "setup_total"] as const) {
+      const costs = flat();
+      costs[key] += 1;
+      await expect(buildPricedOrder(reg, request(basis(), costs), options)).rejects.toThrow(new RegExp(`reconcile ${key}`));
+    }
+  });
+
+  it("preserves existing bare cost_plus and unit_price requests with no new output fields", async () => {
+    const req = request();
+    if (req.parts[0]!.pricing!.method === "cost_plus") delete req.parts[0]!.pricing!.cost_basis;
+    const flatOrder = await buildPricedOrder(reg, req, options);
+    expect(flatOrder.lines[0]).toMatchObject({ unit_price: 15.1875, extended_price: 151.88 });
+    expect(flatOrder.lines[0]).not.toHaveProperty("cost_breakdown");
+    req.parts[0]!.pricing = { method: "unit_price", unit_price: 1.005, reason: "Synthetic explicit proposal" };
+    req.parts[0]!.quantity = 2;
+    const unitOrder = await buildPricedOrder(reg, req, options);
+    expect(unitOrder.lines[0]).toMatchObject({ unit_price: 1.005, extended_price: 2.01 });
+    expect(unitOrder.lines[0]).not.toHaveProperty("cost_breakdown");
+    Reflect.set(req.parts[0]!.pricing, "cost_basis", basis());
+    expect(() => assertOrderRequest(req)).toThrow(/invalid unit_price fields/);
+  });
+
+  it("escapes supplied worksheet prose in Markdown", async () => {
+    const b = basis();
+    b.routing[0]!.id = "<script>|operation";
+    b.components[0]!.sources[0]!.locator = "<script>|source";
+    const md = renderOrderMarkdown(await buildPricedOrder(reg, request(b), options));
+    expect(md).not.toContain("<script>");
+    expect(md).toContain("&lt;script&gt;");
+  });
+});

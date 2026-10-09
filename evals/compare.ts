@@ -1,8 +1,10 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { aggregate, allPass, assertSafeOutputs, grade, printedTargetReconciles, sliceMetrics, CRITERIA, type EvalResult } from "./metrics.js";
 
-interface Report {
+export interface Report {
   schema_version: number;
   provenance: {
     register_sha256: string; evalset_sha256: string;
@@ -16,7 +18,7 @@ interface Report {
   slices: ReturnType<typeof sliceMetrics>;
 }
 
-function readReport(path: string): Report {
+export function readReport(path: string): Report {
   const report = JSON.parse(readFileSync(path, "utf8")) as Report;
   if (report.schema_version !== 2 || !report.provenance || !report.summary || !Array.isArray(report.results) ||
     !report.results.length) throw new Error(`${path}: require nonempty schema_version 2 report`);
@@ -159,6 +161,7 @@ export function compare(baseline: Report, candidate: Report) {
   return { md, regression };
 }
 
+function main() {
 const args = process.argv.slice(2);
 if (args.length && !args[0]?.startsWith("--")) {
   let failOnRegression = false;
@@ -187,3 +190,6 @@ if (args.length && !args[0]?.startsWith("--")) {
     process.exitCode = 1;
   }
 } else throw new Error("usage: compare.ts baseline.json candidate.json --report comparison.md [--fail-on-regression]");
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();
