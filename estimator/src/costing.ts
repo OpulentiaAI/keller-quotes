@@ -42,10 +42,13 @@ export interface CostComponent extends SupportedCost {
 }
 
 export interface CostRate { rate_kind: "cost" | "sell"; unit: "USD/hour"; values: CostRange }
+export type RunTime =
+  | { unit: "minutes_per_piece" | "seconds_per_piece" | "hours_per_piece" | "pieces_per_hour"; values: CostRange }
+  | { unit: "minutes_per_cycle" | "seconds_per_cycle" | "hours_per_cycle" | "cycles_per_hour"; values: CostRange; cycles_per_piece: number };
 export interface CostRouting extends SupportedCost {
   setup_occurrences: number;
   setup_time: { unit: "minutes" | "hours"; values: CostRange };
-  run_time: { unit: "minutes_per_piece" | "seconds_per_piece" | "pieces_per_hour"; values: CostRange };
+  run_time: RunTime;
   process_quantity: number;
   setup_rate: CostRate;
   run_rate: CostRate;
@@ -79,7 +82,8 @@ export interface CostBreakdown {
   components: { id: string; category: CostComponent["category"]; allocation: Allocation;
     priced_quantity: number; total_cost: CostRange }[];
   routing: { id: string; setup_occurrences: number; setup_minutes: CostRange;
-    run_minutes_per_piece: CostRange; process_quantity: number; setup_cost: CostRange; run_cost: CostRange }[];
+    run_minutes_per_piece: CostRange; cycles_per_piece?: number;
+    process_quantity: number; setup_cost: CostRange; run_cost: CostRange }[];
   estimated_line_cost: CostRange;
   /** Low margin uses HIGH cost, and vice versa, against displayed line revenue. */
   estimated_line_margin_pct: CostRange | null;
@@ -162,6 +166,20 @@ function range(value: unknown, path: string): Range {
   const result = { low: number(r.low, `${path}.low`), base: number(r.base, `${path}.base`), high: number(r.high, `${path}.high`) };
   if (compare(result.low, result.base) > 0n || compare(result.base, result.high) > 0n) throw new Error(`${path} must satisfy low <= base <= high`);
   return result;
+}
+function runTimeMinutes(value: unknown, path: string): { minutes: Range; cycles_per_piece?: number } {
+  const time = record(value, path, ["unit", "values", "cycles_per_piece"]);
+  const cycleUnits = ["minutes_per_cycle", "seconds_per_cycle", "hours_per_cycle", "cycles_per_hour"];
+  choice(time.unit, `${path}.unit`, ["minutes_per_piece", "seconds_per_piece", "hours_per_piece", "pieces_per_hour", ...cycleUnits]);
+  const cycles = cycleUnits.includes(time.unit as string)
+    ? count(time.cycles_per_piece, `${path}.cycles_per_piece`, 1_000_000, 1) : undefined;
+  if (cycles === undefined && "cycles_per_piece" in time) throw new Error(`${path}.cycles_per_piece requires a per-cycle unit, not a finished-piece unit`);
+  const values = range(time.values, `${path}.values`);
+  const minutes = time.unit === "pieces_per_hour" || time.unit === "cycles_per_hour"
+    ? { low: div(whole(60), values.high), base: div(whole(60), values.base), high: div(whole(60), values.low) }
+    : mapRange(values, v => time.unit === "hours_per_piece" || time.unit === "hours_per_cycle"
+      ? mul(v, whole(60)) : div(v, whole(time.unit === "seconds_per_piece" || time.unit === "seconds_per_cycle" ? 60 : 1)));
+  return { minutes: mapRange(minutes, v => mul(v, whole(cycles ?? 1))), ...(cycles === undefined ? {} : { cycles_per_piece: cycles }) };
 }
 function rounded(value: Fraction, places: number): bigint {
   const sign = value.n < 0n ? -1n : 1n;
@@ -294,12 +312,8 @@ function calculateCostBasis(value: unknown, quantity: number, asOf: string, flat
     const setupTime = record(r.setup_time, `${p}.setup_time`, ["unit", "values"]);
     choice(setupTime.unit, `${p}.setup_time.unit`, ["minutes", "hours"]);
     const setupMinutes = mapRange(range(setupTime.values, `${p}.setup_time.values`), v => mul(v, whole(setupTime.unit === "hours" ? 60 : 1)));
-    const runTime = record(r.run_time, `${p}.run_time`, ["unit", "values"]);
-    choice(runTime.unit, `${p}.run_time.unit`, ["minutes_per_piece", "seconds_per_piece", "pieces_per_hour"]);
-    const runValues = range(runTime.values, `${p}.run_time.values`);
-    const runMinutes = runTime.unit === "pieces_per_hour"
-      ? { low: div(whole(60), runValues.high), base: div(whole(60), runValues.base), high: div(whole(60), runValues.low) }
-      : mapRange(runValues, v => div(v, whole(runTime.unit === "seconds_per_piece" ? 60 : 1)));
+    const runTime = runTimeMinutes(r.run_time, `${p}.run_time`);
+    const runMinutes = runTime.minutes;
     const rate = (input: unknown, path: string): Range => {
       const v = record(input, path, ["rate_kind", "unit", "values"]);
       costKind(v.rate_kind, `${path}.rate_kind`);
@@ -316,6 +330,7 @@ function calculateCostBasis(value: unknown, quantity: number, asOf: string, flat
     present.add("routing");
     routing.push({ id: r.id as string, setup_occurrences: occurrences, process_quantity: processQuantity,
       setup_minutes: displayRange(setupMinutes, 6, p), run_minutes_per_piece: displayRange(runMinutes, 6, p),
+      ...(runTime.cycles_per_piece === undefined ? {} : { cycles_per_piece: runTime.cycles_per_piece }),
       setup_cost: displayRange(setup, 4, p), run_cost: displayRange(run, 4, p) });
   }
   for (const [i, item] of list(root.not_applicable, "cost_basis.not_applicable", 4).entries()) {
@@ -354,6 +369,7 @@ function calculateCostBasis(value: unknown, quantity: number, asOf: string, flat
     supplied_basis: value as CostBasis, reconciled_flat: reconciled, components, routing,
     estimated_line_cost: displayRange(lineCost, 4, "cost_basis.estimated_line_cost"), estimated_line_margin_pct: margin,
     warnings: [
+      ...(routing.some(r => r.cycles_per_piece !== undefined) ? ["Cycle-based routing uses supplied repetitions per piece; verify cycle scope, process quantity and COST-rate inclusions to avoid omitted or duplicated work"] : []),
       "Worksheet sources, hashes, applicability and estimate approvals are supplied assertions, not authenticated evidence",
       "Historical and approved estimates support prospective review, not guaranteed actual costs or current buy prices",
       "Estimated production-line margin excludes freight, tax and separate order charges; no whole-order margin is claimed",

@@ -112,6 +112,21 @@ console.log(JSON.stringify(result));"""
         return order, markdown
 
     def test_uploaded_engineering_should_cost_survives_native_and_local_handoffs(self):
+        self.assert_uploaded_engineering_handoffs()
+
+    def test_cycle_based_routing_survives_retention_native_review_and_local_inbox(self):
+        self.assert_uploaded_engineering_handoffs({
+            'unit': 'cycles_per_hour', 'values': {'low': 6, 'base': 6, 'high': 6}, 'cycles_per_piece': 2})
+
+    def assert_uploaded_engineering_handoffs(self, run_time=None):
+        input_path = ROOT / 'estimator/examples/should-cost-intake.json'
+        if run_time is not None:
+            request = json.loads(input_path.read_text())
+            route = request['parts'][0]['pricing']['cost_basis']['routing'][0]
+            route['run_time'] = run_time
+            route['assumptions'].append('Two separate cycles per process piece at six cycles per hour, no batch sharing')
+            input_path = self.home / 'cycle-request.json'
+            input_path.write_text(json.dumps(request))
         uploads = []
         for name in ('drawing', 'worksheet'):
             path = self.home / (name + '.txt')
@@ -120,7 +135,7 @@ console.log(JSON.stringify(result));"""
         manifest = self.home / 'uploads.json'
         manifest.write_text(json.dumps(uploads))
         retained = subprocess.run(['node', str(ROOT / 'estimator/node_modules/tsx/dist/cli.mjs'),
-            str(ROOT / 'estimator/src/intake-cli.ts'), str(ROOT / 'estimator/examples/should-cost-intake.json'),
+            str(ROOT / 'estimator/src/intake-cli.ts'), str(input_path),
             '--attachments', str(manifest), '--operator', 'Synthetic Operator'],
             env={**os.environ, 'HOME': str(self.home)}, capture_output=True, text=True, check=True, timeout=20)
         request_path = Path(json.loads(retained.stdout)['request_path'])
@@ -136,7 +151,13 @@ console.log(JSON.stringify(result));"""
         self.assertEqual(line['analogs'], [])
         self.assertEqual(line['cost_breakdown']['estimated_line_cost']['base'], 90)
         self.assertEqual(line['cost_breakdown']['estimated_line_margin_pct']['base'], 25)
+        if run_time is not None:
+            route = line['cost_breakdown']['routing'][0]
+            self.assertEqual(route['cycles_per_piece'], 2)
+            self.assertEqual(route['run_minutes_per_piece']['base'], 20)
+            self.assertEqual(line['cost_breakdown']['supplied_basis']['routing'][0]['run_time'], run_time)
         self.assertEqual(line['part']['geometry'], request['parts'][0]['geometry'])
+        self.assertEqual(content['review']['reviewer'], 'Synthetic Reviewer')
         self.assertFalse(content['review']['customer_release_authorized'])
         self.assertEqual(content['review']['request_sha256'], content['order']['provenance']['request_sha256'])
         # Existing local inbox must route the same fully supplied order to the order builder.
