@@ -8,6 +8,8 @@ import json
 import os
 from pathlib import Path
 import struct
+import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -239,6 +241,137 @@ class SteveSourceEvidenceTest(unittest.TestCase):
             os.mkfifo(self.root / "PIPE.DBF")
             with self.assertRaises(reader.InvalidRequest):
                 self.call("PIPE.DBF", quote_no="Q1")
+
+    def catalog_fixture(self, name="OPERATIO.DBF"):
+        labels = reader.CATALOG_FIELDS[Path(name).stem.upper()]
+        fields = [(field, "C", 24) for field in labels] + [("SU_COST", "N", 12), ("SU_RATE", "N", 12), ("COMMENT", "M", 4)]
+        rows = [(b" ", ["C1", "Synthetic drill"] + ["Alloy blank"] * (len(labels) - 2) + ["60.0000", "90.0000", b"\0" * 4]),
+                (b"*", ["C2", "Deleted drill"] + [""] * (len(labels) - 2) + ["0", "0", b"\0" * 4]),
+                (b" ", ["C1", "Synthetic Café"] + ["Plain blank"] * (len(labels) - 2) + ["75.0000", "105.0000", b"\0" * 4])]
+        return self.put(name, fields, rows)
+
+    def test_catalog_discovery_is_schema_gated_paged_and_keeps_duplicate_ids(self):
+        for name in ("MATERIAL.DBF", "OPERATIO.DBF", "FORMULA.DBF"):
+            with self.subTest(name=name):
+                data = self.catalog_fixture(name)
+                schema = self.call(name, "dbf_schema")
+                self.assertEqual(schema["catalog_lookup"]["action"], "dbf_catalog")
+                first = self.call(name, "dbf_catalog", limit=1)
+                self.assertEqual(first["action"], "dbf_catalog")
+                self.assertEqual(first["citation"]["dbf_sha256"], hashlib.sha256(data).hexdigest())
+                self.assertEqual(first["rows"][0]["values"]["SU_COST"], "60.0000")
+                self.assertEqual(first["rows"][0]["values"]["SU_RATE"], "90.0000")
+                self.assertIsNone(first["rows"][0]["values"]["COMMENT"])
+                self.assertEqual(first["next_offset"], 1)
+                last = self.call(name, "dbf_catalog", offset=first["next_offset"], expected_dbf_sha256=first["citation"]["dbf_sha256"])
+                self.assertEqual(last["deleted_records_skipped"], 1)
+                self.assertEqual([row["record_index"] for row in last["rows"]], [2])
+                self.assertFalse(last["has_more"])
+                for result in (first, last):
+                    row = result["rows"][0]
+                    start, length = row["record_byte_offset"], row["record_bytes"]
+                    self.assertEqual(row["record_sha256"], hashlib.sha256(data[start:start + length]).hexdigest())
+                    self.assertIn("no applicability", result["selection_note"])
+                exact = self.call(name, record_id="C1", expected_dbf_sha256=first["citation"]["dbf_sha256"])
+                self.assertEqual(exact["rows"], first["rows"] + last["rows"])
+
+    def test_catalog_query_is_literal_case_insensitive_and_only_id_or_name(self):
+        self.catalog_fixture("MATERIAL.DBF")
+        for query, indices in (("DRILL", [0]), ("CAFÉ", [2]), ("alloy", [0]), ("c1", [0, 2]),
+                               (".*", []), ("' OR 1=1", []), ("90.0000", []), ("missing", [])):
+            with self.subTest(query=query):
+                result = self.call("MATERIAL.DBF", "dbf_catalog", query=query)
+                self.assertEqual([row["record_index"] for row in result["rows"]], indices)
+                self.assertEqual(result["query"], query)
+                self.assertEqual(result["catalog_text_fields"], ("ID", "NAME", "OTHERNAME"))
+                self.assertFalse(result["has_more"])
+
+    def test_catalog_continuations_require_matching_hash_and_bounded_inputs(self):
+        original = self.catalog_fixture()
+        for changes in ({"query": ""}, {"query": None}, {"query": 3}, {"query": "x" * 81}, {"query": " x"},
+                        {"query": "x\n"}, {"query": "x\x7f"}, {"query": "x\x80y"}, {"query": "x\x85y"},
+                        {"query": "x\x9fy"}, {"offset": 1}, {"offset": -1}, {"offset": True},
+                        {"limit": 6}, {"limit": 0}, {"limit": True}, {"expected_dbf_sha256": "bad"},
+                        {"column": "SU_COST"}, {"record_id": "C1"}, {"quote_no": "Q1"}, {"memo_fields": ["COMMENT"]}):
+            with self.subTest(changes=changes), self.assertRaises(reader.InvalidRequest):
+                self.call("OPERATIO.DBF", "dbf_catalog", **changes)
+        pin = hashlib.sha256(original).hexdigest()
+        with self.assertRaisesRegex(reader.InvalidRequest, "offset exceeds"):
+            self.call("OPERATIO.DBF", "dbf_catalog", offset=4, expected_dbf_sha256=pin)
+        (self.root / "OPERATIO.DBF").write_bytes(original.replace(b"60.0000", b"61.0000"))
+        with self.assertRaisesRegex(reader.InvalidRequest, "hash mismatch"):
+            self.call("OPERATIO.DBF", "dbf_catalog", offset=1, expected_dbf_sha256=pin)
+
+    def test_catalog_rejects_history_tables_and_misleading_or_ambiguous_schema(self):
+        data = self.catalog_fixture()
+        for name in ("QUOTEN.DBF", "QUOTOPER.DBF", "WOSEQ.DBF", "OTHER.DBF"):
+            (self.root / name).write_bytes(data)
+            self.assertNotIn("catalog_lookup", self.call(name, "dbf_schema"))
+            with self.assertRaises(reader.InvalidRequest):
+                self.call(name, "dbf_catalog")
+        for fields in ([('OPER_ID', 'C', 7)], [('OPER_ID', 'N', 7), ('NAME', 'C', 12)],
+                       [('OPER_ID', 'C', 7), ('NAME', 'M', 4)],
+                       [('OPER_ID', 'C', 7), ('NAME', 'C', 12), ('ID', 'C', 7)],
+                       [('OPER_ID', 'C', 7), ('NAME', 'C', 12), ('QUOTE_NO', 'C', 7)]):
+            self.put('OPERATIO.DBF', fields, [])
+            self.assertNotIn('catalog_lookup', self.call('OPERATIO.DBF', 'dbf_schema'))
+            with self.assertRaises(reader.InvalidRequest):
+                self.call('OPERATIO.DBF', 'dbf_catalog')
+
+    def test_catalog_miss_obeys_scan_caps_and_can_continue(self):
+        self.catalog_fixture()
+        for bound in (patch.object(reader, "MAX_SCAN_RECORDS", 1), patch.object(reader, "MAX_SCAN_BYTES", 80)):
+            with bound:
+                first = self.call("OPERATIO.DBF", "dbf_catalog", query="Café")
+            self.assertEqual(first["rows"], [])
+            self.assertEqual(first["next_offset"], 1)
+            last = self.call("OPERATIO.DBF", "dbf_catalog", query="Café", offset=first["next_offset"],
+                             expected_dbf_sha256=first["citation"]["dbf_sha256"])
+            self.assertEqual([row["record_index"] for row in last["rows"]], [2])
+
+    def test_catalog_default_return_cap_and_projection_limit(self):
+        fields = [("OPER_ID", "C", 7), ("NAME", "C", 12)]
+        self.put("OPERATIO.DBF", fields, [(b" ", ["A", "drill"])] * 6)
+        first = self.call("OPERATIO.DBF", "dbf_catalog")
+        self.assertEqual(len(first["rows"]), 5)
+        self.assertEqual(first["next_offset"], 5)
+        fields += [(f"F{i}", "C", 255) for i in range(253)]
+        self.put("OPERATIO.DBF", fields, [(b" ", ["A", "drill"] + ["x" * 255] * 253)])
+        with self.assertRaisesRegex(reader.InvalidRequest, "projection exceeds response limit"):
+            self.call("OPERATIO.DBF", "dbf_catalog")
+
+    def test_catalog_confinement_and_case_preserving_columns(self):
+        self.put("operatio.dbf", [("oper_id", "C", 7), ("name", "C", 12)], [(b" ", ["A", "drill"])])
+        result = self.call("operatio.dbf", "dbf_catalog", query="Drill")
+        self.assertEqual(result["rows"][0]["values"]["oper_id"], "A")
+        (self.root / "OPERATIO.DBF").symlink_to(self.root / "operatio.dbf")
+        (self.root / "alias").symlink_to(self.root, target_is_directory=True)
+        for name in ("OPERATIO.DBF", "alias/operatio.dbf", "../operatio.dbf", str(self.root / "operatio.dbf")):
+            with self.subTest(name=name), self.assertRaises((reader.InvalidRequest, OSError)):
+                self.call(name, "dbf_catalog")
+
+    def test_catalog_native_plugin_discovers_pages_and_resolves_exact_ids(self):
+        self.catalog_fixture()
+        config = self.root / "sources.json"
+        config.write_text(json.dumps(self.bindings))
+        script = """import {createPlugin} from './arsumbris/sources/tool.ts';
+const tool = createPlugin({workspace:process.cwd()});
+const base = {action:'dbf_catalog', source_set:'fabritrak', path:'OPERATIO.DBF'};
+const first = await tool.invoke({...base, limit:1});
+const pin = first.content.citation.dbf_sha256;
+const next = await tool.invoke({...base, offset:first.content.next_offset, expected_dbf_sha256:pin});
+const exact = await tool.invoke({...base, action:'dbf_rows', record_id:first.content.rows[0].values.OPER_ID, expected_dbf_sha256:pin});
+const denied = await tool.invoke({...base, path:'QUOTOPER.DBF'});
+console.log(JSON.stringify({first,next,exact,denied}));"""
+        result = subprocess.run(["node", "--input-type=module", "-e", script], cwd=ROOT,
+                                env={**os.environ, "KELLER_SOURCE_CONFIG": str(config), "KELLER_PYTHON": sys.executable},
+                                capture_output=True, text=True, check=True, timeout=15)
+        results = json.loads(result.stdout)
+        for name in ("first", "next", "exact"):
+            self.assertFalse(results[name].get("isError", False))
+        self.assertEqual(results["first"]["content"]["rows"] + results["next"]["content"]["rows"],
+                         results["exact"]["content"]["rows"])
+        self.assertTrue(results["denied"]["isError"])
 
 
 if __name__ == "__main__":

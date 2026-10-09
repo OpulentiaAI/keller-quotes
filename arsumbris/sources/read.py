@@ -34,6 +34,11 @@ KEY_FIELDS = {"quote_no": "QUOTE_NO", "quotletter": "QUOTLETTER", "item": "ITEM"
               "wo_no": "WO_NO", "jobno": "JOBNO", "page_no": "PAGE_NO", "seq": "SEQ"}
 KEY_GROUPS = (("quote_no",), ("record_id",), ("quotletter",), ("quotletter", "item"),
               ("wo_no",), ("jobno",), ("wo_no", "page_no", "seq"))
+CATALOG_FIELDS = {
+    "MATERIAL": ("ID", "NAME", "OTHERNAME"),
+    "OPERATIO": ("OPER_ID", "NAME"),
+    "FORMULA": ("FORM_ID", "FORM_NAME"),
+}
 # Fixed joins from retained table schemas, not caller-selected column predicates.
 TABLE_KEYS = {
     "QUOTLETT": (("quotletter",),),
@@ -87,6 +92,7 @@ def validate(request):
         "list": {"action", "source_set", "path", "offset", "limit"},
         "read": {"action", "source_set", "path", "offset", "limit", "encoding"},
         "dbf_schema": {"action", "source_set", "path"},
+        "dbf_catalog": {"action", "source_set", "path", "query", "offset", "limit", "expected_dbf_sha256"},
         "dbf_rows": {"action", "source_set", "path", "quote_no", "record_id", "quotletter", "item",
                      "wo_no", "jobno", "page_no", "seq", "offset", "limit", "expected_dbf_sha256",
                      "memo_fields", "fpt_path", "expected_fpt_sha256", "memo_offset", "memo_limit"},
@@ -98,7 +104,7 @@ def validate(request):
     if request.get("source_set") not in SETS:
         raise InvalidRequest("unknown source set")
     components = parts(request.get("path", ""), action != "list")
-    if action in ("read", "dbf_schema", "dbf_rows"):
+    if action in ("read", "dbf_schema", "dbf_rows", "dbf_catalog"):
         if Path(components[-1]).suffix.lower() not in SETS[request["source_set"]]:
             raise InvalidRequest("source file type not approved")
     if action.startswith("dbf_") and (request["source_set"] != "fabritrak" or
@@ -113,9 +119,6 @@ def validate(request):
             if (not isinstance(value, str) or not value.strip() or value != value.strip()
                     or len(value) > 32 or any(ord(c) < 32 or ord(c) == 127 for c in value)):
                 raise InvalidRequest(f"exact {field} required (maximum 32 characters, no edge whitespace)")
-        if "expected_dbf_sha256" in request and (not isinstance(request["expected_dbf_sha256"], str)
-                or not re.fullmatch(r"[0-9a-f]{64}", request["expected_dbf_sha256"])):
-            raise InvalidRequest("expected_dbf_sha256 must be a lowercase SHA256")
         memo_keys = {"fpt_path", "expected_fpt_sha256", "memo_offset", "memo_limit"}
         if "memo_fields" in request:
             selected = request["memo_fields"]
@@ -134,6 +137,20 @@ def validate(request):
             integer(request.get("memo_limit"), "memo_limit", 2048, 4096, 1)
         elif memo_keys & set(request):
             raise InvalidRequest("memo options require explicit memo_fields")
+    if action == "dbf_catalog":
+        if Path(components[-1]).stem.upper() not in CATALOG_FIELDS:
+            raise InvalidRequest("catalog discovery is limited to MATERIAL, OPERATIO and FORMULA")
+        if "query" in request:
+            query = request["query"]
+            if (not isinstance(query, str) or not query.strip() or query != query.strip() or len(query) > 80
+                    or any(ord(c) < 32 or 127 <= ord(c) <= 159 for c in query)):
+                raise InvalidRequest("query must be 1..80 literal characters without edge whitespace or controls")
+        if integer(request.get("offset"), "offset", 0, 10000000) and "expected_dbf_sha256" not in request:
+            raise InvalidRequest("catalog continuation requires expected_dbf_sha256")
+    if action in ("dbf_rows", "dbf_catalog"):
+        if "expected_dbf_sha256" in request and (not isinstance(request["expected_dbf_sha256"], str)
+                or not re.fullmatch(r"[0-9a-f]{64}", request["expected_dbf_sha256"])):
+            raise InvalidRequest("expected_dbf_sha256 must be a lowercase SHA256")
         integer(request.get("offset"), "offset", 0, 10000000)
         integer(request.get("limit"), "limit", 5, 5, 1)
     if action == "list":
@@ -293,6 +310,16 @@ def dbf_citation(table, request):
             "verification": "SHA256 measured from opened DBF; not authenticated against an external catalog"}
 
 
+def catalog_fields(table, request):
+    selected = CATALOG_FIELDS.get(Path(request["path"]).stem.upper(), ())
+    fields = {field.name.upper(): field for field in table.fields}
+    if (not selected or not all(name in fields and fields[name].type == "C" for name in selected)
+            or "QUOTE_NO" in fields
+            or [name for name in ("ID", "OPER_ID", "FORM_ID") if name in fields] != [selected[0]]):
+        return ()
+    return tuple(fields[name].name for name in selected)
+
+
 def dbf_schema(table, request):
     return {"action": "dbf_schema", "citation": dbf_citation(table, request),
             "record_count_header": table.header.numrecords, "header_bytes": table.header.headerlen,
@@ -300,6 +327,9 @@ def dbf_schema(table, request):
             "fields": [{"name": f.name, "type": f.type, "length": f.length,
                         "decimal_count": f.decimal_count, "record_byte_offset": f.offset} for f in table.fields],
             "exact_filters": exact_filters(table, request), "lookup_scope_note": LOOKUP_NOTE,
+            **({"catalog_lookup": {"action": "dbf_catalog", "text_fields": catalog_fields(table, request),
+                                    "match": "case-insensitive literal substring; candidates only"}}
+               if catalog_fields(table, request) else {}),
             "scan_record_limit": MAX_SCAN_RECORDS, "scan_byte_limit": MAX_SCAN_BYTES,
             "memo_note": MEMO_NOTE, "warning": WARNING}
 
@@ -401,11 +431,18 @@ def memo_text(table, record, field, memo, request):
 
 
 def dbf_rows(fd, table, request, memo=None):
-    keys = set(request) & (set(KEY_FIELDS) | {"record_id"})
-    filters = [mapping for mapping in exact_filters(table, request) if set(mapping) == keys]
-    if len(filters) != 1:
-        raise InvalidRequest("DBF lacks the requested approved exact key; inspect dbf_schema exact_filters")
-    mapping = filters[0]
+    catalog = request["action"] == "dbf_catalog"
+    if catalog:
+        text_fields = catalog_fields(table, request)
+        if not text_fields:
+            raise InvalidRequest("DBF lacks the approved catalog schema; inspect dbf_schema")
+        mapping = {}
+    else:
+        keys = set(request) & (set(KEY_FIELDS) | {"record_id"})
+        filters = [mapping for mapping in exact_filters(table, request) if set(mapping) == keys]
+        if len(filters) != 1:
+            raise InvalidRequest("DBF lacks the requested approved exact key; inspect dbf_schema exact_filters")
+        mapping = filters[0]
     selected_memos = request.get("memo_fields", [])
     memo_fields = {f.name: f for f in table.fields if f.type == "M"}
     if any(name not in memo_fields for name in selected_memos):
@@ -435,6 +472,9 @@ def dbf_rows(fd, table, request, memo=None):
         values, binary = record_values(table, record)
         if any(values[fields[name].name] != request[key] for key, name in mapping.items()):
             continue
+        if catalog and "query" in request and not any(request["query"].casefold() in values[name].casefold()
+                                                       for name in text_fields):
+            continue
         candidate = {"record_index": index, "record_byte_offset": byte_offset,
                      "record_bytes": table.header.recordlen, "record_sha256": hashlib.sha256(record).hexdigest(),
                      "values": values, "truncated_fields": [], "binary_fields": binary,
@@ -454,13 +494,16 @@ def dbf_rows(fd, table, request, memo=None):
     if memo is not None:
         unchanged(memo.fd, memo)
     more = position < count
-    response = {"action": "dbf_rows", "citation": dbf_citation(table, request),
+    response = {"action": request["action"], "citation": dbf_citation(table, request),
                 **{key: request[key] for key in mapping}, "filter_fields": mapping,
                 "rows": rows, "record_count_header": count, "offset": offset, "record_index_base": 0,
                 "scanned_records": position - offset, "deleted_records_skipped": deleted,
                 "scan_end_offset": position, "scan_record_limit": MAX_SCAN_RECORDS, "scan_byte_limit": MAX_SCAN_BYTES,
                 "has_more": more, "next_offset": position if more else None,
                 "lookup_scope_note": LOOKUP_NOTE, "memo_note": MEMO_NOTE, "warning": WARNING}
+    if catalog:
+        response.update({"catalog_text_fields": text_fields, "query": request.get("query"),
+                         "selection_note": "Discovery candidates only; no applicability, unit, COST/SELL or freshness decision made"})
     if len(mapping) == 1:
         response["filter_field"] = fields[next(iter(mapping.values()))].name
     return response
