@@ -44,6 +44,34 @@ Capture source class/hash/locator, effective and expiry dates separately from ca
 
 An explicit material/revision/finish/UOM/scope conflict blocks adoption of that analog transfer. Unknown applicability triggers the named lookup, then an approved estimate/assumption or a price-critical adoption hold; it is never silently a match. Unknown current cost blocks a supported margin claim, not historical price comparison. Missing acceptance/payment/closed-job actuals blocks realized-outcome claims, not a supported prospective estimate. Historical chronology conflicts still block prior-availability claims in replay.
 
+## Derive material consumption from a rectangular blank
+
+For a supported rectangular blank/plate estimate, a material component may replace `original_units_per_quantity_unit` with `rectangular_blank`. Supply length, width and thickness with explicit `mm` or `in` units, and an explicit `density_kg_m3`. Set `quantity_unit: "blank"`, `quantity` to the positive integer number of blanks allocated to this line, and `original_unit` to `kg` or `lb`, matching the cost evidence. Blank count is not automatically the finished-piece quantity. The original manual conversion path remains available for other stock shapes or units; do not send both conversion methods.
+
+Conversion-only fragment (synthetic, not default dimensions/density; all other supported component fields remain required):
+
+```json
+{
+  "original_unit": "kg", "quantity_unit": "blank", "quantity": 10,
+  "rectangular_blank": {
+    "length": { "value": 100, "unit": "mm" },
+    "width": { "value": 50, "unit": "mm" },
+    "thickness": { "value": 2, "unit": "mm" },
+    "density_kg_m3": 7850
+  }
+}
+```
+
+The calculator derives mass using exact metre/inch and kg/lb conversions, then applies the existing yield and purchase minimum rules once:
+
+```text
+mass per blank = length_m × width_m × thickness_m × density_kg_m3
+purchased mass = max(blank count × mass per blank / yield fraction, minimum quantity)
+material cost = max(purchased mass × unit COST, minimum charge)
+```
+
+The review breakdown retains blank count, derived mass/unit, priced quantity, original dimensions, sources and assumptions. Displayed mass is rounded to eight decimals; cost uses the unrounded rational result. Sources and assumptions must support the dimensions, density, blank allocation and rate—not just the grade name. Explain whether yield covers nesting, stock loss or process scrap, and do not include the same loss in both blank count and yield. This is bounding-stock consumption, not finished geometry, CAD interpretation, optimized nesting, a default steel density, or a verified current buy price. Existing dated evidence/approved estimates and cost ranges remain usable without a live provider. Automatic stock/rate record selection and FabriTRAK formula interpretation remain separate work.
+
 ## COST, SELL and estimating time
 
 The retained FabriTRAK quoting manual distinguishes operation-maintenance **COST** rates used in Unit Cost from quote-specific setup/run **SELL** rates used in Unit Sell. Quick Quote/Quick Entry accept estimated setup minutes and run minutes per part. Neither requires a previously completed paid job. The manual also describes an alternative rate-building mode: corroborate the installed mode and included labor/overhead rather than guessing from a field name. See the manual citation below.

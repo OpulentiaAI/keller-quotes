@@ -56,6 +56,111 @@ function reconcile(b = basis(), costs = flat(), quantity = 10) {
   return reconcileCostBasis(b, quantity, asOf, costs);
 }
 
+function blankBasis(): CostBasis {
+  const b = basis();
+  const material = b.components[0]!;
+  delete material.original_units_per_quantity_unit;
+  material.original_unit = "kg";
+  material.quantity_unit = "blank";
+  material.rectangular_blank = {
+    length: { value: 100, unit: "mm" }, width: { value: 50, unit: "mm" },
+    thickness: { value: 2, unit: "mm" }, density_kg_m3: 7850,
+  };
+  material.assumptions = ["Synthetic blank dimensions and density, ten blanks, 80% yield beyond blank mass; not finished geometry"];
+  return b;
+}
+
+describe("rectangular blank material consumption", () => {
+  it("derives mass before yield without changing supported costs or request bytes", async () => {
+    const b = blankBasis();
+    const before = JSON.stringify(b);
+    const result = deriveCostBasis(b, 10, asOf);
+    expect(result.components[0]).toMatchObject({
+      priced_quantity: 0.98125, total_cost: range(9.8125, 7.85, 11.775),
+      consumption: { method: "rectangular_blank", mass_per_blank: 0.0785, mass_unit: "kg", blank_count: 10 },
+    });
+    const manual = structuredClone(b);
+    delete manual.components[0]!.rectangular_blank;
+    manual.components[0]!.original_units_per_quantity_unit = 0.0785;
+    expect(result.reconciled_flat).toEqual(deriveCostBasis(manual, 10, asOf).reconciled_flat);
+    const req = request();
+    req.parts[0]!.pricing = { method: "should_cost", cost_basis: b, margin_pct: 20, reason: "Synthetic blank estimate" };
+    assertOrderRequest(req);
+    const order = await buildPricedOrder(reg, req, { registerSha256: null });
+    expect(order.state).toBe("PRICED_REQUIRES_REVIEW");
+    expect(order.requires_human_review).toBe(true);
+    expect(order.lines[0]!.analogs).toEqual([]);
+    expect(order.lines[0]!.cost_breakdown!.assertion_status).toBe("supplied_not_authenticated");
+    expect(order.lines[0]!.cost_breakdown!.estimated_line_margin_pct!.base).toBe(20);
+    expect(renderOrderMarkdown(order)).toContain("mass\\_per\\_blank");
+    expect(order.lines[0]!.warnings.join(" ")).toContain("not verified finished geometry or nesting");
+    expect(JSON.stringify(b)).toBe(before);
+  });
+
+  it("keeps equivalent millimetre and inch dimensions exact", () => {
+    const b = blankBasis();
+    const blank = b.components[0]!.rectangular_blank!;
+    blank.length = { value: 25.4, unit: "mm" };
+    blank.width = { value: 25.4, unit: "mm" };
+    blank.thickness = { value: 25.4, unit: "mm" };
+    const metric = deriveCostBasis(b, 10, asOf);
+    blank.length = { value: 1, unit: "in" };
+    blank.width = { value: 1, unit: "in" };
+    blank.thickness = { value: 1, unit: "in" };
+    expect(deriveCostBasis(b, 10, asOf).components).toEqual(metric.components);
+    expect(metric.components[0]!.consumption!.mass_per_blank).toBe(0.12863845);
+  });
+
+  it("converts kg to pounds before multiplying by price, without intermediate rounding", () => {
+    const b = blankBasis();
+    const material = b.components[0]!;
+    const blank = material.rectangular_blank!;
+    blank.length = { value: 1000, unit: "mm" };
+    blank.width = { value: 1000, unit: "mm" };
+    blank.thickness = { value: 1000, unit: "mm" };
+    blank.density_kg_m3 = 1;
+    material.quantity = 1;
+    material.yield_fraction = 1;
+    material.original_unit = "lb";
+    // Synthetic conversion stress test: exactly 100 USD/kg, expressed in USD/lb.
+    material.unit_cost = range(45.359237);
+    const result = deriveCostBasis(b, 10, asOf).components[0]!;
+    expect(result.consumption!.mass_per_blank).toBe(2.20462262);
+    expect(result.total_cost).toEqual(range(100));
+  });
+
+  it("applies quantity and charge minimums once after mass and yield", () => {
+    const b = blankBasis();
+    b.components[0]!.minimum_quantity = 2;
+    b.components[0]!.minimum_charge = range(21);
+    const result = deriveCostBasis(b, 10, asOf).components[0]!;
+    expect(result.priced_quantity).toBe(2);
+    expect(result.total_cost).toEqual(range(21, 21, 24));
+    expect(result.consumption!.mass_per_blank).toBe(0.0785);
+  });
+
+  const invalid: [string, (b: CostBasis) => void, RegExp][] = [
+    ["missing density", b => { Reflect.deleteProperty(b.components[0]!.rectangular_blank!, "density_kg_m3"); }, /density_kg_m3/],
+    ["zero thickness", b => { b.components[0]!.rectangular_blank!.thickness.value = 0; }, /positive/],
+    ["negative length", b => { b.components[0]!.rectangular_blank!.length.value = -1; }, /positive/],
+    ["nonfinite width", b => { b.components[0]!.rectangular_blank!.width.value = Infinity; }, /finite/],
+    ["unknown units", b => { Reflect.set(b.components[0]!.rectangular_blank!.length, "unit", "gauge"); }, /unit/],
+    ["ambiguous conversion", b => { b.components[0]!.original_units_per_quantity_unit = 1; }, /not both/],
+    ["unknown price unit", b => { b.components[0]!.original_unit = "ton"; }, /original_unit/],
+    ["implicit blank count", b => { b.components[0]!.quantity_unit = "finished_piece"; }, /quantity_unit/],
+    ["fractional blank count", b => { b.components[0]!.quantity = 0.5; }, /integer/],
+    ["extra geometry fields", b => { Reflect.set(b.components[0]!.rectangular_blank!, "cutouts", []); }, /not supported/],
+    ["missing geometry", b => { Reflect.set(b.components[0]!, "rectangular_blank", null); }, /plain object/],
+    ["unbound provenance", b => { b.components[0]!.sources = []; }, /1\.\.8/],
+    ["non-material use", b => { b.components[0]!.category = "other"; }, /category for rectangular_blank/],
+  ];
+  it.each(invalid)("rejects %s rather than inventing a material estimate", (_name, mutate, pattern) => {
+    const b = blankBasis();
+    mutate(b);
+    expect(() => deriveCostBasis(b, 10, asOf)).toThrow(pattern);
+  });
+});
+
 describe("prospective cost-basis worksheet", () => {
   it("builds a should-cost proposal without analogs or manually copied flat costs", async () => {
     const req = request();

@@ -160,6 +160,37 @@ console.log(JSON.stringify(result));"""
         attachment.chmod(0o400)
         self.assertTrue(self.invoke(request, corpus=None, no_database=True).get('isError'))
 
+    def test_rectangular_blank_cost_reaches_named_review_without_register(self):
+        request = json.loads((ROOT / 'estimator/examples/should-cost-intake.json').read_text())
+        part = request['parts'][0]
+        for evidence in part['source_evidence']:
+            del evidence['attachment_id']
+            evidence.update(sha256='a' * 64, locator='synthetic-blank-fixture:' + evidence['id'])
+        basis = part['pricing']['cost_basis']
+        for entry in basis['components'] + basis['routing'] + basis['not_applicable']:
+            for source in entry['sources']:
+                source.update(sha256='a' * 64, locator='synthetic-blank-fixture:worksheet')
+        material = basis['components'][0]
+        del material['original_units_per_quantity_unit']
+        material.update(original_unit='kg', quantity_unit='blank', minimum_quantity=0,
+            unit_cost={'low': 1000, 'base': 1000, 'high': 1000}, rectangular_blank={
+                'length': {'value': 100, 'unit': 'mm'}, 'width': {'value': 100, 'unit': 'mm'},
+                'thickness': {'value': 4, 'unit': 'mm'}, 'density_kg_m3': 1000})
+        result = self.invoke(request, corpus=None, no_database=True)
+        self.assertFalse(result.get('isError'), result)
+        content = result['content']
+        self.assertEqual(content['total'], 120)
+        self.assertEqual(content['order']['request'], request)
+        self.assertIsNone(content['order']['provenance']['register_sha256'])
+        line = content['order']['lines'][0]
+        self.assertEqual(line['analogs'], [])
+        self.assertEqual(line['cost_breakdown']['components'][0]['consumption']['mass_per_blank'], 0.04)
+        self.assertEqual(line['cost_breakdown']['estimated_line_cost']['base'], 90)
+        self.assertEqual(line['cost_breakdown']['estimated_line_margin_pct']['base'], 25)
+        self.assertEqual(content['review']['reviewer'], 'Synthetic Reviewer')
+        self.assertFalse(content['review']['customer_release_authorized'])
+        self.assertEqual(content['review']['request_sha256'], content['order']['provenance']['request_sha256'])
+
     def test_unreferenced_engineering_conflict_blocks_native_order_completion(self):
         request = self.request([{'line_id': 'cost', 'part_no': 'SYNTHETIC', 'quantity': 1,
             'pricing': {'method': 'unit_price', 'unit_price': 120, 'reason': 'synthetic proposal'},
