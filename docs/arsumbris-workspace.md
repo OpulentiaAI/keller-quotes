@@ -47,7 +47,7 @@ The GUI can start its configured MCP daemon while opening the workspace or selec
 
 The pinned upstream runtime is an early alpha, not a security sandbox. Tool allowlists and bounded readers narrow the application surface but do not isolate plugin code from the operating-system account. Run it only under the authorized private account. This setup was verified on Linux; the DBF reader uses Linux file-descriptor paths and must not be claimed portable to macOS without a separate test.
 
-No private PDF, DBF, transcript, customer register, connection string, or customer-specific quote artifact is packaged by this repo. An authorized owner binds existing private roots in ignored `.keller-local/arsumbris/sources.json`; setup preserves rather than invents this file. Its **only permitted keys** are `fabritrak`, `pdfs`, `transcripts`, and `manufacturing-audit`, each an absolute path to an approved existing directory. For example, substitute real owner-approved paths and keep the file owner-private:
+No private PDF, DBF, transcript, customer register, connection string, or customer-specific quote artifact is packaged by this repo. An authorized owner binds existing private roots in ignored `.keller-local/arsumbris/sources.json`; setup preserves rather than invents this file. Its **only permitted keys** are `fabritrak`, `pdfs`, `intake`, `transcripts`, and `manufacturing-audit`, each an absolute path to an approved existing directory. The optional `intake` binding is restricted to the same host owner's retained intake root, as described below. For example, substitute real owner-approved paths and keep the file owner-private:
 
 ```json
 {
@@ -75,6 +75,24 @@ The committed `quotes.csv` and `quotes.json.gz` are frozen internal-calculation 
 The ≥90% completed-quoting goal is **not established** by this workspace. The existing replay measures historical price prediction on a frozen basis, not end-to-end completed, correctly reviewed orders. No claim of accuracy improvement follows from mounting Ars Umbris, connecting Polygres, or making skills discoverable. Measure and review the separate completion gate before any production release.
 
 The `keller_quote` tool is the controlled internal draft path, not a release mechanism. It requires an explicit public corpus ID, an order request satisfying the estimator's `OrderRequest` contract, and a named human reviewer; it reuses the local order CLI with explicit operator price/cost inputs or the selected read-only customer-PDF register. It preserves blocked lines and returns structured `order`, `markdown`, `review`, state/blockers, and opaque references to persisted private artifacts. **The response itself contains private customer/cost evidence** and must stay in approved internal channels; don't paste it into a public graph node or customer message. It performs no database write or hosted model call. Treat a `PRICED_REQUIRES_REVIEW` result as an internal calculation awaiting approval, not as a quote sent to a customer.
+
+### Read a selected PDF page without mistaking text for geometry
+
+The optional `pdf_text` source action requires Linux and distro-maintained Poppler `pdfinfo`/`pdftotext` on the source-tool host. Install with `sudo apt-get update && sudo apt-get install -y poppler-utils` on Debian/Ubuntu; the managed Python setup does not install system binaries. Missing tools produce an explicit unavailable error, not an empty page. No cloud upload or model call occurs.
+
+```json
+{"action":"pdf_text","source_set":"pdfs","path":"synthetic-drawing.pdf","page":1,"limit":4096}
+```
+
+Use only an exact owner-approved relative path, with the same no-symlink/confinement rules as other source reads. `page` is explicit and one-based; output includes measured `citation.pdf_sha256`, `page_count`, `text_sha256`, status and bounded layout text. `offset` and `limit` count **Unicode characters**, not PDF bytes. For page > 1 or offset > 0, supply `expected_pdf_sha256`; for offset > 0 also supply `expected_text_sha256` from that same page. Continue `next_offset` until `has_more` is false before treating the page's extracted text as fully read. A different page has its own text hash. Hash changes require rereading, not combining incompatible output.
+
+PDFs are limited to 32 MiB/10,000 pages, one selected page per call, 4,096 characters per response and <128 KiB extractor output. Each child has a four-second wall limit, two-second CPU limit and 512 MiB address-space limit. Encrypted, malformed, changed, warning-producing or resource-exceeding inputs fail closed without returning partial text. Hashes attest local bytes, not external authenticity or completeness of extraction. Parser limits are not an OS security sandbox.
+
+Captured RFQ attachments use `keller-intake:UUID/attachment-N.bin` locators, not archive `.pdf` paths. To read their PDF text without copying them into an archive, the owner must explicitly bind `intake` to the absolute existing `$HOME/.local/share/keller-quotes/intake` directory in the same host's private source configuration. This is not automatic discovery or permission to mount another owner's store. Use `source_set: intake`, the exact attachment `locator` (instead of `path`), explicit `page`, and the attachment's `expected_pdf_sha256` from the retained request on **every** call. Same-page continuations also require `expected_text_sha256`. Returned citations preserve the retained locator and measured PDF hash.
+
+The intake route permits only `pdf_text`: no listing, arbitrary byte reads, original-request reads or caller-selected filesystem paths. It requires owner-private immutable bundle/attachment modes, single-link regular files and no symlink traversal, matching retention's storage contract. `.bin` contents must actually be a PDF. An unknown binding, wrong hash, altered bytes or unsafe storage fails closed. This read does not authenticate the supplied request or modify its immutable engineering facts; changed quote inputs require a new retained intake. Frozen worker permissions and source roots remain unchanged.
+
+`no_extractable_text` means OCR or visual review is needed; it does not distinguish blank, scanned, outlined or illegible content. Text extraction does not perform OCR, resolve overlapping dimensions, interpret CAD, execute document instructions, authenticate revision/applicability or calculate costs. Even `text_extracted` may miss symbols or have wrong reading order. Carry the PDF hash/page into retained evidence and separately reviewed engineering facts; retain unknowns/conflicts. These operator source reads do not expand blinded-worker allowlists or admit target quote PDFs.
 
 ### Reviewed supplier cost inputs
 
