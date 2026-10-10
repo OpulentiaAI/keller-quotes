@@ -56,6 +56,101 @@ function reconcile(b = basis(), costs = flat(), quantity = 10) {
   return reconcileCostBasis(b, quantity, asOf, costs);
 }
 
+function cycleBasis(): CostBasis {
+  const b = basis();
+  b.routing[0]!.run_time = { unit: "cycles_per_hour", values: range(100, 50, 200), cycles_per_piece: 4 };
+  b.routing[0]!.assumptions.push("Four separately timed cycles per process piece; twelve process pieces include scrap; no parallel batch sharing");
+  return b;
+}
+
+describe("supported cycle-based routing", () => {
+  it.each([
+    { unit: "minutes_per_cycle", values: range(0.6, 0.3, 1.2) },
+    { unit: "seconds_per_cycle", values: range(36, 18, 72) },
+    { unit: "hours_per_cycle", values: range(0.01, 0.005, 0.02) },
+    { unit: "cycles_per_hour", values: range(100, 50, 200) },
+  ] as const)("converts $unit once and leaves setup and scrap allocation intact", time => {
+    const b = cycleBasis();
+    b.routing[0]!.run_time = { ...time, cycles_per_piece: 4 };
+    const result = deriveCostBasis(b, 10, asOf);
+    expect(result.routing[0]).toMatchObject({
+      cycles_per_piece: 4, process_quantity: 12, setup_occurrences: 2,
+      run_minutes_per_piece: range(2.4, 1.2, 4.8), run_cost: range(28.8, 14.4, 57.6),
+      setup_cost: range(60, 40, 80),
+    });
+    expect(result.reconciled_flat.labor_per_unit).toBe(2.88);
+    expect(result.reconciled_flat.setup_total).toBe(60);
+  });
+
+  it("retains unrounded inverse throughput through cycle and quantity multiplication", () => {
+    const b = cycleBasis();
+    b.routing[0]!.run_time = { unit: "cycles_per_hour", values: range(7), cycles_per_piece: 3 };
+    b.routing[0]!.process_quantity = 7;
+    const route = deriveCostBasis(b, 10, asOf).routing[0]!;
+    expect(route.run_minutes_per_piece).toEqual(range(25.714286));
+    expect(route.run_cost).toEqual(range(180));
+  });
+
+  it("supports explicit finished-piece hours without a repetition multiplier", () => {
+    const b = basis();
+    b.routing[0]!.run_time = { unit: "hours_per_piece", values: range(0.1, 0.05, 0.2) };
+    const route = deriveCostBasis(b, 10, asOf).routing[0]!;
+    expect(route.run_minutes_per_piece).toEqual(range(6, 3, 12));
+    expect(route.run_cost).toEqual(range(72, 36, 144));
+    expect(route).not.toHaveProperty("cycles_per_piece");
+  });
+
+  it("preserves supplied cycle evidence and source assertions through margin-priced review", async () => {
+    const b = cycleBasis();
+    const before = JSON.stringify(b);
+    const req = request();
+    req.parts[0]!.pricing = { method: "should_cost", cost_basis: b, margin_pct: 20, reason: "Synthetic cycle estimate" };
+    assertOrderRequest(req);
+    const order = await buildPricedOrder(reg, req, { registerSha256: null });
+    expect(order.state).toBe("PRICED_REQUIRES_REVIEW");
+    expect(order.requires_human_review).toBe(true);
+    expect(order.lines[0]!.analogs).toEqual([]);
+    const cost = order.lines[0]!.cost_breakdown!;
+    expect(cost.assertion_status).toBe("supplied_not_authenticated");
+    expect(cost.estimated_line_margin_pct!.base).toBe(20);
+    expect(cost.supplied_basis).toEqual(b);
+    expect(renderOrderMarkdown(order)).toContain("cycles\\_per\\_piece");
+    expect(order.lines[0]!.warnings.join(" ")).toContain("Cycle-based routing");
+    expect(JSON.stringify(b)).toBe(before);
+  });
+
+  const invalid: [string, (b: CostBasis) => void, RegExp][] = [
+    ["missing cycle count", b => { Reflect.deleteProperty(b.routing[0]!.run_time, "cycles_per_piece"); }, /cycles_per_piece/],
+    ["null cycle count", b => { Reflect.set(b.routing[0]!.run_time, "cycles_per_piece", null); }, /cycles_per_piece/],
+    ["zero cycle count", b => { Reflect.set(b.routing[0]!.run_time, "cycles_per_piece", 0); }, /cycles_per_piece/],
+    ["negative cycle count", b => { Reflect.set(b.routing[0]!.run_time, "cycles_per_piece", -1); }, /cycles_per_piece/],
+    ["fractional cycle count", b => { Reflect.set(b.routing[0]!.run_time, "cycles_per_piece", 1.5); }, /cycles_per_piece/],
+    ["unbounded cycle count", b => { Reflect.set(b.routing[0]!.run_time, "cycles_per_piece", 1000001); }, /cycles_per_piece/],
+    ["nonfinite cycle count", b => { Reflect.set(b.routing[0]!.run_time, "cycles_per_piece", Infinity); }, /cycles_per_piece/],
+    ["ambiguous piece count", b => { b.routing[0]!.run_time.unit = "pieces_per_hour"; }, /per-cycle unit/],
+    ["zero throughput", b => { b.routing[0]!.run_time.values.low = 0; }, /divisor/],
+    ["nonfinite duration", b => { b.routing[0]!.run_time.values.high = Infinity; }, /finite/],
+    ["reversed bounds", b => { b.routing[0]!.run_time.values.low = 101; }, /low <= base/],
+    ["implicit units", b => { Reflect.set(b.routing[0]!.run_time, "unit", "operations"); }, /unit/],
+    ["source expression", b => { Reflect.set(b.routing[0]!.run_time, "formula", "60/RUN_V1*RUN_V2"); }, /not supported/],
+    ["missing provenance", b => { b.routing[0]!.sources = []; }, /1\.\.8/],
+    ["sell rate", b => { b.routing[0]!.run_rate.rate_kind = "sell"; }, /cost/],
+  ];
+  it.each(invalid)("rejects %s instead of fabricating run cost", (_label, mutate, error) => {
+    const b = cycleBasis();
+    mutate(b);
+    expect(() => deriveCostBasis(b, 10, asOf)).toThrow(error);
+  });
+
+  it("requires an explicit reason for zero duration even with a positive cycle count", () => {
+    const b = cycleBasis();
+    b.routing[0]!.run_time = { unit: "minutes_per_cycle", values: range(0), cycles_per_piece: 2 };
+    expect(() => deriveCostBasis(b, 10, asOf)).toThrow(/zero_reason/);
+    b.routing[0]!.zero_reason = "Synthetic operation included in another supported charge; verify no duplication";
+    expect(deriveCostBasis(b, 10, asOf).routing[0]!.run_cost).toEqual(range(0));
+  });
+});
+
 describe("prospective cost-basis worksheet", () => {
   it("builds a should-cost proposal without analogs or manually copied flat costs", async () => {
     const req = request();
