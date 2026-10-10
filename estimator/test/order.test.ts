@@ -137,6 +137,61 @@ describe("priced orders", () => {
     expect(order.lines[0]!.warnings.join(" ")).toContain("not approval");
   });
 
+  it.each([
+    [0.0001, 49, 0], [0.0001, 50, 0.01], [0.0049, 1, 0], [0.005, 1, 0.01],
+    [0.0051, 1, 0.01], [0.0003, 16, 0], [0.0003, 17, 0.01],
+  ])("preserves %s × %s while holding only zero-cent extensions", async (unit_price, quantity, extension) => {
+    for (const pricing of [
+      { method: "unit_price", unit_price, reason: "Synthetic operator proposal" },
+      { method: "cost_plus", material_per_unit: unit_price, labor_per_unit: 0, outside_per_unit: 0,
+        setup_total: 0, margin_pct: 0, reason: "Synthetic cost estimate; explicit zero excluded costs" },
+    ]) {
+      const request = { ...base(), parts: [{ ...base().parts[0], quantity, pricing }] };
+      const original = JSON.stringify(request);
+      const order = await buildPricedOrder(reg, request, opts);
+      expect(order.lines[0]).toMatchObject({ unit_price, extended_price: extension, proposal_status: "NUMERIC_PROVISIONAL" });
+      expect(order.priced_subtotal).toBe(extension);
+      expect(order.subtotal).toBe(extension);
+      expect(order.total).toBe(extension === 0 ? null : extension);
+      expect(order.state).toBe(extension === 0 ? "BLOCKED" : "PRICED_REQUIRES_REVIEW");
+      expect(order.requires_human_review).toBe(true);
+      expect(JSON.stringify(order.request)).toBe(original);
+      expect(order.provenance.request_sha256).toBe(createHash("sha256").update(original).digest("hex"));
+      expect(order.blockers.some(blocker => blocker.includes("zero-cent"))).toBe(extension === 0);
+      expect(order.lines[0]!.next_action.includes("zero-cent")).toBe(extension === 0);
+      expect(order.lines[0]!.warnings.some(warning => warning.includes("zero-cent"))).toBe(extension === 0);
+      expect(order.warnings.some(warning => warning.includes("zero-cent"))).toBe(extension === 0);
+    }
+  });
+
+  it("holds a zero-cent line despite other revenue and keeps independent blockers", async () => {
+    const order = await buildPricedOrder(reg, { ...base(), parts: [base().parts[0]!, {
+      line_id: "tiny", description: "Synthetic tiny line", quantity: 1,
+      pricing: { method: "unit_price", unit_price: 0.0001, reason: "Synthetic proposal" },
+      geometry: [{ id: "rev", field: "revision", value: "Conflicting revisions", source_ids: [], applicability: "conflict" }],
+    }], charges: { shipping: 10 }, additional_charges: [{ label: "Handling", amount: 50 }] }, opts);
+    expect(order.lines.map(line => line.extended_price)).toEqual([1, 0]);
+    expect(order.subtotal).toBe(1);
+    expect(order.total).toBeNull();
+    expect(order.state).toBe("BLOCKED");
+    expect(order.blockers).toHaveLength(3);
+    expect(order.blockers.join(" ")).toMatch(/engineering conflict.*zero-cent.*tax is missing/);
+    expect(order.lines[1]!.next_action).toMatch(/zero-cent.*engineering conflict/);
+    expect(renderOrderMarkdown(order)).toContain("BLOCKED");
+  });
+
+  it("retains a tiny historical proposal and its analog while blocking zero-cent completion", async () => {
+    const source = new QuoteRegister([row({ quote_no: "SYNTHETIC-TINY", part_no: "TINY",
+      quote_date: "2020-01-01", quantity: 1, unit_price: 0.0001 })]);
+    const order = await buildPricedOrder(source, { ...base(), parts: [{ line_id: "tiny", part_no: "TINY", quantity: 1 }] }, opts);
+    expect(order.lines[0]).toMatchObject({ unit_price: 0.0001, extended_price: 0, pricing_source: "historical_analog",
+      proposal_status: "NUMERIC_PROVISIONAL" });
+    expect(order.lines[0]!.analogs.map(analog => analog.quote_no)).toEqual(["SYNTHETIC-TINY"]);
+    expect(order.state).toBe("BLOCKED");
+    expect(order.total).toBeNull();
+    expect(order.blockers.join(" ")).toContain("zero-cent");
+  });
+
   it("uses only pre-cutoff register history, offline even with gateway credentials", async () => {
     const history = new QuoteRegister([
       row({ quote_no: "past", part_no: "MATCH", quote_date: "2020-01-01", quantity: 3, unit_price: 2.0001, status: "won" }),

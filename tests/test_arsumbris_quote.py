@@ -111,6 +111,31 @@ console.log(JSON.stringify(result));"""
         self.assertEqual(content["review"], review)
         return order, markdown
 
+    def test_zero_cent_line_preserves_proposal_in_pending_named_review(self):
+        request = self.request([{'line_id': 'tiny', 'description': 'Synthetic tiny line', 'quantity': 1,
+            'pricing': {'method': 'unit_price', 'unit_price': 0.0001, 'reason': 'Synthetic proposal'}}],
+            {'shipping': 10, 'tax': 0})
+        response = self.invoke(request, corpus=None, no_database=True)
+        self.assertFalse(response.get('isError'), response)
+        content = response['content']
+        self.assertEqual(content['state'], 'BLOCKED')
+        self.assertIsNone(content['total'])
+        line = content['order']['lines'][0]
+        self.assertEqual(line['unit_price'], 0.0001)
+        self.assertEqual(line['extended_price'], 0)
+        self.assertEqual(line['proposal_status'], 'NUMERIC_PROVISIONAL')
+        self.assertIn('zero-cent', line['next_action'])
+        self.assertIn('zero-cent', ' '.join(content['blockers']))
+        self.assertEqual(content['order']['request'], request)
+        self.assertEqual(content['review']['status'], 'PENDING_NAMED_HUMAN_REVIEW')
+        self.assertEqual(content['review']['reviewer'], 'Synthetic Reviewer')
+        self.assertFalse(content['review']['customer_release_authorized'])
+        self.assertEqual(content['request_sha256'], content['review']['request_sha256'])
+        directory = self.home / '.local/share/keller-quotes/drafts' / content['draft_id']
+        self.assertEqual(json.loads((directory / 'output/order.json').read_text()), content['order'])
+        self.assertEqual(json.loads((directory / 'output/review.json').read_text()), content['review'])
+        self.assertIn('BLOCKED', content['markdown'])
+
     def test_uploaded_engineering_should_cost_survives_native_and_local_handoffs(self):
         self.check_uploaded_engineering_should_cost()
 
