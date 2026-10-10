@@ -16,6 +16,12 @@ fields:
   quote_no?: String
   #: Exact catalog identifier in one unambiguous ID, FORM_ID or OPER_ID character column; legacy alternative to quote_no.
   record_id?: String
+  #: Exact native VEND_QUOT on VENDQUOT.DBF only. Do not substitute the vendor's printed QUOTE_NUM or infer uniqueness; duplicate physical offers remain separate. Alternative to other complete key forms.
+  vendor_quote?: String
+  #: VENDQUOT only: exact character ID, required together with quote_no and vendor_id. Narrows source-offer candidates, not material applicability or price-unit meaning.
+  material_id?: String
+  #: VENDQUOT only: exact character VENDOR_ID, required together with quote_no and material_id. Currency/units, quantity tiers, dates, VOIDED and validity still require review.
+  vendor_id?: String
   #: dbf_catalog only: optional 1..80 character case-insensitive literal substring in fixed ID/name fields; omit to browse. Only MATERIAL, OPERATIO and FORMULA with verified schema shapes. No ranking or automatic applicability; preserve duplicate candidates.
   query?: String
   #: Exact QUOTLETTER alone for QUOTLETT, or with item for QUOTLINE/QUOTLEIT.
@@ -28,7 +34,7 @@ fields:
   jobno?: String
   #: Exact trimmed PAGE_NO numeric-field text, required together with wo_no and seq for the operation composite key. No numeric coercion.
   page_no?: String
-  #: Exact character SEQ including leading zeros, required with wo_no and page_no for WOSEQ/WOCOLL.
+  #: Exact character SEQ including leading zeros: with wo_no/page_no for WOSEQ/WOCOLL, or with quote_no for QUOTEM/QUOTEO.
   seq?: String
   #: Lowercase SHA256 from a prior DBF citation; DBF rows/catalog fail closed on mismatch. Required for dbf_catalog when offset > 0.
   expected_dbf_sha256?: String
