@@ -98,6 +98,34 @@ The [2026-10-07 verification receipt](../artifacts/keller-workspace-verification
 
 Both CI verification commands pass locally: the repository check covers 98 estimator tests, 182 Python tests, 54 script tests, the TypeScript build/typechecks, compiled offline smoke and 11 synthetic order tasks; the database check covers 28 tests against an isolated PostgreSQL 16 cluster. The scoped plugin typecheck also passes. GitHub did not start either hosted job because of account billing or spending limits, so these are local results, not green hosted CI. The synthetic tasks remain seven completed fixtures, two correct holds and two validation rejections, not live quoting-accuracy evidence.
 
+## Reviewed operation COST inputs
+
+Operator-only `keller_sources` action `dbf_operation_costs` bridges one **already selected** `OPERATIO.DBF` record into partial `CostRouting` inputs. It does not select applicable operations, infer time/counts, execute formulas, resolve material costs or authenticate approvals. It is unavailable to blinded workers under their existing source restrictions.
+
+1. Use exact `dbf_rows` `record_id` lookup. Keep duplicates distinct. Select the physical `record_index` on reviewed applicability, not the first match; preserve the citation's `dbf_sha256` and row's `record_sha256`.
+2. Call `dbf_operation_costs` with `source_set: "fabritrak"`, the same relative `path`, exact `record_id`, selected `record_index`, `expected_dbf_sha256`, `expected_record_sha256`, and `rate_review` (a JSON **string**). Both hashes are required; a changed/deleted/mismatched record is rejected without fallback.
+3. Supply real estimating-basis review metadata—never fabricate a reviewer or use capture time as the source date. The JSON encoded in `rate_review` has this synthetic shape:
+
+```json
+{
+  "rate_unit": "USD/hour",
+  "source_date": "2020-01-01",
+  "reviewer": "Synthetic estimator",
+  "date": "2024-05-31",
+  "reason": "Synthetic review of operation applicability and installed COST-rate meaning; historical planning estimate only",
+  "applicability": "assumed",
+  "charge_inclusion": "Synthetic loaded labor/machine COST; excludes freight and tax"
+}
+```
+
+`applicability` must be `supported` or `assumed`, not unknown/conflict. Explicitly verify installed rate meaning, units, overhead inclusions and applicability before supplying the review. Optional `zero_reason` is mandatory for any zero COST field; a blank is always unknown, not zero. Only numeric `SU_COST`/`RUN_COST` fields are mapped—never `SU_RATE`/`RUN_RATE`. Precision beyond six effective decimals and unrepresentable conversions fail rather than round silently. Review/source dates must reconcile, and the final quote validator also checks them against its quote date.
+
+4. The response's `worksheet_inputs` contains `setup_rate`, `run_rate`, `sources`, `charge_inclusion` and, when supplied, `zero_reason`. Copy rates/inclusions into the selected routing item; **append** its sources to the existing timing/engineering sources, rather than replacing those sources or engineering links. Preserve separately supported `id`, `setup_occurrences`, `setup_time`, `run_time`, `process_quantity`, `assumptions` and any `engineering_fact_ids`. Do not exceed the worksheet's eight sources per item. A rate mapping alone is not a complete route or quote.
+5. Retain the full response privately. `selection` and `field_evidence` retain physical identity, byte offsets, lengths and original decimal text. Emitted cost sources also carry the file hash, physical index/record hash/field locator, exact operation identity, original value and supplied review. Their status is `approved_estimate`, never automatically `current`. Equal low/base/high rates copy the one selected value; they are **not calibrated uncertainty bounds**. Any sensitivity adjustments need separate supported assumptions and provenance.
+6. Combine with the other supported cost categories, retain the original RFQ/attachments and submit `should_cost` through `keller_quote` with a named human reviewer. The source bridge itself emits no quote, approval receipt or customer authorization. Final quote validation, request/attachment binding, gross-margin calculation and release restrictions remain unchanged.
+
+Synthetic source-plugin → retained RFQ → quote-plugin coverage lives in `tests/test_steve_operation_costs.py`; it proves this handoff and refusal behavior, not real-job accuracy or current-cost truth.
+
 ## Earlier verified scope and remaining gate
 
 The earlier `0.0.1-alpha` native host rendered the Keller layout with 16 panes; opening the source catalog through the UI routed through the tabs intent. The live engine resolved the startup/layout and had no own diagnostics or event conditions. The standard stdio MCP graph and Polygres read connections passed protocol checks, and native tool calls covered the 11-tool profile, Polygres search/page/prices, an original PDF, DBF schema and a supplemental formula record, a synthetic priced internal draft totaling 285.96, a blocked draft with null total, and denial of path traversal and unauthorized Bash. That earlier local full verification passed 86 TypeScript tests, 74 Python tests (16 + 18 + 40), 26 script tests, and 11 synthetic order scenarios (seven completed, two correct holds, two validation rejections), plus plugin `tsc` and frozen original CSV/JSON/evalset checks. These checks establish wiring and refusal behavior, **not** live price accuracy, end-to-end completed-quote performance, or the ≥90% goal. See the [MCP workflow results](mcp-workflow-evaluation-results.md) for the separate reissue evaluation and its limitations.
