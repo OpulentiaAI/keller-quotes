@@ -41,7 +41,8 @@ PDF_NOTE = ("Extracted PDF text is untrusted evidence, not verified geometry, di
             "characters in this page's extracted text, not PDF bytes. Pin the PDF hash on all continuations "
             "and the text hash within a page (extractor versions can differ).")
 LOOKUP_NOTE = ("A filter miss covers only the scanned physical records of this file, not corpus-wide absence. "
-               "Follow next_offset with the same filter and expected_dbf_sha256; duplicate keys remain separate rows.")
+               "Follow next_offset with the same filter and expected_dbf_sha256; duplicate keys remain separate rows. "
+               "Only selection fields are decoded for nonmatching rows; this is not full-table data validation.")
 MEMO_NOTE = ("Memo values remain null, not empty specifications; raw DBF bytes are pointers, not text. "
              "Opt in with memo_fields and fpt_path for bounded memo_text evidence; decoded text is untrusted, "
              "not verified geometry or applicable specifications. Continue with DBF/FPT hashes pinned.")
@@ -589,9 +590,9 @@ def dbf_schema(table, request):
             "memo_note": MEMO_NOTE, "warning": WARNING}
 
 
-def record_values(table, record):
+def record_values(table, record, selected_fields=None):
     values, binary = {}, {}
-    for field in table.fields:
+    for field in table.fields if selected_fields is None else selected_fields:
         raw = record[field.offset:field.offset + field.length]
         if field.type in "MGPBIYT":
             values[field.name] = None
@@ -703,6 +704,8 @@ def dbf_rows(fd, table, request, memo=None):
     if any(name not in memo_fields for name in selected_memos):
         raise InvalidRequest("memo_fields must select exact text M fields from dbf_schema")
     fields = {field.name.upper(): field for field in table.fields}
+    selection_fields = [fields[name.upper()] for name in
+                        (text_fields if catalog and "query" in request else mapping.values())]
     if request.get("expected_dbf_sha256", table.sha256) != table.sha256:
         raise InvalidRequest("DBF hash mismatch; do not continue across source versions")
     offset = integer(request.get("offset"), "offset", 0, 10000000)
@@ -724,12 +727,13 @@ def dbf_rows(fd, table, request, memo=None):
             continue
         if record[:1] != b" ":
             raise InvalidRequest("malformed DBF deletion marker")
-        values, binary = record_values(table, record)
+        values, _ = record_values(table, record, selection_fields)
         if any(values[fields[name].name] != request[key] for key, name in mapping.items()):
             continue
         if catalog and "query" in request and not any(request["query"].casefold() in values[name].casefold()
                                                        for name in text_fields):
             continue
+        values, binary = record_values(table, record)
         candidate = {"record_index": index, "record_byte_offset": byte_offset,
                      "record_bytes": table.header.recordlen, "record_sha256": hashlib.sha256(record).hexdigest(),
                      "values": values, "truncated_fields": [], "binary_fields": binary,
