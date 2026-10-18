@@ -111,6 +111,31 @@ console.log(JSON.stringify(result));"""
         self.assertEqual(content["review"], review)
         return order, markdown
 
+    def test_zero_cent_line_preserves_proposal_in_pending_named_review(self):
+        request = self.request([{'line_id': 'tiny', 'description': 'Synthetic tiny line', 'quantity': 1,
+            'pricing': {'method': 'unit_price', 'unit_price': 0.0001, 'reason': 'Synthetic proposal'}}],
+            {'shipping': 10, 'tax': 0})
+        response = self.invoke(request, corpus=None, no_database=True)
+        self.assertFalse(response.get('isError'), response)
+        content = response['content']
+        self.assertEqual(content['state'], 'BLOCKED')
+        self.assertIsNone(content['total'])
+        line = content['order']['lines'][0]
+        self.assertEqual(line['unit_price'], 0.0001)
+        self.assertEqual(line['extended_price'], 0)
+        self.assertEqual(line['proposal_status'], 'NUMERIC_PROVISIONAL')
+        self.assertIn('zero-cent', line['next_action'])
+        self.assertIn('zero-cent', ' '.join(content['blockers']))
+        self.assertEqual(content['order']['request'], request)
+        self.assertEqual(content['review']['status'], 'PENDING_NAMED_HUMAN_REVIEW')
+        self.assertEqual(content['review']['reviewer'], 'Synthetic Reviewer')
+        self.assertFalse(content['review']['customer_release_authorized'])
+        self.assertEqual(content['request_sha256'], content['review']['request_sha256'])
+        directory = self.home / '.local/share/keller-quotes/drafts' / content['draft_id']
+        self.assertEqual(json.loads((directory / 'output/order.json').read_text()), content['order'])
+        self.assertEqual(json.loads((directory / 'output/review.json').read_text()), content['review'])
+        self.assertIn('BLOCKED', content['markdown'])
+
     def test_uploaded_engineering_should_cost_survives_native_and_local_handoffs(self):
         self.check_uploaded_engineering_should_cost()
 
@@ -125,13 +150,52 @@ console.log(JSON.stringify(result));"""
         self.check_uploaded_engineering_should_cost(purchase_increment=2, run_time={
             'unit': 'cycles_per_hour', 'values': {'low': 6, 'base': 6, 'high': 6}, 'cycles_per_piece': 2})
 
-    def check_uploaded_engineering_should_cost(self, purchase_increment=None, run_time=None):
+    def test_exact_should_cost_margin_survives_retention_native_review_and_local_inbox(self):
+        self.check_uploaded_engineering_should_cost(precise_cost=True)
+
+    def test_margin_shortfall_warning_survives_retention_native_review_and_local_inbox(self):
+        self.check_uploaded_engineering_should_cost(margin_shortfall=True)
+
+    def test_exact_conversion_ratio_survives_retention_native_review_and_local_inbox(self):
+        self.check_uploaded_engineering_should_cost(conversion_ratio=True)
+
+    def check_uploaded_engineering_should_cost(self, purchase_increment=None, run_time=None, precise_cost=False,
+                                               margin_shortfall=False, conversion_ratio=False):
         original = json.loads((ROOT / 'estimator/examples/should-cost-intake.json').read_text())
         if run_time is not None:
             route = original['parts'][0]['pricing']['cost_basis']['routing'][0]
             route['run_time'] = run_time
             route['assumptions'].append('Two separate cycles per process piece at six cycles per hour, no batch sharing')
-        expected_total, expected_cost = 120, 90
+        expected_total, expected_cost, expected_margin = 120, 90, 25
+        if precise_cost or margin_shortfall:
+            part = original['parts'][0]
+            quantity = 1000 if margin_shortfall else 100000
+            unit_cost = 0.000121 if margin_shortfall else 0.00014
+            part['quantity'] = part['uom']['original_quantity'] = quantity
+            part['geometry'] = [f for f in part['geometry'] if f['id'] != 'route']
+            next(f for f in part['geometry'] if f['id'] == 'material')['value'] = f'Synthetic: {quantity} pieces at USD {unit_cost} per piece'
+            basis = part['pricing']['cost_basis']
+            material = basis['components'][0]
+            material['quantity'] = quantity
+            material['unit_cost'] = dict.fromkeys(('low', 'base', 'high'), unit_cost)
+            material['assumptions'] = ['Synthetic precision fixture: one blank per piece, material-only scope']
+            basis['not_applicable'].append({'category': 'routing', 'reason': 'Synthetic material-only scope',
+                                           'sources': basis['routing'][0]['sources']})
+            basis['routing'] = []
+            part['pricing']['margin_pct'] = 12.5 if margin_shortfall else 30
+            expected_total, expected_cost, expected_margin = (0.1, 0.121, -21) if margin_shortfall else (20, 14, 30)
+        if conversion_ratio:
+            part = original['parts'][0]
+            part['quantity'] = part['uom']['original_quantity'] = 3
+            part['pricing']['cost_basis']['routing'][0]['process_quantity'] = 3
+            material = part['pricing']['cost_basis']['components'][0]
+            del material['original_units_per_quantity_unit']
+            material.update(conversion_ratio={'original_units': 2, 'quantity_units': 3},
+                            quantity=3, minimum_quantity=0, purchase_increment=1)
+            assumption = 'SYNTHETIC: two purchased blanks per three pieces; exact ratio, no separate scrap'
+            material['assumptions'] = [assumption]
+            next(f for f in part['geometry'] if f['id'] == 'material')['value'] = assumption
+            expected_total, expected_cost = 226.67, 170
         if purchase_increment is not None:
             material = original['parts'][0]['pricing']['cost_basis']['components'][0]
             material['purchase_increment'] = purchase_increment
@@ -145,6 +209,8 @@ console.log(JSON.stringify(result));"""
         for name in ('drawing', 'worksheet'):
             path = self.home / (name + '.txt')
             path.write_text('SYNTHETIC evidence only: ' + name +
+                            ('; two original blanks per three pieces, buy whole blanks'
+                             if name == 'worksheet' and conversion_ratio else '') +
                             (f'; purchase_increment={purchase_increment} blanks, no inventory credit'
                              if name == 'worksheet' and purchase_increment is not None else ''))
             uploads.append({'id': name, 'path': str(path), 'media_type': 'text/plain'})
@@ -166,7 +232,20 @@ console.log(JSON.stringify(result));"""
         line = content['order']['lines'][0]
         self.assertEqual(line['analogs'], [])
         self.assertEqual(line['cost_breakdown']['estimated_line_cost']['base'], expected_cost)
-        self.assertEqual(line['cost_breakdown']['estimated_line_margin_pct']['base'], 25)
+        self.assertEqual(line['cost_breakdown']['estimated_line_margin_pct']['base'], expected_margin)
+        self.assertEqual(line['cost_breakdown']['base_margin_target'], {
+            'requested_pct': original['parts'][0]['pricing']['margin_pct'],
+            'status': 'below_target' if margin_shortfall or purchase_increment is not None else 'met'})
+        if margin_shortfall:
+            self.assertIn(r'below the requested 12\.5% gross margin', content['markdown'])
+            self.assertTrue(any('below the requested' in w for w in content['order']['warnings']))
+        if precise_cost:
+            self.assertEqual(line['unit_price'], 0.0002)
+            self.assertEqual(line['cost_breakdown']['reconciled_flat']['material_per_unit'], 0.0001)
+        if conversion_ratio:
+            self.assertEqual(line['cost_breakdown']['components'][0]['priced_quantity'], 2)
+            self.assertEqual(line['cost_breakdown']['supplied_basis']['components'][0]['conversion_ratio'],
+                             {'original_units': 2, 'quantity_units': 3})
         if run_time is not None:
             route = line['cost_breakdown']['routing'][0]
             self.assertEqual(route['cycles_per_piece'], 2)
@@ -222,6 +301,37 @@ console.log(JSON.stringify(result));"""
         attachment.chmod(0o400)
         self.assertTrue(self.invoke(request, corpus=None, no_database=True).get('isError'))
 
+    def test_rectangular_blank_cost_reaches_named_review_without_register(self):
+        request = json.loads((ROOT / 'estimator/examples/should-cost-intake.json').read_text())
+        part = request['parts'][0]
+        for evidence in part['source_evidence']:
+            del evidence['attachment_id']
+            evidence.update(sha256='a' * 64, locator='synthetic-blank-fixture:' + evidence['id'])
+        basis = part['pricing']['cost_basis']
+        for entry in basis['components'] + basis['routing'] + basis['not_applicable']:
+            for source in entry['sources']:
+                source.update(sha256='a' * 64, locator='synthetic-blank-fixture:worksheet')
+        material = basis['components'][0]
+        del material['original_units_per_quantity_unit']
+        material.update(original_unit='kg', quantity_unit='blank', minimum_quantity=0,
+            unit_cost={'low': 1000, 'base': 1000, 'high': 1000}, rectangular_blank={
+                'length': {'value': 100, 'unit': 'mm'}, 'width': {'value': 100, 'unit': 'mm'},
+                'thickness': {'value': 4, 'unit': 'mm'}, 'density_kg_m3': 1000})
+        result = self.invoke(request, corpus=None, no_database=True)
+        self.assertFalse(result.get('isError'), result)
+        content = result['content']
+        self.assertEqual(content['total'], 120)
+        self.assertEqual(content['order']['request'], request)
+        self.assertIsNone(content['order']['provenance']['register_sha256'])
+        line = content['order']['lines'][0]
+        self.assertEqual(line['analogs'], [])
+        self.assertEqual(line['cost_breakdown']['components'][0]['consumption']['mass_per_blank'], 0.04)
+        self.assertEqual(line['cost_breakdown']['estimated_line_cost']['base'], 90)
+        self.assertEqual(line['cost_breakdown']['estimated_line_margin_pct']['base'], 25)
+        self.assertEqual(content['review']['reviewer'], 'Synthetic Reviewer')
+        self.assertFalse(content['review']['customer_release_authorized'])
+        self.assertEqual(content['review']['request_sha256'], content['order']['provenance']['request_sha256'])
+
     def test_native_cost_sources_cannot_claim_missing_retained_or_pending_upload_evidence(self):
         request = json.loads((ROOT / 'estimator/examples/should-cost-intake.json').read_text())
         part = request['parts'][0]
@@ -266,6 +376,57 @@ console.log(JSON.stringify(result));"""
         self.assertIn('explicit engineering conflict', ' '.join(content['order']['blockers']))
         self.assertFalse(content['review']['customer_release_authorized'])
         self.assertTrue(content['review']['requires_human_review'])
+
+    def test_partial_piece_quantities_require_reasons_and_survive_named_review(self):
+        original = json.loads((ROOT / 'estimator/examples/should-cost-intake.json').read_text())
+        part = original['parts'][0]
+        del part['geometry'], part['source_evidence'], part['uom']
+        part['quantity'] = 10
+        basis = part['pricing']['cost_basis']
+        for entry in basis['components'] + basis['routing'] + basis['not_applicable']:
+            entry.pop('engineering_fact_ids', None)
+            for source in entry['sources']:
+                source.update(sha256='a' * 64, locator='synthetic-cost:worksheet')
+        component, route = basis['components'][0], basis['routing'][0]
+        component.update(quantity_unit='finished_piece', quantity=10)
+        route['process_quantity'] = 10
+        for method in ('should_cost', 'cost_plus'):
+            part['pricing']['method'] = method
+            if method == 'cost_plus':
+                part['pricing'].update(material_per_unit=40, labor_per_unit=20, outside_per_unit=0, setup_total=30)
+            baseline = self.invoke(original, corpus=None, no_database=True)
+            self.assertFalse(baseline.get('isError'), baseline)
+            self.assertEqual(baseline['content']['total'], 840)
+            for group, key in [('components', 'quantity'), ('routing', 'process_quantity')]:
+                with self.subTest(method=method, group=group):
+                    candidate = json.loads(json.dumps(original))
+                    item = candidate['parts'][0]['pricing']['cost_basis'][group][0]
+                    item[key] = 1
+                    if method == 'cost_plus':
+                        candidate['parts'][0]['pricing']['material_per_unit' if group == 'components' else 'labor_per_unit'] /= 10
+                    receipts = set(self.home.rglob('review.json'))
+                    denied = self.invoke(candidate, corpus=None, no_database=True)
+                    self.assertTrue(denied.get('isError'), denied)
+                    self.assertNotIn('artifacts', denied['content'])
+                    self.assertEqual(set(self.home.rglob('review.json')), receipts)
+                    item['partial_quantity_reason'] = ('SYNTHETIC: remaining nine pieces use customer-supplied stock'
+                        if group == 'components' else 'SYNTHETIC: first-article-only operation; nine pieces skip it')
+                    result = self.invoke(candidate, corpus=None, no_database=True)
+                    self.assertFalse(result.get('isError'), result)
+                    content = result['content']
+                    self.assertEqual(content['state'], 'PRICED_REQUIRES_REVIEW')
+                    self.assertEqual(content['total'], 360 if group == 'components' else 600)
+                    cost = content['order']['lines'][0]['cost_breakdown']
+                    self.assertEqual(cost[group][0]['partial_quantity'], {
+                        'quantity': 1, 'line_quantity': 10, 'reason': item['partial_quantity_reason']})
+                    self.assertEqual(cost['estimated_line_margin_pct']['base'], 25)
+                    self.assertEqual(cost['reconciled_flat']['setup_total'], 30)
+                    self.assertIn(item['partial_quantity_reason'].replace('-', r'\-'), content['markdown'])
+                    self.assertEqual(cost['supplied_basis'], candidate['parts'][0]['pricing']['cost_basis'])
+                    self.assertEqual(content['order']['request'], candidate)
+                    self.assertFalse(content['review']['customer_release_authorized'])
+                    self.assertEqual(content['review']['reviewer'], 'Synthetic Reviewer')
+                    self.assertEqual(content['review']['request_sha256'], content['request_sha256'])
 
     def test_cost_estimate_review_dates_must_follow_their_source_without_requiring_current_prices(self):
         original = json.loads((ROOT / 'estimator/examples/should-cost-intake.json').read_text())

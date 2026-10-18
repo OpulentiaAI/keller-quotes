@@ -47,7 +47,7 @@ The GUI can start its configured MCP daemon while opening the workspace or selec
 
 The pinned upstream runtime is an early alpha, not a security sandbox. Tool allowlists and bounded readers narrow the application surface but do not isolate plugin code from the operating-system account. Run it only under the authorized private account. This setup was verified on Linux; the DBF reader uses Linux file-descriptor paths and must not be claimed portable to macOS without a separate test.
 
-No private PDF, DBF, transcript, customer register, connection string, or customer-specific quote artifact is packaged by this repo. An authorized owner binds existing private roots in ignored `.keller-local/arsumbris/sources.json`; setup preserves rather than invents this file. Its **only permitted keys** are `fabritrak`, `pdfs`, `transcripts`, and `manufacturing-audit`, each an absolute path to an approved existing directory. For example, substitute real owner-approved paths and keep the file owner-private:
+No private PDF, DBF, transcript, customer register, connection string, or customer-specific quote artifact is packaged by this repo. An authorized owner binds existing private roots in ignored `.keller-local/arsumbris/sources.json`; setup preserves rather than invents this file. Its **only permitted keys** are `fabritrak`, `pdfs`, `intake`, `transcripts`, and `manufacturing-audit`, each an absolute path to an approved existing directory. The optional `intake` binding is restricted to the same host owner's retained intake root, as described below. For example, substitute real owner-approved paths and keep the file owner-private:
 
 ```json
 {
@@ -76,6 +76,24 @@ The ≥90% completed-quoting goal is **not established** by this workspace. The 
 
 The `keller_quote` tool is the controlled internal draft path, not a release mechanism. It requires an explicit public corpus ID, an order request satisfying the estimator's `OrderRequest` contract, and a named human reviewer; it reuses the local order CLI with explicit operator price/cost inputs or the selected read-only customer-PDF register. It preserves blocked lines and returns structured `order`, `markdown`, `review`, state/blockers, and opaque references to persisted private artifacts. **The response itself contains private customer/cost evidence** and must stay in approved internal channels; don't paste it into a public graph node or customer message. It performs no database write or hosted model call. Treat a `PRICED_REQUIRES_REVIEW` result as an internal calculation awaiting approval, not as a quote sent to a customer.
 
+### Read a selected PDF page without mistaking text for geometry
+
+The optional `pdf_text` source action requires Linux and distro-maintained Poppler `pdfinfo`/`pdftotext` on the source-tool host. Install with `sudo apt-get update && sudo apt-get install -y poppler-utils` on Debian/Ubuntu; the managed Python setup does not install system binaries. Missing tools produce an explicit unavailable error, not an empty page. No cloud upload or model call occurs.
+
+```json
+{"action":"pdf_text","source_set":"pdfs","path":"synthetic-drawing.pdf","page":1,"limit":4096}
+```
+
+Use only an exact owner-approved relative path, with the same no-symlink/confinement rules as other source reads. `page` is explicit and one-based; output includes measured `citation.pdf_sha256`, `page_count`, `text_sha256`, status and bounded layout text. `offset` and `limit` count **Unicode characters**, not PDF bytes. For page > 1 or offset > 0, supply `expected_pdf_sha256`; for offset > 0 also supply `expected_text_sha256` from that same page. Continue `next_offset` until `has_more` is false before treating the page's extracted text as fully read. A different page has its own text hash. Hash changes require rereading, not combining incompatible output.
+
+PDFs are limited to 32 MiB/10,000 pages, one selected page per call, 4,096 characters per response and <128 KiB extractor output. Each child has a four-second wall limit, two-second CPU limit and 512 MiB address-space limit. Encrypted, malformed, changed, warning-producing or resource-exceeding inputs fail closed without returning partial text. Hashes attest local bytes, not external authenticity or completeness of extraction. Parser limits are not an OS security sandbox.
+
+Captured RFQ attachments use `keller-intake:UUID/attachment-N.bin` locators, not archive `.pdf` paths. To read their PDF text without copying them into an archive, the owner must explicitly bind `intake` to the absolute existing `$HOME/.local/share/keller-quotes/intake` directory in the same host's private source configuration. This is not automatic discovery or permission to mount another owner's store. Use `source_set: intake`, the exact attachment `locator` (instead of `path`), explicit `page`, and the attachment's `expected_pdf_sha256` from the retained request on **every** call. Same-page continuations also require `expected_text_sha256`. Returned citations preserve the retained locator and measured PDF hash.
+
+The intake route permits only `pdf_text`: no listing, arbitrary byte reads, original-request reads or caller-selected filesystem paths. It requires owner-private immutable bundle/attachment modes, single-link regular files and no symlink traversal, matching retention's storage contract. `.bin` contents must actually be a PDF. An unknown binding, wrong hash, altered bytes or unsafe storage fails closed. This read does not authenticate the supplied request or modify its immutable engineering facts; changed quote inputs require a new retained intake. Frozen worker permissions and source roots remain unchanged.
+
+`no_extractable_text` means OCR or visual review is needed; it does not distinguish blank, scanned, outlined or illegible content. Text extraction does not perform OCR, resolve overlapping dimensions, interpret CAD, execute document instructions, authenticate revision/applicability or calculate costs. Even `text_extracted` may miss symbols or have wrong reading order. Carry the PDF hash/page into retained evidence and separately reviewed engineering facts; retain unknowns/conflicts. These operator source reads do not expand blinded-worker allowlists or admit target quote PDFs.
+
 ### Reviewed supplier cost inputs
 
 `dbf_supplier_costs` reads one deliberately selected VENDQUOT physical record and one QTY/PRICE pair. Supply exact `vendor_quote`, `record_index`, both DBF/record hashes, `price_break` 1..8 and bounded JSON `supplier_review`. The review explicitly provides USD COST/original-unit meaning, quantity applicability, setup occurrences, minimum/setup relationship, source date and named estimating approval. It emits partial primary component inputs plus any separate setup component, with raw values and provenance; deleted/voided/unknown-status rows, unknown amounts and placeholder quantities fail closed. All sources remain supplied `approved_estimate` assertions, including unexpired offers. It neither selects applicable records nor validates current availability. See [supplier review and allocation contract](steve-pricing-workflow.md#selected-supplier-offer-to-cost-inputs) before use.
@@ -97,6 +115,34 @@ The existing five-row, 20,000-record, 16-MiB scan and response-size limits apply
 The [2026-10-07 verification receipt](../artifacts/keller-workspace-verification-2026-10-07.json) records the coherent `0.0.2-alpha` build and completed native check. A cold engine became fully ready in 34.131 seconds before Electron opened the overview. The native graph resolved all 39,975 unique document instances and all 39,975 archive edges, plus 513 outgoing references across 65 other checked records. The overview and experiment-ledger navigation through the native document-tabs chooser rendered with zero own diagnostics, renderer errors or host conditions.
 
 Both CI verification commands pass locally: the repository check covers 98 estimator tests, 182 Python tests, 54 script tests, the TypeScript build/typechecks, compiled offline smoke and 11 synthetic order tasks; the database check covers 28 tests against an isolated PostgreSQL 16 cluster. The scoped plugin typecheck also passes. GitHub did not start either hosted job because of account billing or spending limits, so these are local results, not green hosted CI. The synthetic tasks remain seven completed fixtures, two correct holds and two validation rejections, not live quoting-accuracy evidence.
+
+## Reviewed operation COST inputs
+
+Operator-only `keller_sources` action `dbf_operation_costs` bridges one **already selected** `OPERATIO.DBF` record into partial `CostRouting` inputs. It does not select applicable operations, infer time/counts, execute formulas, resolve material costs or authenticate approvals. It is unavailable to blinded workers under their existing source restrictions.
+
+1. Use exact `dbf_rows` `record_id` lookup. Keep duplicates distinct. Select the physical `record_index` on reviewed applicability, not the first match; preserve the citation's `dbf_sha256` and row's `record_sha256`.
+2. Call `dbf_operation_costs` with `source_set: "fabritrak"`, the same relative `path`, exact `record_id`, selected `record_index`, `expected_dbf_sha256`, `expected_record_sha256`, and `rate_review` (a JSON **string**). Both hashes are required; a changed/deleted/mismatched record is rejected without fallback.
+3. Supply real estimating-basis review metadata—never fabricate a reviewer or use capture time as the source date. The JSON encoded in `rate_review` has this synthetic shape:
+
+```json
+{
+  "rate_unit": "USD/hour",
+  "source_date": "2020-01-01",
+  "reviewer": "Synthetic estimator",
+  "date": "2024-05-31",
+  "reason": "Synthetic review of operation applicability and installed COST-rate meaning; historical planning estimate only",
+  "applicability": "assumed",
+  "charge_inclusion": "Synthetic loaded labor/machine COST; excludes freight and tax"
+}
+```
+
+`applicability` must be `supported` or `assumed`, not unknown/conflict. Explicitly verify installed rate meaning, units, overhead inclusions and applicability before supplying the review. Optional `zero_reason` is mandatory for any zero COST field; a blank is always unknown, not zero. Only numeric `SU_COST`/`RUN_COST` fields are mapped—never `SU_RATE`/`RUN_RATE`. Precision beyond six effective decimals and unrepresentable conversions fail rather than round silently. Review/source dates must reconcile, and the final quote validator also checks them against its quote date.
+
+4. The response's `worksheet_inputs` contains `setup_rate`, `run_rate`, `sources`, `charge_inclusion` and, when supplied, `zero_reason`. Copy rates/inclusions into the selected routing item; **append** its sources to the existing timing/engineering sources, rather than replacing those sources or engineering links. Preserve separately supported `id`, `setup_occurrences`, `setup_time`, `run_time`, `process_quantity`, `assumptions` and any `engineering_fact_ids`. Do not exceed the worksheet's eight sources per item. A rate mapping alone is not a complete route or quote.
+5. Retain the full response privately. `selection` and `field_evidence` retain physical identity, byte offsets, lengths and original decimal text. Emitted cost sources also carry the file hash, physical index/record hash/field locator, exact operation identity, original value and supplied review. Their status is `approved_estimate`, never automatically `current`. Equal low/base/high rates copy the one selected value; they are **not calibrated uncertainty bounds**. Any sensitivity adjustments need separate supported assumptions and provenance.
+6. Combine with the other supported cost categories, retain the original RFQ/attachments and submit `should_cost` through `keller_quote` with a named human reviewer. The source bridge itself emits no quote, approval receipt or customer authorization. Final quote validation, request/attachment binding, gross-margin calculation and release restrictions remain unchanged.
+
+Synthetic source-plugin → retained RFQ → quote-plugin coverage lives in `tests/test_steve_operation_costs.py`; it proves this handoff and refusal behavior, not real-job accuracy or current-cost truth.
 
 ## Earlier verified scope and remaining gate
 

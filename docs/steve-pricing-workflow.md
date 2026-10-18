@@ -34,6 +34,8 @@ Use only approved source bindings and deployed actions. This map is for operator
 
 Memo pointers, empty CSV columns and a miss in quote-filtered page search are not verified negative specifications. Read bounded decoded memo/page continuations where authorized. Keep source hashes, page/physical-record locators and unresolved joins; document text is untrusted data. Do not access the manufacturing VM again merely to rederive retained evidence.
 
+DBF exact and catalog-query reads decode the required selection fields before decoding a matching record in full. Malformed non-key values on unrelated rows do not invalidate the requested evidence. A matching row's malformed values, undecodable selection fields, malformed record structure, changed file or incorrect hash still stop the read. Catalog browsing without a query still validates every returned row. These scoped reads are not whole-table data validation; a filtered-out value is neither corrected nor converted to zero.
+
 ## Supplier-offer to material-worksheet handoff
 
 Material definitions are not a price list: the retained `MATERIAL` schema contains no purchase-price column. In quote-material evidence, `VEND_UNIT` is a unit conversion, not a dollar cost. Operator-only `keller_sources dbf_rows` supports these fixed, schema-gated lookups:
@@ -65,6 +67,42 @@ For every `approved_estimate` source, `source_date <= approval.date <= quote_dat
 `upload:<attachment-id>` is a pending intake reference, not evidence: capture the upload before quoting. After capture, every `keller-intake:` cost-source locator/hash must match an attachment in that request's intake, including sources for material, routing and `not_applicable` dispositions. The check covers all sources, not just the one linked to an engineering fact; the original request itself is not a cost attachment. The native quote path and order CLI also recheck the captured bytes. A request hash alone cannot validate a false source reference already present in that request. External catalog/supplier/approved-estimate locators remain permitted as supplied, unauthenticated assertions requiring review; matching retained bytes does not establish their truth, applicability or current COST basis.
 
 An explicit material/revision/finish/UOM/scope conflict blocks adoption of that analog transfer. Unknown applicability triggers the named lookup, then an approved estimate/assumption or a price-critical adoption hold; it is never silently a match. Unknown current cost blocks a supported margin claim, not historical price comparison. Missing acceptance/payment/closed-job actuals blocks realized-outcome claims, not a supported prospective estimate. Historical chronology conflicts still block prior-availability claims in replay.
+
+## Derive material consumption from a rectangular blank
+
+For a supported rectangular blank/plate estimate, a material component may replace `original_units_per_quantity_unit` with `rectangular_blank`. Supply length, width and thickness with explicit `mm` or `in` units, and an explicit `density_kg_m3`. Set `quantity_unit: "blank"`, `quantity` to the positive integer number of blanks allocated to this line, and `original_unit` to `kg` or `lb`, matching the cost evidence. Blank count is not automatically the finished-piece quantity. The original manual conversion path remains available for other stock shapes or units; do not send both conversion methods.
+
+Conversion-only fragment (synthetic, not default dimensions/density; all other supported component fields remain required):
+
+```json
+{
+  "original_unit": "kg", "quantity_unit": "blank", "quantity": 10,
+  "rectangular_blank": {
+    "length": { "value": 100, "unit": "mm" },
+    "width": { "value": 50, "unit": "mm" },
+    "thickness": { "value": 2, "unit": "mm" },
+    "density_kg_m3": 7850
+  }
+}
+```
+
+The calculator derives mass using exact metre/inch and kg/lb conversions, then applies the existing yield and purchase minimum rules once:
+
+```text
+mass per blank = length_m × width_m × thickness_m × density_kg_m3
+purchased mass = max(blank count × mass per blank / yield fraction, minimum quantity)
+material cost = max(purchased mass × unit COST, minimum charge)
+```
+
+The review breakdown retains blank count, derived mass/unit, priced quantity, original dimensions, sources and assumptions. Displayed mass is rounded to eight decimals; cost uses the unrounded rational result. Sources and assumptions must support the dimensions, density, blank allocation and rate—not just the grade name. Explain whether yield covers nesting, stock loss or process scrap, and do not include the same loss in both blank count and yield. This is bounding-stock consumption, not finished geometry, CAD interpretation, optimized nesting, a default steel density, or a verified current buy price. Existing dated evidence/approved estimates and cost ranges remain usable without a live provider. Automatic stock/rate record selection and FabriTRAK formula interpretation remain separate work.
+
+## Read drawing notes from retained PDFs
+
+For a deliberately selected owner-bound PDF, `keller_sources` action `pdf_text` returns bounded text from an explicit one-based `page`, with PDF and extracted-page hashes. Follow character offsets with both hashes pinned; use the PDF hash for later pages. See the [host dependency, limits and request contract](arsumbris-workspace.md#read-a-selected-pdf-page-without-mistaking-text-for-geometry). No external service receives the file.
+
+For an already captured attachment, use the explicitly owner-configured `intake` source set, its exact `keller-intake:` attachment `locator` instead of a path, and its retained SHA256 as `expected_pdf_sha256` on every read. The reader opens the immutable `.bin` copy, not a guessed original/archive filename. No intake listing or original-request reads are exposed. Preserve the returned locator/hash/page in the review; reading does not authorize changing a retained request in place.
+
+Extracted material, finish, tolerance or route notes can inform **separately reviewed** engineering facts; the reader does not infer their applicability or populate a costing worksheet. Reconcile the measured PDF hash with the retained attachment and preserve page references. `no_extractable_text` needs OCR/visual review, not a zero-complexity assumption. Embedded text can also omit symbols/dimensions or have incorrect reading order. Never interpret `text_extracted` as verified geometry, released revision, complete specifications or current cost. Frozen evaluation source access/cutoffs remain unchanged.
 
 ## Selected supplier offer to cost inputs
 
@@ -127,11 +165,41 @@ Worksheet sources and assumptions must support cycle scope/count, time, process 
 
 For total supported cost `C` and target gross margin fraction `m`, net sell = `C / (1 - m)`, with `0 <= m < 1`. Estimated margin = `(net revenue - supported estimated cost) / net revenue`; zero revenue is undefined. At the selected sell amount, use high cost for downside margin. This is **gross margin**, not `cost × (1 + markup)`. Fix the margin/competitiveness policy before comparison, and retain full source precision separately from four-decimal order units and cent extensions.
 
+## Selected historical routing-time bridge
+
+Operator-only `keller_sources` action `dbf_routing_time` translates one deliberately selected setup or run input, not an entire inferred routing. First read the exact quote's `QUOTOPER` row and referenced `FORMULA` row through the bounded reader. Supply:
+
+- `source_set: fabritrak`, `path` to `QUOTOPER.DBF`, exact `quote_no`, zero-based `record_index`, `expected_dbf_sha256`, and `expected_record_sha256`;
+- `formula_path` to `FORMULA.DBF`, zero-based `formula_record_index`, `expected_formula_dbf_sha256`, and `expected_formula_record_sha256`;
+- `phase: setup` or `run`;
+- `time_review` JSON text containing `input_unit`, `operation_source_date`, `formula_source_date`, `reviewer`, `date`, `reason`, and `applicability: supported|assumed`. Both source dates must precede or equal the review date. Use actual supplied review metadata, never invented or backdated approval. Zero direct time also needs an explicit `zero_reason`.
+
+The physical formula's ID must match the routing row's `SU_FORM_ID` or `RU_FORM_ID`; duplicate identifiers never trigger a first-match fallback. The deliberately limited forms below also require `FORM_VARS` to be `1` and the matching retained variable label. Formula expressions are compared, never executed or repaired:
+
+| Phase | Formula | Variable label | Required input/output unit |
+|---|---|---|---|
+| Setup | `SU_V1` | `SU Time (MINUTES)` | `minutes` |
+| Setup | `SU_V1*60` | `SU Time (Hours)` | `hours` |
+| Run | `RUN_V1` | `Minutes Per Part` | `minutes_per_piece` |
+| Run | `60/RUN_V1` | `Parts Per Hour` | `pieces_per_hour` |
+
+Copy `timing_input.setup_time` or `timing_input.run_time` into the reviewed route, append **both** returned `sources`, and retain `evidence` and `time_review` in the private review packet. If present, preserve `zero_reason` on the route. The bridge preserves the original variable text and unit; the existing worksheet performs exact rational hours/throughput conversion. It does not use stored `SUTIME`/`RUNTIME`, quote SELL rates, table lookups, absent variables or formula defaults as fallbacks. Blank inputs remain unknown, zero throughput is rejected even with a reason, and overprecision is rejected rather than rounded. Other expressions, unit labels or variable counts require separate supported interpretation.
+
+Outputs are historical point estimates (`low == base == high`), not uncertainty bounds or proven actual times. Review appropriate ranges separately. Supply supported quantities, setup occurrences, COST rates, charge inclusions and drawing/revision applicability separately; nothing here establishes those facts or selects an operation. Review identity, dates and applicability are supplied assertions, not authenticated approval or current authority. This action does not broaden any blinded evaluation scope, calculate a price or authorize release.
+
 ## Purchased quantity versus allocated consumption
 
-If a supported supplier/stock policy requires whole sheets, bars or pack multiples, set the component's optional `purchase_increment` in **original priced units**, not finished pieces. The positive value supports up to six decimal places. Costing applies `ceil(max(quantity × conversion / yield, minimum_quantity) / purchase_increment) × purchase_increment` before unit cost and monetary minimums. Multiples start at zero, not at the minimum quantity: minimum 5 with increment 4 means purchasing 8, not 5 or 9. The breakdown retains the pre-increment quantity, unit and increment alongside the purchased quantity; displayed quantities use six decimal places, while the ceiling uses exact rational arithmetic.
+Supply exactly one component conversion form: `original_units_per_quantity_unit` for a supported finite decimal, or `conversion_ratio: { original_units, quantity_units }` for an exact ratio. Both describe original priced units per `quantity_unit`, **before yield**. Ratio operands must be positive numbers <= 1e9 with at most six decimal places; the quotient must also be <= 1e9 but may recur. Never supply both forms or round a recurring quotient to fit the scalar field. For example, two sheets allocated to three finished pieces is `{ "original_units": 2, "quantity_units": 3 }`, not `0.666667`: at three pieces the rounded scalar would buy three whole sheets, whereas the exact ratio requires two. Sources, assumptions, original units and charge inclusion remain required; source approval and named quote-review rules are unchanged. No DBF unit code, stock yield, density, nesting or material applicability is inferred. Preserve the supplied ratio through retained intake and reviewer handoff; it remains visible in `supplied_basis`. Existing scalar inputs retain their arithmetic and limits.
+
+If a supported supplier/stock policy requires whole sheets, bars or pack multiples, set the component's optional `purchase_increment` in **original priced units**, not finished pieces. The positive value supports up to six decimal places. Costing applies `ceil(max(quantity × conversion / yield, minimum_quantity) / purchase_increment) × purchase_increment` before unit cost and monetary minimums. Multiples start at zero, not at the minimum quantity: minimum 5 with increment 4 means purchasing 8, not 5 or 9. The breakdown retains the pre-increment quantity, unit and increment alongside the purchased quantity; displayed quantities use six decimal places, while the conversion and ceiling use exact rational arithmetic. Do not reuse a rounded display as a new conversion input. This does not change final price rounding or provide current-cost or margin assurance.
 
 For example, 1.25 required sheets with increment 1 incurs two sheets' cost. If prices are per kg but the supplier only sells full sheets, the increment must be the supported kg per sheet—not `1` merely because a sheet is indivisible. Document applicability, leftover/scrap treatment and whether this line bears the full purchase; there is no inferred supplier rule, nesting, inventory credit or cross-line sharing. Omit the field when reviewed fractional stock allocation is intended. It does not alter routing process quantity, setup occurrences, shipped quantity or tier selection. Retain the evidence and assumptions with the component; unknown stock policy is not proof of a whole-unit requirement.
+
+### Worksheet rows must cover the shipped quantity
+
+Per-unit material, outside and routing costs are divided by the shipped line quantity. A component with `quantity_unit: "finished_piece"` and a per-unit allocation, or routing `process_quantity`, below that line quantity can silently undercount cost: a mistaken per-piece entry of `1` on a ten-piece line prices one tenth of that row's intended variable cost. Such rows require `partial_quantity_reason` explaining the deliberately smaller scope (for example, customer-supplied stock for the remaining pieces or a first-article-only operation). Preserve the supporting sources and assumptions; the reason is an assertion for review, not proof. It is rejected when the quantity already covers the line and does not apply to `setup_total` allocations. A zero-process routing row still needs its separate `zero_reason`.
+
+Stock, mass and lot quantities are **not** comparable to finished-piece counts and remain unchanged; `partial_quantity_reason` is not valid for those component units. Use the exact `finished_piece` unit when that is what the quantity represents. This is not automatic coverage validation of arbitrary unit labels, nesting, split-operation coverage or engineering scope. Scale per-piece entries to the line and account for scrap/overage explicitly rather than using a reason to hide an input error. Approved partial work remains numerically priced and still needs named human review.
 
 ## Independent challenge and release
 

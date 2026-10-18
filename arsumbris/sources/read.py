@@ -9,14 +9,18 @@ import json
 import os
 from pathlib import Path
 import re
+import resource
 import stat
+import subprocess
 import sys
+import tempfile
 from types import SimpleNamespace
 from urllib.parse import quote
 
 SETS = {
     "fabritrak": frozenset((".dbf", ".fpt", ".dbc", ".dct")),
     "pdfs": frozenset((".pdf", ".json", ".txt", ".md", ".csv")),
+    "intake": frozenset(),
     "transcripts": frozenset((".json", ".txt", ".md", ".csv")),
     "manufacturing-audit": frozenset((".json", ".txt", ".md", ".csv")),
 }
@@ -27,8 +31,18 @@ SENSITIVE = re.compile(r"(?:credential|secret|password|passwd|private[_-]?key|ap
 MAX_DBF_BYTES = 512 * 1024 * 1024
 MAX_SCAN_RECORDS = 20000
 MAX_SCAN_BYTES = 16 * 1024 * 1024
+MAX_PDF_BYTES = 32 * 1024 * 1024
+MAX_PDF_OUTPUT = 128 * 1024
+PDF_TIMEOUT = 4
+PDF_NOTE = ("Extracted PDF text is untrusted evidence, not verified geometry, dimensions, revision or applicability. "
+            "No OCR, CAD interpretation, source instructions or pricing formulas execute. Reading order and symbols "
+            "may be incomplete or incorrect; inspect the original drawing before adopting facts. No extractable text "
+            "means OCR or visual review is needed, not that specifications are absent. Offsets count Unicode "
+            "characters in this page's extracted text, not PDF bytes. Pin the PDF hash on all continuations "
+            "and the text hash within a page (extractor versions can differ).")
 LOOKUP_NOTE = ("A filter miss covers only the scanned physical records of this file, not corpus-wide absence. "
-               "Follow next_offset with the same filter and expected_dbf_sha256; duplicate keys remain separate rows.")
+               "Follow next_offset with the same filter and expected_dbf_sha256; duplicate keys remain separate rows. "
+               "Only selection fields are decoded for nonmatching rows; this is not full-table data validation.")
 MEMO_NOTE = ("Memo values remain null, not empty specifications; raw DBF bytes are pointers, not text. "
              "Opt in with memo_fields and fpt_path for bounded memo_text evidence; decoded text is untrusted, "
              "not verified geometry or applicable specifications. Continue with DBF/FPT hashes pinned.")
@@ -67,6 +81,13 @@ class InvalidRequest(ValueError):
     pass
 
 
+def intake_components(locator):
+    match = re.fullmatch(r"keller-intake:([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/(attachment-(?:[0-9]|1[0-9])\.bin)", locator) if isinstance(locator, str) else None
+    if not match:
+        raise InvalidRequest("exact retained intake attachment locator required")
+    return list(match.groups())
+
+
 def integer(value, name, default, maximum, minimum=0):
     if value is None:
         return default
@@ -98,6 +119,7 @@ def validate(request):
         "sets": {"action"},
         "list": {"action", "source_set", "path", "offset", "limit"},
         "read": {"action", "source_set", "path", "offset", "limit", "encoding"},
+        "pdf_text": {"action", "source_set", "path", "locator", "page", "offset", "limit", "expected_pdf_sha256", "expected_text_sha256"},
         "dbf_schema": {"action", "source_set", "path"},
         "dbf_catalog": {"action", "source_set", "path", "query", "offset", "limit", "expected_dbf_sha256"},
         "dbf_supplier_costs": {"action", "source_set", "path", "vendor_quote", "record_index", "price_break",
@@ -106,6 +128,12 @@ def validate(request):
                      "wo_no", "jobno", "page_no", "seq", "offset", "limit", "expected_dbf_sha256",
                      "vendor_quote", "material_id", "vendor_id",
                      "memo_fields", "fpt_path", "expected_fpt_sha256", "memo_offset", "memo_limit"},
+        "dbf_operation_costs": {"action", "source_set", "path", "record_id", "record_index",
+                                "expected_dbf_sha256", "expected_record_sha256", "rate_review"},
+        "dbf_routing_time": {"action", "source_set", "path", "quote_no", "record_index",
+                             "expected_dbf_sha256", "expected_record_sha256", "phase", "time_review",
+                             "formula_path", "formula_record_index", "expected_formula_dbf_sha256",
+                             "expected_formula_record_sha256"},
     }
     if action not in allowed or set(request) - allowed[action]:
         raise InvalidRequest("unsupported action or fields")
@@ -113,13 +141,68 @@ def validate(request):
         return request
     if request.get("source_set") not in SETS:
         raise InvalidRequest("unknown source set")
-    components = parts(request.get("path", ""), action != "list")
-    if action in ("read", "dbf_schema", "dbf_rows", "dbf_catalog"):
+    if request["source_set"] == "intake":
+        if action != "pdf_text" or "path" in request:
+            raise InvalidRequest("intake supports only pdf_text by retained attachment locator")
+        components = intake_components(request.get("locator"))
+        if "expected_pdf_sha256" not in request:
+            raise InvalidRequest("retained attachment requires expected_pdf_sha256")
+    else:
+        if "locator" in request:
+            raise InvalidRequest("locator is only supported for retained intake PDF text")
+        components = parts(request.get("path", ""), action != "list")
+    if action in ("read", "dbf_schema", "dbf_rows", "dbf_catalog", "dbf_operation_costs"):
         if Path(components[-1]).suffix.lower() not in SETS[request["source_set"]]:
             raise InvalidRequest("source file type not approved")
     if action.startswith("dbf_") and (request["source_set"] != "fabritrak" or
                                      Path(components[-1]).suffix.lower() != ".dbf"):
         raise InvalidRequest("DBF action requires a fabritrak .dbf file")
+    if action == "dbf_operation_costs":
+        if Path(components[-1]).stem.upper() != "OPERATIO":
+            raise InvalidRequest("operation cost translation requires OPERATIO.DBF")
+        validate({"action": "dbf_rows", **{key: request.get(key) for key in
+                  ("source_set", "path", "record_id", "expected_dbf_sha256")}})
+        if "record_index" not in request:
+            raise InvalidRequest("selected physical record_index required")
+        integer(request["record_index"], "record_index", -1, 10000000)
+        if request["record_index"] is None:
+            raise InvalidRequest("selected physical record_index required")
+        if not isinstance(request.get("expected_record_sha256"), str) or not re.fullmatch(r"[0-9a-f]{64}", request["expected_record_sha256"]):
+            raise InvalidRequest("expected_record_sha256 must be a lowercase SHA256")
+        operation_rate_review(request.get("rate_review"))
+    if action == "pdf_text":
+        if request["source_set"] != "intake" and (request["source_set"] != "pdfs" or Path(components[-1]).suffix.lower() != ".pdf"):
+            raise InvalidRequest("pdf_text requires an owner-bound PDF or retained intake attachment")
+        if request.get("page") is None:
+            raise InvalidRequest("explicit one-based page required")
+        page = integer(request["page"], "page", 1, 10000, 1)
+        offset = integer(request.get("offset"), "offset", 0, MAX_PDF_OUTPUT)
+        integer(request.get("limit"), "limit", 4096, 4096, 1)
+        for key in ("expected_pdf_sha256", "expected_text_sha256"):
+            if key in request and (not isinstance(request[key], str) or not re.fullmatch(r"[0-9a-f]{64}", request[key])):
+                raise InvalidRequest(f"{key} must be a lowercase SHA256")
+        if (page > 1 or offset > 0) and "expected_pdf_sha256" not in request:
+            raise InvalidRequest("PDF page/text continuation requires expected_pdf_sha256")
+        if offset > 0 and "expected_text_sha256" not in request:
+            raise InvalidRequest("PDF text continuation requires expected_text_sha256")
+    if action == "dbf_routing_time":
+        if Path(components[-1]).stem.upper() != "QUOTOPER":
+            raise InvalidRequest("routing time requires QUOTOPER.DBF")
+        formula_parts = parts(request.get("formula_path", ""), True)
+        if formula_parts[-1].upper() != "FORMULA.DBF":
+            raise InvalidRequest("routing time requires FORMULA.DBF")
+        validate({"action": "dbf_rows", **{key: request.get(key) for key in
+                  ("source_set", "path", "quote_no", "expected_dbf_sha256")}})
+        for key in ("record_index", "formula_record_index"):
+            if request.get(key) is None:
+                raise InvalidRequest(f"{key} required")
+            integer(request[key], key, 0, 10000000)
+        for key in ("expected_dbf_sha256", "expected_record_sha256", "expected_formula_dbf_sha256", "expected_formula_record_sha256"):
+            if not isinstance(request.get(key), str) or not re.fullmatch(r"[0-9a-f]{64}", request[key]):
+                raise InvalidRequest(f"{key} must be a lowercase SHA256")
+        if request.get("phase") not in ("setup", "run"):
+            raise InvalidRequest("phase must be setup or run")
+        routing_time_review(request.get("time_review"))
     if action == "dbf_supplier_costs":
         if Path(components[-1]).stem.upper() != "VENDQUOT":
             raise InvalidRequest("supplier costs require VENDQUOT.DBF")
@@ -187,6 +270,77 @@ def validate(request):
         if request.get("encoding", "utf-8") not in ("utf-8", "latin-1", "base64"):
             raise InvalidRequest("encoding must be utf-8, latin-1 or base64")
     return request
+
+
+def operation_rate_review(value):
+    if not isinstance(value, str) or len(value) > 2400:
+        raise InvalidRequest("rate_review must be bounded JSON text")
+    def unique_fields(pairs):
+        result = {}
+        for key, item in pairs:
+            if key in result:
+                raise InvalidRequest("rate_review contains duplicate fields")
+            result[key] = item
+        return result
+    try:
+        review = json.loads(value, object_pairs_hook=unique_fields)
+    except (ValueError, TypeError):
+        raise InvalidRequest("rate_review must be bounded JSON text") from None
+    required = {"rate_unit", "source_date", "reviewer", "date", "reason", "applicability", "charge_inclusion"}
+    if not isinstance(review, dict) or not required <= set(review) or set(review) - required - {"zero_reason"}:
+        raise InvalidRequest("rate_review requires explicit units, dates, reviewer, reason, applicability and charge_inclusion")
+    for key, text in review.items():
+        maximum = 128 if key == "reviewer" else 512
+        if (not isinstance(text, str) or not text.strip() or text != text.strip() or len(text) > maximum
+                or any(ord(c) < 32 or 127 <= ord(c) <= 159 for c in text)):
+            raise InvalidRequest("rate_review fields must be bounded nonblank text without controls")
+    if review["rate_unit"] != "USD/hour" or review["applicability"] not in ("supported", "assumed"):
+        raise InvalidRequest("reviewed COST rates require explicit USD/hour and supported or assumed applicability")
+    for key in ("source_date", "date"):
+        try:
+            if not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", review[key]):
+                raise ValueError()
+            datetime.strptime(review[key], "%Y-%m-%d")
+        except ValueError:
+            raise InvalidRequest("rate_review dates must be valid YYYY-MM-DD") from None
+    if review["source_date"] > review["date"]:
+        raise InvalidRequest("rate_review source_date cannot follow estimate approval date")
+    return review
+
+
+def routing_time_review(value):
+    if not isinstance(value, str) or len(value) > 2400:
+        raise InvalidRequest("time_review must be bounded JSON text")
+    def unique(pairs):
+        obj = {}
+        for key, item in pairs:
+            if key in obj:
+                raise InvalidRequest("duplicate time_review field")
+            obj[key] = item
+        return obj
+    try:
+        review = json.loads(value, object_pairs_hook=unique)
+    except (ValueError, TypeError):
+        raise InvalidRequest("time_review must be bounded JSON text") from None
+    required = {"input_unit", "operation_source_date", "formula_source_date", "reviewer", "date", "reason", "applicability"}
+    if not isinstance(review, dict) or not required <= set(review) or set(review) - required - {"zero_reason"}:
+        raise InvalidRequest("time_review requires units, both source dates, reviewer, date, reason and applicability")
+    for key, text in review.items():
+        if (not isinstance(text, str) or not text.strip() or text != text.strip() or len(text) > (128 if key == "reviewer" else 512)
+                or any(ord(c) < 32 or 127 <= ord(c) <= 159 for c in text)):
+            raise InvalidRequest("time_review fields must be bounded nonblank text without controls")
+    if review["applicability"] not in ("supported", "assumed"):
+        raise InvalidRequest("time_review applicability must be supported or assumed")
+    for key in ("operation_source_date", "formula_source_date", "date"):
+        try:
+            if not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", review[key]):
+                raise ValueError()
+            datetime.strptime(review[key], "%Y-%m-%d")
+        except ValueError:
+            raise InvalidRequest("time_review dates must be valid YYYY-MM-DD") from None
+    if max(review["operation_source_date"], review["formula_source_date"]) > review["date"]:
+        raise InvalidRequest("time_review cannot predate either source")
+    return review
 
 
 def supplier_cost_review(value):
@@ -277,8 +431,41 @@ def open_source(root, components, directory=False):
 
 
 def citation(request):
-    return {"source_set": request["source_set"], "path": request.get("path", ""),
+    location = {"locator": request["locator"]} if request["source_set"] == "intake" else {"path": request.get("path", "")}
+    return {"source_set": request["source_set"], **location,
             "verification": "owner-bound local source; content hash not checked"}
+
+
+def open_intake_source(root, locator):
+    home = Path.home()
+    if Path(root) != home / ".local/share/keller-quotes/intake":
+        raise InvalidRequest("intake binding must be the owner's retained intake root")
+    if not home.is_absolute() or home.resolve() != home:
+        raise InvalidRequest("private intake storage unavailable")
+    bundle, attachment = intake_components(locator)
+    flags = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_DIRECTORY
+    directory = os.open(home, flags)
+    try:
+        for index, component in enumerate((".local", "share", "keller-quotes", "intake", bundle)):
+            following = os.open(component, flags, dir_fd=directory)
+            os.close(directory)
+            directory = following
+            metadata = os.fstat(directory)
+            mask = 0o277 if index == 4 else 0o077 if index >= 2 else 0
+            if metadata.st_uid != os.getuid() or metadata.st_mode & mask:
+                raise InvalidRequest("private immutable intake storage required")
+        fd = os.open(attachment, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory)
+        try:
+            metadata = os.fstat(fd)
+            if (not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != os.getuid()
+                    or metadata.st_mode & 0o377 or metadata.st_nlink != 1):
+                raise InvalidRequest("private immutable retained attachment required")
+            return fd
+        except BaseException:
+            os.close(fd)
+            raise
+    finally:
+        os.close(directory)
 
 
 def file_state(fd):
@@ -403,9 +590,9 @@ def dbf_schema(table, request):
             "memo_note": MEMO_NOTE, "warning": WARNING}
 
 
-def record_values(table, record):
+def record_values(table, record, selected_fields=None):
     values, binary = {}, {}
-    for field in table.fields:
+    for field in table.fields if selected_fields is None else selected_fields:
         raw = record[field.offset:field.offset + field.length]
         if field.type in "MGPBIYT":
             values[field.name] = None
@@ -517,6 +704,8 @@ def dbf_rows(fd, table, request, memo=None):
     if any(name not in memo_fields for name in selected_memos):
         raise InvalidRequest("memo_fields must select exact text M fields from dbf_schema")
     fields = {field.name.upper(): field for field in table.fields}
+    selection_fields = [fields[name.upper()] for name in
+                        (text_fields if catalog and "query" in request else mapping.values())]
     if request.get("expected_dbf_sha256", table.sha256) != table.sha256:
         raise InvalidRequest("DBF hash mismatch; do not continue across source versions")
     offset = integer(request.get("offset"), "offset", 0, 10000000)
@@ -538,12 +727,13 @@ def dbf_rows(fd, table, request, memo=None):
             continue
         if record[:1] != b" ":
             raise InvalidRequest("malformed DBF deletion marker")
-        values, binary = record_values(table, record)
+        values, _ = record_values(table, record, selection_fields)
         if any(values[fields[name].name] != request[key] for key, name in mapping.items()):
             continue
         if catalog and "query" in request and not any(request["query"].casefold() in values[name].casefold()
                                                        for name in text_fields):
             continue
+        values, binary = record_values(table, record)
         candidate = {"record_index": index, "record_byte_offset": byte_offset,
                      "record_bytes": table.header.recordlen, "record_sha256": hashlib.sha256(record).hexdigest(),
                      "values": values, "truncated_fields": [], "binary_fields": binary,
@@ -576,6 +766,222 @@ def dbf_rows(fd, table, request, memo=None):
     if len(mapping) == 1:
         response["filter_field"] = fields[next(iter(mapping.values()))].name
     return response
+
+
+def operation_costs(fd, table, request):
+    fields = {field.name.upper(): field for field in table.fields}
+    required = {"OPER_ID": "C", "NAME": "C", "SU_COST": "N", "RUN_COST": "N"}
+    if (any(name not in fields or fields[name].type != kind for name, kind in required.items())
+            or any(name in fields for name in ("QUOTE_NO", "ID", "FORM_ID"))):
+        raise InvalidRequest("OPERATIO requires unambiguous character identity and numeric COST fields")
+    if table.sha256 != request["expected_dbf_sha256"]:
+        raise InvalidRequest("DBF hash mismatch; reread and review selected operation")
+    index = request["record_index"]
+    if index >= table.header.numrecords:
+        raise InvalidRequest("selected operation record_index is outside the DBF")
+    byte_offset = table.header.headerlen + index * table.header.recordlen
+    raw = os.pread(fd, table.header.recordlen, byte_offset)
+    record_hash = hashlib.sha256(raw).hexdigest()
+    if len(raw) != table.header.recordlen or record_hash != request["expected_record_sha256"]:
+        raise InvalidRequest("selected operation record hash mismatch")
+    if raw[:1] != b" ":
+        raise InvalidRequest("selected operation is deleted or malformed")
+    values, _ = record_values(table, raw)
+    if values[fields["OPER_ID"].name] != request["record_id"]:
+        raise InvalidRequest("selected physical operation does not match record_id")
+    review = operation_rate_review(request["rate_review"])
+    rates, sources, evidence = {}, [], {}
+    for role, name in (("setup_rate", "SU_COST"), ("run_rate", "RUN_COST")):
+        field = fields[name]
+        original = values[field.name]
+        if not original:
+            raise InvalidRequest("blank COST field is unknown, not zero; no SELL-rate substitution")
+        value = Decimal(original)
+        if value < 0 or value > 1e9 or len(original.partition(".")[2].rstrip("0")) > 6:
+            raise InvalidRequest("COST field must be nonnegative, <= 1e9 and exact to six decimal places")
+        numeric = float(value)
+        if Decimal(str(numeric)) != value:
+            raise InvalidRequest("COST field cannot be represented without rounding")
+        if value == 0 and "zero_reason" not in review:
+            raise InvalidRequest("zero COST field requires an explicit reviewed zero_reason")
+        locator = (f"fabritrak:{quote(request['path'], safe='/')}#record_index={index}"
+                   f"&record_sha256={record_hash}&field={field.name}")
+        if len(locator) > 2048:
+            raise InvalidRequest("operation source locator exceeds worksheet limit")
+        rates[role] = {"rate_kind": "cost", "unit": review["rate_unit"],
+                       "values": {key: numeric for key in ("low", "base", "high")}}
+        sources.append({"source_class": "cost_record", "sha256": table.sha256, "locator": locator,
+                        "source_date": review["source_date"], "status": "approved_estimate",
+                        "applicability": review["applicability"],
+                        "basis": f"Selected OPERATIO {request['record_id']} ({values[fields['NAME'].name]}), "
+                                 f"{field.name} original value {original}; "
+                                 f"record byte offset {byte_offset}, length {table.header.recordlen}; "
+                                 "rate unit and estimating applicability supplied by reviewer, not inferred from DBF",
+                        "approval": {key: review[key] for key in ("reviewer", "date", "reason")}})
+        evidence[role] = {"field": field.name, "type": field.type, "original_value": original,
+                          "decimal_count": field.decimal_count,
+                          "record_byte_offset": field.offset, "field_bytes": field.length}
+    unchanged(fd, table)
+    return {"action": "dbf_operation_costs", "citation": dbf_citation(table, request),
+            "selection": {"record_id": request["record_id"], "name": values[fields["NAME"].name],
+                          "record_index": index, "record_byte_offset": byte_offset,
+                          "record_bytes": table.header.recordlen, "record_sha256": record_hash},
+            "field_evidence": evidence, "rate_review": review,
+            "worksheet_inputs": {**rates, "sources": sources, "charge_inclusion": review["charge_inclusion"],
+                                 **({"zero_reason": review["zero_reason"]} if "zero_reason" in review else {})},
+            "selection_note": "Partial routing inputs only. No operation selection, timing/formula execution, "
+                              "quantity allocation, current-price claim or customer authorization. Equal low/base/high "
+                              "rates copy one reviewed catalog value, not a calibrated uncertainty range. "
+                              "Review identity and approval are supplied assertions, not authenticated approvals.",
+            "warning": WARNING}
+
+
+def pdf_limits():
+    resource.setrlimit(resource.RLIMIT_AS, (512 * 1024 * 1024,) * 2)
+    resource.setrlimit(resource.RLIMIT_CPU, (2, 2))
+    resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_PDF_OUTPUT,) * 2)
+    resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
+
+
+def pdf_command(fd, command):
+    # Files plus RLIMIT_FSIZE bound child output without unbounded parent pipe buffers.
+    with tempfile.TemporaryFile() as output, tempfile.TemporaryFile() as errors:
+        try:
+            result = subprocess.run(command, stdin=subprocess.DEVNULL, stdout=output, stderr=errors,
+                                    pass_fds=(fd,), timeout=PDF_TIMEOUT, preexec_fn=pdf_limits,
+                                    env={"PATH": os.environ.get("PATH", os.defpath), "LC_ALL": "C.UTF-8"})
+        except FileNotFoundError:
+            raise InvalidRequest("PDF text tools unavailable; install poppler-utils on the source host") from None
+        except subprocess.TimeoutExpired:
+            raise InvalidRequest("PDF text extraction timed out; no page text accepted") from None
+        output.seek(0)
+        errors.seek(0)
+        content, diagnostics = output.read(MAX_PDF_OUTPUT + 1), errors.read(MAX_PDF_OUTPUT + 1)
+        if result.returncode or diagnostics.strip() or len(content) >= MAX_PDF_OUTPUT:
+            raise InvalidRequest("PDF extraction failed, warned or exceeded resource/output limits; no text accepted")
+        try:
+            return content.decode("utf-8")
+        except UnicodeDecodeError:
+            raise InvalidRequest("PDF extractor returned invalid UTF-8; no text accepted") from None
+
+
+def pdf_text(fd, request):
+    state = file_state(fd)
+    if not 8 <= state[2] <= MAX_PDF_BYTES or os.pread(fd, 5, 0) != b"%PDF-":
+        raise InvalidRequest("PDF must have a PDF header and be at most 32 MiB")
+    digest = hashlib.sha256()
+    for start in range(0, state[2], 1024 * 1024):
+        digest.update(os.pread(fd, min(1024 * 1024, state[2] - start), start))
+    sha = digest.hexdigest()
+    if "expected_pdf_sha256" in request and request["expected_pdf_sha256"] != sha:
+        raise InvalidRequest("PDF hash mismatch; restart with reviewed source bytes")
+    source = f"/proc/self/fd/{fd}"
+    info = pdf_command(fd, ["pdfinfo", "-enc", "UTF-8", source])
+    pages = re.findall(r"^Pages:\s+(\d+)\s*$", info, re.M)
+    encrypted = re.findall(r"^Encrypted:\s+(yes|no)(?:\s+[^\r\n]*)?$", info, re.M)
+    if len(pages) != 1 or len(encrypted) != 1 or encrypted[0] != "no":
+        raise InvalidRequest("PDF page count/encryption metadata unavailable or encrypted PDF unsupported")
+    page_count, page = int(pages[0]), request["page"]
+    if not 1 <= page_count <= 10000 or page > page_count:
+        raise InvalidRequest("PDF page exceeds page count or supported document limit")
+    content = pdf_command(fd, ["pdftotext", "-f", str(page), "-l", str(page), "-layout",
+                               "-nopgbrk", "-enc", "UTF-8", source, "-"])
+    if file_state(fd) != state:
+        raise InvalidRequest("PDF changed during extraction; restart with a stable source")
+    text_sha = hashlib.sha256(content.encode("utf-8")).hexdigest()
+    if "expected_text_sha256" in request and request["expected_text_sha256"] != text_sha:
+        raise InvalidRequest("extracted text hash mismatch; restart this page with a stable extractor")
+    offset, limit = request.get("offset", 0), request.get("limit", 4096)
+    if offset > len(content):
+        raise InvalidRequest("offset exceeds extracted page text")
+    following = min(offset + limit, len(content))
+    return {"action": "pdf_text", "citation": {**citation(request), "pdf_sha256": sha,
+            "verification": "measured local PDF SHA256; not authenticated against an external catalog"},
+            "page": page, "page_count": page_count, "size_bytes": state[2],
+            "extractor": "poppler_pdftotext_layout_utf8", "text_sha256": text_sha,
+            "status": "text_extracted" if content.strip() else "no_extractable_text",
+            "offset": offset, "offset_unit": "unicode_characters", "total_characters": len(content),
+            "content": content[offset:following], "has_more": following < len(content),
+            "next_offset": following if following < len(content) else None,
+            "extraction_note": PDF_NOTE, "warning": WARNING}
+
+
+def selected_timing_record(fd, table, index, expected_hash, schema):
+    fields = {field.name.upper(): field for field in table.fields}
+    if any(name not in fields or fields[name].type != kind for name, kind in schema.items()):
+        raise InvalidRequest("routing/formula field schema mismatch")
+    if index >= table.header.numrecords:
+        raise InvalidRequest("selected timing record outside DBF")
+    offset = table.header.headerlen + index * table.header.recordlen
+    raw = os.pread(fd, table.header.recordlen, offset)
+    if len(raw) != table.header.recordlen or hashlib.sha256(raw).hexdigest() != expected_hash:
+        raise InvalidRequest("selected timing record hash mismatch")
+    if raw[:1] != b" ":
+        raise InvalidRequest("selected timing record deleted or malformed")
+    values, _ = record_values(table, raw)
+    return ({name: values[field.name] for name, field in fields.items()},
+            {"record_index": index, "record_byte_offset": offset, "record_bytes": table.header.recordlen,
+             "record_sha256": expected_hash})
+
+
+def routing_time(fd, table, formula_fd, formula_table, request):
+    if table.sha256 != request["expected_dbf_sha256"] or formula_table.sha256 != request["expected_formula_dbf_sha256"]:
+        raise InvalidRequest("routing/formula DBF hash mismatch; reread selected evidence")
+    phase = request["phase"]
+    variable, link = ("SU_V1", "SU_FORM_ID") if phase == "setup" else ("RUN_V1", "RU_FORM_ID")
+    operation, operation_proof = selected_timing_record(fd, table, request["record_index"], request["expected_record_sha256"],
+        {"QUOTE_NO": "C", "SEQ": "C", "OPER_ID": "C", variable: "N", link: "C"})
+    formula, formula_proof = selected_timing_record(formula_fd, formula_table, request["formula_record_index"],
+        request["expected_formula_record_sha256"], {"FORM_ID": "C", "FORMULA": "C", "FORM_VARS": "N", "V1_DESC": "C"})
+    if operation["QUOTE_NO"] != request["quote_no"] or not operation["SEQ"] or not operation["OPER_ID"]:
+        raise InvalidRequest("selected timing record quote/operation identity mismatch")
+    if not operation[link] or operation[link] != formula["FORM_ID"]:
+        raise InvalidRequest("selected formula does not match routing formula reference")
+    # Preserve original units for the worksheet's exact time conversion; never execute source formulas.
+    forms = {("setup", "SU_V1"): ("minutes", "SU Time (MINUTES)"),
+             ("setup", "SU_V1*60"): ("hours", "SU Time (Hours)"),
+             ("run", "RUN_V1"): ("minutes_per_piece", "Minutes Per Part"),
+             ("run", "60/RUN_V1"): ("pieces_per_hour", "Parts Per Hour")}
+    form = forms.get((phase, formula["FORMULA"]))
+    if not form or formula["FORM_VARS"] != "1" or formula["V1_DESC"] != form[1]:
+        raise InvalidRequest("unsupported or ambiguous timing formula/units; separate evidence interpretation required")
+    review = routing_time_review(request["time_review"])
+    if review["input_unit"] != form[0]:
+        raise InvalidRequest("reviewed input_unit conflicts with formula variable units")
+    original = operation[variable]
+    if not original:
+        raise InvalidRequest("blank timing variable is unknown, not zero")
+    value = Decimal(original)
+    if value < 0 or value > 1e9 or len(original.partition(".")[2].rstrip("0")) > 6:
+        raise InvalidRequest("timing variable must be nonnegative, <= 1e9 and exact to six decimal places")
+    numeric = float(value)
+    if Decimal(str(numeric)) != value:
+        raise InvalidRequest("timing variable cannot be represented without rounding")
+    if value == 0 and form[0] == "pieces_per_hour":
+        raise InvalidRequest("pieces_per_hour must be positive; zero is not zero duration")
+    if value == 0 and "zero_reason" not in review:
+        raise InvalidRequest("zero timing requires an explicit reviewed zero_reason")
+    sources = []
+    for path, source_table, proof, field, date_key in (
+            (request["path"], table, operation_proof, variable, "operation_source_date"),
+            (request["formula_path"], formula_table, formula_proof, "FORMULA", "formula_source_date")):
+        locator = (f"fabritrak:{quote(path, safe='/')}#record_index={proof['record_index']}"
+                   f"&record_sha256={proof['record_sha256']}&field={field}")
+        sources.append({"source_class": "routing_estimate", "sha256": source_table.sha256, "locator": locator,
+                        "source_date": review[date_key], "status": "approved_estimate", "applicability": review["applicability"],
+                        "basis": "Selected historical routing variable and formula; supplied review, not actual/current time or rate authority",
+                        "approval": {key: review[key] for key in ("reviewer", "date", "reason")}})
+    unchanged(fd, table)
+    unchanged(formula_fd, formula_table)
+    return {"action": request["action"], "quote_no": operation["QUOTE_NO"], "seq": operation["SEQ"], "operation_id": operation["OPER_ID"],
+            "phase": phase, "timing_input": {f"{phase}_time": {"unit": form[0], "values": {k: numeric for k in ("low", "base", "high")}}},
+            "sources": sources, "time_review": review, **({"zero_reason": review["zero_reason"]} if "zero_reason" in review else {}),
+            "evidence": {"operation": {"citation": dbf_citation(table, request), **operation_proof,
+                                       "variable_field": variable, "original_variable_text": original, "formula_id": operation[link]},
+                         "formula": {"citation": dbf_citation(formula_table, {**request, "path": request["formula_path"]}), **formula_proof,
+                                     "formula_id": formula["FORM_ID"], "expression": formula["FORMULA"], "variable_label": formula["V1_DESC"]}},
+            "selection_note": "Explicitly selected historical timing only. No operation selection, applicability authentication, quantities, occurrences, COST/SELL rates or prices inferred. Point values are not uncertainty bounds; review ranges separately.",
+            "warning": WARNING}
 
 
 def supplier_costs(fd, table, request):
@@ -696,7 +1102,8 @@ def read(bindings, request):
         raise InvalidRequest("source set is not configured")
     components = parts(request.get("path", ""))
     action = request["action"]
-    fd = open_source(bindings[source_set], components, directory=action == "list")
+    fd = (open_intake_source(bindings[source_set], request["locator"]) if source_set == "intake"
+          else open_source(bindings[source_set], components, directory=action == "list"))
     try:
         if action == "list":
             entries = []
@@ -735,9 +1142,19 @@ def read(bindings, request):
                     "bytes_read": len(chunk), "encoding": encoding, "content": content,
                     "has_more": following < size, "next_offset": following if following < size else None,
                     "warning": WARNING}
+        if action == "pdf_text":
+            return pdf_text(fd, request)
         table = dbf_table(fd)
         if action == "dbf_schema":
             return dbf_schema(table, request)
+        if action == "dbf_operation_costs":
+            return operation_costs(fd, table, request)
+        if action == "dbf_routing_time":
+            formula_fd = open_source(bindings[source_set], parts(request["formula_path"], True))
+            try:
+                return routing_time(fd, table, formula_fd, dbf_table(formula_fd), request)
+            finally:
+                os.close(formula_fd)
         if action == "dbf_supplier_costs":
             return supplier_costs(fd, table, request)
         if "memo_fields" not in request:
