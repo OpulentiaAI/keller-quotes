@@ -40,6 +40,8 @@ export interface CostComponent extends SupportedCost {
   original_unit: string;
   quantity_unit: string;
   quantity: number;
+  /** For finished_piece quantities below the line quantity; not stock/mass/lot units. */
+  partial_quantity_reason?: string;
   /** Original priced units per quantity_unit, BEFORE yield. */
   original_units_per_quantity_unit?: number;
   /** Derives kg/lb per blank instead of a manually supplied conversion. */
@@ -61,6 +63,8 @@ export interface CostRouting extends SupportedCost {
   setup_time: { unit: "minutes" | "hours"; values: CostRange };
   run_time: RunTime;
   process_quantity: number;
+  /** Required when process_quantity is below the line quantity. */
+  partial_quantity_reason?: string;
   setup_rate: CostRate;
   run_rate: CostRate;
 }
@@ -84,6 +88,8 @@ export interface FlatCosts {
   setup_total: number;
 }
 
+interface PartialQuantity { quantity: number; line_quantity: number; reason: string }
+
 export interface CostBreakdown {
   assertion_status: "supplied_not_authenticated";
   scope: "production_line_excluding_freight_tax_and_order_charges";
@@ -91,12 +97,12 @@ export interface CostBreakdown {
   supplied_basis: CostBasis;
   reconciled_flat: FlatCosts;
   components: { id: string; category: CostComponent["category"]; allocation: Allocation;
-    priced_quantity: number; total_cost: CostRange;
+    priced_quantity: number; total_cost: CostRange; partial_quantity?: PartialQuantity;
     consumption?: { method: "rectangular_blank"; mass_per_blank: number; mass_unit: "kg" | "lb"; blank_count: number };
     purchase_rounding?: { original_unit: string; quantity_before_increment: number; increment: number } }[];
   routing: { id: string; setup_occurrences: number; setup_minutes: CostRange;
     run_minutes_per_piece: CostRange; cycles_per_piece?: number;
-    process_quantity: number; setup_cost: CostRange; run_cost: CostRange }[];
+    process_quantity: number; setup_cost: CostRange; run_cost: CostRange; partial_quantity?: PartialQuantity }[];
   estimated_line_cost: CostRange;
   /** Low margin uses HIGH cost, and vice versa, against displayed line revenue. */
   estimated_line_margin_pct: CostRange | null;
@@ -285,6 +291,13 @@ function support(obj: Record<string, unknown>, path: string, asOf: string, ids: 
 function justifyZero(obj: Record<string, unknown>, path: string, hasZero: boolean): void {
   if (hasZero) text(obj.zero_reason, `${path}.zero_reason (explicit zero requires support)`);
 }
+// Unscaled per-piece entries can silently understate line cost before margin pricing.
+function justifyPartial(obj: Record<string, unknown>, path: string, covered: Fraction, lineQuantity: number): PartialQuantity | undefined {
+  if (compare(covered, whole(lineQuantity)) < 0n) {
+    text(obj.partial_quantity_reason, `${path}.partial_quantity_reason (covers fewer pieces than the line quantity; per-piece entries must be scaled to the line)`);
+    return { quantity: display(covered, 6, path), line_quantity: lineQuantity, reason: obj.partial_quantity_reason };
+  } else if (obj.partial_quantity_reason !== undefined) throw new Error(`${path}.partial_quantity_reason requires a quantity below the line quantity`);
+}
 function costKind(value: unknown, path: string): void {
   if (value !== "cost") throw new Error(`${path} must be cost; SELL rates cannot enter cost_plus (double margin)`);
 }
@@ -321,7 +334,7 @@ function calculateCostBasis(value: unknown, quantity: number, asOf: string, flat
   const present = new Set<Category>();
   for (const [i, item] of list(root.components, "cost_basis.components", 64).entries()) {
     const p = `cost_basis.components[${i}]`;
-    const c = record(item, p, [...supportKeys, "category", "allocation", "rate_kind", "original_unit", "quantity_unit", "quantity", "original_units_per_quantity_unit", "rectangular_blank", "yield_fraction", "minimum_quantity", "purchase_increment", "unit_cost", "minimum_charge"]);
+    const c = record(item, p, [...supportKeys, "category", "allocation", "rate_kind", "original_unit", "quantity_unit", "quantity", "partial_quantity_reason", "original_units_per_quantity_unit", "rectangular_blank", "yield_fraction", "minimum_quantity", "purchase_increment", "unit_cost", "minimum_charge"]);
     support(c, p, asOf, ids, sourceWarnings);
     choice(c.category, `${p}.category`, ["material", "outside", "other"]);
     choice(c.allocation, `${p}.allocation`, ["material_per_unit", "outside_per_unit", "setup_total"]);
@@ -330,6 +343,9 @@ function calculateCostBasis(value: unknown, quantity: number, asOf: string, flat
     text(c.original_unit, `${p}.original_unit`);
     text(c.quantity_unit, `${p}.quantity_unit`);
     const q = number(c.quantity, `${p}.quantity`, true);
+    const comparableQuantity = c.allocation !== "setup_total" && c.quantity_unit === "finished_piece";
+    const partialQuantity = comparableQuantity ? justifyPartial(c, p, q, quantity) : undefined;
+    if (!comparableQuantity && c.partial_quantity_reason !== undefined) throw new Error(`${p}.partial_quantity_reason requires a finished_piece quantity and per-unit allocation, not setup_total`);
     const conversion = materialConversion(c, p);
     const yieldFraction = number(c.yield_fraction, `${p}.yield_fraction`, true);
     if (compare(yieldFraction, whole(1)) > 0n) throw new Error(`${p}.yield_fraction must be <= 1`);
@@ -352,15 +368,17 @@ function calculateCostBasis(value: unknown, quantity: number, asOf: string, flat
       priced_quantity: display(pricedQuantity, 6, p), total_cost: displayRange(total, 4, p),
       ...("rectangular_blank" in c ? { consumption: { method: "rectangular_blank" as const,
         mass_per_blank: display(conversion, 8, p), mass_unit: c.original_unit as "kg" | "lb", blank_count: c.quantity as number } } : {}),
+      ...(partialQuantity ? { partial_quantity: partialQuantity } : {}),
       ...(increment ? { purchase_rounding: { original_unit: c.original_unit as string,
         quantity_before_increment: display(quantityBeforeIncrement, 6, p), increment: c.purchase_increment as number } } : {}) });
   }
   for (const [i, item] of list(root.routing, "cost_basis.routing", 64).entries()) {
     const p = `cost_basis.routing[${i}]`;
-    const r = record(item, p, [...supportKeys, "setup_occurrences", "setup_time", "run_time", "process_quantity", "setup_rate", "run_rate"]);
+    const r = record(item, p, [...supportKeys, "setup_occurrences", "setup_time", "run_time", "process_quantity", "partial_quantity_reason", "setup_rate", "run_rate"]);
     support(r, p, asOf, ids, sourceWarnings);
     const occurrences = count(r.setup_occurrences, `${p}.setup_occurrences`, 10_000);
     const processQuantity = count(r.process_quantity, `${p}.process_quantity`, 10_000_000);
+    const partialQuantity = justifyPartial(r, p, whole(processQuantity), quantity);
     const setupTime = record(r.setup_time, `${p}.setup_time`, ["unit", "values"]);
     choice(setupTime.unit, `${p}.setup_time.unit`, ["minutes", "hours"]);
     const setupMinutes = mapRange(range(setupTime.values, `${p}.setup_time.values`), v => mul(v, whole(setupTime.unit === "hours" ? 60 : 1)));
@@ -383,6 +401,7 @@ function calculateCostBasis(value: unknown, quantity: number, asOf: string, flat
     routing.push({ id: r.id as string, setup_occurrences: occurrences, process_quantity: processQuantity,
       setup_minutes: displayRange(setupMinutes, 6, p), run_minutes_per_piece: displayRange(runMinutes, 6, p),
       ...(runTime.cycles_per_piece === undefined ? {} : { cycles_per_piece: runTime.cycles_per_piece }),
+      ...(partialQuantity ? { partial_quantity: partialQuantity } : {}),
       setup_cost: displayRange(setup, 4, p), run_cost: displayRange(run, 4, p) });
   }
   for (const [i, item] of list(root.not_applicable, "cost_basis.not_applicable", 4).entries()) {
