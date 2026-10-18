@@ -1,7 +1,7 @@
 extends: mcp.tool::au-mcp-sdk
 fields:
-  #: Discover source sets, list one directory, read bounded bytes, extract one PDF page's text, inspect/filter a FabriTRAK DBF, or translate selected reviewed operation and supplier COST inputs.
-  action: [sets, list, read, pdf_text, dbf_schema, dbf_rows, dbf_catalog, dbf_operation_costs, dbf_supplier_costs]
+  #: Discover source sets, list one directory, read bounded bytes, extract one PDF page's text, inspect/filter a FabriTRAK DBF, bridge one selected routing-time formula, or translate selected reviewed operation and supplier COST inputs.
+  action: [sets, list, read, pdf_text, dbf_schema, dbf_rows, dbf_catalog, dbf_operation_costs, dbf_routing_time, dbf_supplier_costs]
   #: Owner-bound source set; required except for sets.
   source_set?: [fabritrak, pdfs, intake, transcripts, manufacturing-audit]
   #: Relative directory or file path within the source set; empty or omitted means root for list.
@@ -46,11 +46,20 @@ fields:
   seq?: String
   #: Lowercase SHA256 from a prior DBF citation; fail closed on mismatch. Optional for dbf_rows, required for dbf_catalog when offset > 0 and mandatory for dbf_operation_costs.
   expected_dbf_sha256?: String
-  #: dbf_operation_costs/dbf_supplier_costs: explicitly selected zero-based physical record. Both DBF and record hashes required.
+  #: dbf_operation_costs/dbf_routing_time/dbf_supplier_costs: explicitly selected zero-based physical record. Both DBF and record hashes required.
   record_index?: Number{>=0 & integer}
   expected_record_sha256?: String
   #: dbf_operation_costs only: JSON with rate_unit (USD/hour), source_date, reviewer, date, reason, applicability (supported/assumed), charge_inclusion and optional zero_reason. Explicit review of operation applicability, installed COST-rate meaning/units and inclusions is required; these are supplied approval assertions, not authentication. Returns partial CostRouting setup_rate/run_rate/sources inputs using only SU_COST/RUN_COST; no timing, SELL fallback, formula execution or current-price claim. Merge with separately supported routing times/quantities and preserve their sources.
   rate_review?: String
+  #: dbf_routing_time: one explicitly selected phase; no operation or route selection.
+  phase?: [setup, run]
+  #: Owner-root relative FORMULA.DBF and selected physical record, linked by SU_FORM_ID or RU_FORM_ID. Both hashes required.
+  formula_path?: String
+  formula_record_index?: Number{>=0 & integer}
+  expected_formula_dbf_sha256?: String
+  expected_formula_record_sha256?: String
+  #: Bounded JSON: input_unit, operation_source_date, formula_source_date, reviewer, date, reason, applicability (supported/assumed), optional zero_reason. Review date must not predate either source. Supplied review, not authenticated applicability or current authority.
+  time_review?: String
   #: dbf_supplier_costs only. Exact selected VEND_QUOT identity, not automatic vendor selection.
   vendor_quote?: String
   #: dbf_supplier_costs only. Explicit QTYn/PRICEn pair 1..8, not automatic tier selection.
