@@ -42,8 +42,9 @@ export interface CostComponent extends SupportedCost {
   quantity: number;
   /** For finished_piece quantities below the line quantity; not stock/mass/lot units. */
   partial_quantity_reason?: string;
-  /** Original priced units per quantity_unit, BEFORE yield. */
+  /** Supply exactly one conversion form, BEFORE yield; never round a recurring ratio. */
   original_units_per_quantity_unit?: number;
+  conversion_ratio?: { original_units: number; quantity_units: number };
   /** Derives kg/lb per blank instead of a manually supplied conversion. */
   rectangular_blank?: RectangularBlank;
   yield_fraction: number;
@@ -183,8 +184,20 @@ function count(value: unknown, path: string, maximum: number, minimum = 0): numb
   return value;
 }
 function materialConversion(c: Record<string, unknown>, p: string): Fraction {
-  if (!("rectangular_blank" in c)) return number(c.original_units_per_quantity_unit, `${p}.original_units_per_quantity_unit`, true);
-  if ("original_units_per_quantity_unit" in c) throw new Error(`${p} must supply rectangular_blank OR original_units_per_quantity_unit, not both`);
+  if (!("rectangular_blank" in c)) {
+    if ((c.original_units_per_quantity_unit === undefined) === (c.conversion_ratio === undefined)) {
+      throw new Error(`${p} requires exactly one of original_units_per_quantity_unit or conversion_ratio`);
+    }
+    if (c.conversion_ratio === undefined) return number(c.original_units_per_quantity_unit, `${p}.original_units_per_quantity_unit`, true);
+    const ratio = record(c.conversion_ratio, `${p}.conversion_ratio`, ["original_units", "quantity_units"]);
+    const conversion = div(number(ratio.original_units, `${p}.conversion_ratio.original_units`, true),
+      number(ratio.quantity_units, `${p}.conversion_ratio.quantity_units`, true));
+    if (compare(conversion, whole(1e9)) > 0n) throw new Error(`${p}.conversion_ratio must be <= 1e9`);
+    return conversion;
+  }
+  if ("original_units_per_quantity_unit" in c || "conversion_ratio" in c) {
+    throw new Error(`${p} must supply rectangular_blank OR original_units_per_quantity_unit/conversion_ratio, not both`);
+  }
   choice(c.category, `${p}.category for rectangular_blank`, ["material"]);
   choice(c.original_unit, `${p}.original_unit for rectangular_blank`, ["kg", "lb"]);
   choice(c.quantity_unit, `${p}.quantity_unit for rectangular_blank`, ["blank"]);
@@ -349,7 +362,7 @@ function calculateCostBasis(value: unknown, quantity: number, asOf: string, flat
   const present = new Set<Category>();
   for (const [i, item] of list(root.components, "cost_basis.components", 64).entries()) {
     const p = `cost_basis.components[${i}]`;
-    const c = record(item, p, [...supportKeys, "category", "allocation", "rate_kind", "original_unit", "quantity_unit", "quantity", "partial_quantity_reason", "original_units_per_quantity_unit", "rectangular_blank", "yield_fraction", "minimum_quantity", "purchase_increment", "unit_cost", "minimum_charge"]);
+    const c = record(item, p, [...supportKeys, "category", "allocation", "rate_kind", "original_unit", "quantity_unit", "quantity", "partial_quantity_reason", "original_units_per_quantity_unit", "conversion_ratio", "rectangular_blank", "yield_fraction", "minimum_quantity", "purchase_increment", "unit_cost", "minimum_charge"]);
     support(c, p, asOf, ids, sourceWarnings);
     choice(c.category, `${p}.category`, ["material", "outside", "other"]);
     choice(c.allocation, `${p}.allocation`, ["material_per_unit", "outside_per_unit", "setup_total"]);
